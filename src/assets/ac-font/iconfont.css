@@ -1,0 +1,55 @@
+@font-face {
+  font-family: "ac-font"; /* Project id 3420115 */
+  src: url('iconfont.woff2?t=1655869219932') format('woff2'),
+       url('iconfont.woff?t=1655869219932') format('woff'),
+       url('iconfont.ttf?t=1655869219932') format('truetype');
+}
+
+.ac-font {
+  font-family: "ac-font" !important;
+  font-size: 16px;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.ac-jia:before {
+  content: "\e601";
+}
+
+.ac-play1:before {
+  content: "\e637";
+}
+
+.ac-Search:before {
+  content: "\e62c";
+}
+
+.ac-diantai:before {
+  content: "\e600";
+}
+
+.ac-comment:before {
+  content: "\e7d9";
+}
+
+.ac-back:before {
+  content: "\ea44";
+}
+
+.ac-next:before {
+  content: "\ea47";
+}
+
+.ac-pause:before {
+  content: "\ea48";
+}
+
+.ac-likefill:before {
+  content: "\e668";
+}
+
+.ac-like:before {
+  content: "\e813";
+}
+

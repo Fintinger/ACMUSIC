@@ -1,0 +1,53 @@
+@import "../base/variables";
+.comment-container {
+  margin-top: 1rem;
+
+  .send-top-comment {
+    .send-comment {
+      margin-right: 2rem;
+
+      height: 25rem;
+    }
+
+    .top-comment {
+      max-height: 25rem;
+      overflow-y: auto;
+      overflow-x: hidden;
+
+
+      &::-webkit-scrollbar {
+        width: 5px
+      }
+
+      &::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.04)
+      }
+
+      &::-webkit-scrollbar-thumb {
+        border-radius: 5px;
+        background: rgba(0, 0, 0, .3);
+      }
+    }
+  }
+
+  .comment-content-list {
+    position: relative;
+    padding-top: 2rem;
+    margin-top: 2rem;
+
+    &:before {
+      content: "";
+      position: absolute;
+      width: 50%;
+      height: 1px;
+      left: 25%;
+      top: 0px;
+      background: -webkit-linear-gradient(left, $color-theme -4%, $color-main 50%, $color-theme 100%);
+    }
+
+    h2 {
+      margin-bottom: 2rem;
+    }
+  }
+
+}

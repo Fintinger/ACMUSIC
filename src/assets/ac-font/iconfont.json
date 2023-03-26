@@ -1,0 +1,79 @@
+{
+  "id": "3420115",
+  "name": "AcMusic",
+  "font_family": "ac-font",
+  "css_prefix_text": "ac-",
+  "description": "",
+  "glyphs": [
+    {
+      "icon_id": "1302",
+      "name": "加",
+      "font_class": "jia",
+      "unicode": "e601",
+      "unicode_decimal": 58881
+    },
+    {
+      "icon_id": "4933553",
+      "name": "play",
+      "font_class": "play1",
+      "unicode": "e637",
+      "unicode_decimal": 58935
+    },
+    {
+      "icon_id": "12856610",
+      "name": "Search",
+      "font_class": "Search",
+      "unicode": "e62c",
+      "unicode_decimal": 58924
+    },
+    {
+      "icon_id": "12858365",
+      "name": "电台",
+      "font_class": "diantai",
+      "unicode": "e600",
+      "unicode_decimal": 58880
+    },
+    {
+      "icon_id": "10475347",
+      "name": "comment",
+      "font_class": "comment",
+      "unicode": "e7d9",
+      "unicode_decimal": 59353
+    },
+    {
+      "icon_id": "12002817",
+      "name": "back",
+      "font_class": "back",
+      "unicode": "ea44",
+      "unicode_decimal": 59972
+    },
+    {
+      "icon_id": "12002849",
+      "name": "next",
+      "font_class": "next",
+      "unicode": "ea47",
+      "unicode_decimal": 59975
+    },
+    {
+      "icon_id": "12002854",
+      "name": "pause",
+      "font_class": "pause",
+      "unicode": "ea48",
+      "unicode_decimal": 59976
+    },
+    {
+      "icon_id": "30417",
+      "name": "like_fill",
+      "font_class": "likefill",
+      "unicode": "e668",
+      "unicode_decimal": 58984
+    },
+    {
+      "icon_id": "6151266",
+      "name": "like",
+      "font_class": "like",
+      "unicode": "e813",
+      "unicode_decimal": 59411
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+@import "base/variables";
+
+ul {
+  li.album {
+    .el-card {
+      border: none;
+      position: relative;
+
+      .img-wrapper {
+        padding-right: 100px;
+        overflow: hidden;
+        background: {
+          position: center;
+          size: 60%;
+          repeat: no-repeat;
+        };
+
+        img {
+          border-radius: 8px;
+        }
+      }
+
+      .info {
+        margin-top: 1rem;
+
+        & > div {
+          margin-bottom: .5rem;
+          color: $font-black-2;
+          font-size: .8rem;
+          line-height: 1.1rem;
+        }
+
+        .albumName {
+          width: 80%;
+          color: $font-black;
+          font-size: 1.1rem;
+          font-weight: bold;
+        }
+
+        .artist {
+          cursor: pointer;
+          transition: color .5s;
+          &:hover {
+            color: $font-black-1;
+          }
+        }
+        .pub-time{
+          font-size: .6rem;
+        }
+      }
+
+      &:hover .play-btn{
+        display: inline-block;
+      }
+
+      .play-btn{
+        position: absolute;
+        right: 45px;
+        bottom: 45px;
+        width: 100%;
+        height: 100%;
+        display: none;
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+@import "base/variables";
+
+.daily-songs{
+  text-align: center;
+  h1{
+    font-size: 6rem;
+    margin: 5rem 0  2rem 0;
+    color: $color-main;
+
+  }
+  p{
+    font-size: .8rem;
+    color: $font-black-2;
+    margin-bottom: 8rem;
+  }
+}

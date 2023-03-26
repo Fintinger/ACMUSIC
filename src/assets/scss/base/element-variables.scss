@@ -1,0 +1,36 @@
+@import "variables";
+
+$--color-primary: $color-main;
+
+//tab主题色改变
+.el-tabs__header {
+  .el-tabs__item{
+    font: {
+      size: 1.1rem;
+      weight: bold;
+    };
+    width: 5rem;
+    margin-right: 1rem;
+    box-sizing: border-box;
+    text-align: center;
+    padding: .5rem!important;
+    line-height: 1.2rem;
+    border-radius: 8px;
+    &:hover{
+      color: $color-main;
+    }
+  }
+  .el-tabs__item.is-active {
+    background: $color-theme-sec;
+    color: $color-main;
+  }
+
+  .el-tabs__nav-wrap::after{
+    content: "";
+    display: none;
+  }
+  .el-tabs__active-bar{
+    display: none;
+    //background:  $color-main;
+  }
+}

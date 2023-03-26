@@ -1,0 +1,68 @@
+@import "../base/variables";
+
+.comment-content {
+  .comment-item {
+    padding-left: .8rem;
+    margin-bottom: 1rem;
+    .avatar {
+      border-radius: 50%;
+      overflow: hidden;
+      padding: 0 !important;
+
+      width: 3rem;
+      height: 3rem;
+
+      img {
+        width: 100%;
+      }
+    }
+    .main{
+      &>.el-row{
+        margin-bottom: .5rem;
+      }
+      .name{
+        font: {
+          size: 1.2rem;
+          weight: bold;
+        };
+        .nickname{
+          cursor: pointer;
+          &:hover{
+            text-decoration: underline;
+          }
+        }
+        .identityIcon{
+          margin-left: .5rem;
+        }
+      }
+
+      .content{
+        font-size: .95rem;
+        color: $font-black-1;
+        line-height: 1.1rem;
+      }
+      .time-ribbon{
+        .time{
+          font-size: .8rem;
+          color: $font-black-2;
+        }
+        .ribbon{
+          &>span{
+            margin-left: 1rem;
+            font-size: .85rem;
+            color: $font-black-1;
+          }
+          .like-count,.reply-count{
+            margin-left: .3rem;
+          }
+
+          .comment-delete{
+            .el-button{
+              color: $color-main;
+            }
+          }
+        }
+      }
+    }
+  }
+}

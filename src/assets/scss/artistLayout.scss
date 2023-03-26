@@ -1,0 +1,34 @@
+@import "base/variables";
+
+ul {
+  li.artist {
+    .el-card {
+      border: none;
+
+      .imgContainer{
+        cursor: pointer;
+        overflow: hidden;
+        padding: 2rem;
+        padding-bottom: .5rem;
+
+        img{
+          border-radius: 50%;
+        }
+      }
+      .name{
+        text-align: center;
+        color: $font-black;
+        font: {
+          size: 1.2rem;
+          weight: bold;
+        };
+        .accountId{
+          cursor: pointer;
+          font-size: 1rem;
+          font-weight: normal;
+          color: $font-black-2;
+        }
+      }
+    }
+  }
+}

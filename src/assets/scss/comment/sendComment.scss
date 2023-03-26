@@ -1,0 +1,58 @@
+@import "../base/variables";
+
+textarea {
+  font-size: 1.1rem;
+  font-weight: bold;
+
+  &:focus {
+    border-color: $color-main;
+  }
+}
+
+.comment {
+  height: 100%;
+
+  & > .el-row {
+    display: flex;
+    flex-direction: column;
+    justify-items: center;
+    align-items: center;
+
+    & > .el-col {
+      //margin-bottom: 2rem;
+    }
+  }
+
+  .avatar {
+    padding: 1.5rem;
+
+    img {
+      border-radius: 50%;
+    }
+  }
+
+  .input-box {
+
+    margin-bottom: 1rem;
+  }
+
+  .btn-send {
+    span {
+      width: 100%;
+      text-align: center;
+      display: inline-block;
+      font-weight: bold;
+      color: $font-white;
+      background: $color-main;
+      padding: .5rem;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all .3s;
+
+
+      &:hover {
+        background: $color-main-1;
+      }
+    }
+  }
+}

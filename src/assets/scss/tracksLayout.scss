@@ -1,0 +1,119 @@
+@import "base/variables";
+
+.tracksContainer{
+  margin: 0 auto;
+  border-radius: 3px;
+  //border: 2px solid $color-theme-sec;
+  //border-left:1px solid $color-theme-sec;
+  //border-right:1px solid $color-theme-sec;
+  .btns{
+    margin: 1rem 0 1rem 1rem;
+    padding-top: .5rem;
+    .btn-container{
+      color: $font-black-1;
+      width: max-content;
+      border-radius: 8px;
+      background: $color-theme-sec;
+
+
+      &>i{
+        display:inline-block;
+        padding: .5rem;
+        cursor: pointer;
+        box-sizing: border-box;
+        transition: all .2s;
+        &:hover{
+          color: $color-main;
+        }
+      }
+      .ac-play1{
+        font: {
+          size: .8rem;
+          weight: bold;
+        };
+        &:before{
+          font-size: .9rem;
+        }
+      }
+      .ac-jia{
+        margin-left: 1.5rem;
+        font-size: .8rem;
+        font-weight: normal;
+        border-left: 1px solid $font-white-1;
+      }
+    }
+  }
+
+
+  .tracks{
+    margin-bottom: 1rem;
+    border-radius: 5px;
+    transition: all .3s;
+    cursor: pointer;
+    font-family: Barlow,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Helvetica Neue,PingFang SC,Microsoft YaHei,Source Han Sans SC,Noto Sans CJK SC,WenQuanYi Micro Hei,sans-serif,microsoft uighur;
+
+    &:hover{
+      background: $color-theme-sec;
+    }
+
+    padding: 1rem 1rem;
+    .coverImg{
+      width: 3rem;
+      height: 3rem;
+      margin-right: 1rem;
+      border-radius: 8px;
+      background: $font-white-1;
+      overflow: hidden;
+
+      img{
+        width: 100%;
+      }
+    }
+    .name-artist{
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+      font-size: .8rem;
+
+      .name{
+        padding: .2rem;
+        font: {
+          size: 1.2rem;
+          weight: bold;
+        };
+        margin-bottom: .5rem;
+      }
+      .artist{
+        color: $font-black-1;
+        line-height: 1.1rem;
+        &:hover{
+          text-decoration: underline;
+          color: $font-black;
+        }
+      }
+    }
+
+    .album{
+      text-align: center;
+      margin-top: 1rem;
+      font: {
+        size: .9rem;
+      };
+      color: $font-black-1;
+      &:hover{
+        text-decoration: underline;
+        color: $font-black;
+      }
+    }
+    .duration{
+      margin-top: 1rem;
+      padding: .3rem;
+      font:{
+        size: .8rem;
+        weight: bold;
+      };
+      color: $font-black-1;
+      text-align: right;
+    }
+  }
+}

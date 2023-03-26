@@ -5,6 +5,15 @@ module.exports = defineConfig({
     lintOnSave: false,
     //配置全局代理
     devServer: {
-        proxy: "https://netease-cloud-music-api-nu-rosy.vercel.app"
+        proxy: {
+            'api': {
+                target: 'https://music.163.com',
+                changeOrigin: true,
+                ws: true,
+                secure: false,
+                logLevel: 'debug',
+                pathRewrite: {'^/api': ''}
+            }
+        }
     }
 })

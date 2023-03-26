@@ -1,0 +1,134 @@
+/**
+reset css
+ */
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, embed,
+figure, figcaption, footer, header, hgroup,
+menu, nav, output, ruby, section, summary,
+time, mark, audio, video {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 100%;
+  font: inherit;
+  vertical-align: baseline;
+}
+
+html, body {
+  font: {
+    family: Barlow, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Helvetica Neue, PingFang SC, Microsoft YaHei, Source Han Sans SC, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif, microsoft uighur;
+    size: 16px;
+  }
+
+  &::-webkit-scrollbar {
+    width: 5px
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.04)
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 5px;
+    background: rgba(0, 0, 0, .3);
+  }
+}
+
+article, aside, details, figcaption, figure,
+footer, header, hgroup, menu, nav, section {
+  display: block;
+}
+
+body {
+  line-height: 1;
+}
+
+ol, ul {
+  list-style: none;
+}
+
+blockquote, q {
+  quotes: none;
+}
+
+blockquote:before, blockquote:after,
+q:before, q:after {
+  content: '';
+  content: none;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+a{
+  text-decoration: none;
+}
+
+input{
+  border: none;
+  outline: none;
+}
+
+.gridLayout {
+  display: grid;
+  grid-template-columns: repeat(5, 20%);
+  width: 100%;
+
+  li{
+    padding: 15px;
+    .imgContainer {
+      width: 100%;
+      max-height: 340px;
+      overflow: hidden;
+    }
+
+    .moreInfo {
+      & > p {
+        height: 1.5rem;
+        width: 100%;
+        overflow: hidden;
+      }
+    }
+  }
+}
+
+img {
+  width: 100%;
+}
+
+[v-cloak] {
+  display: none;
+}
+//关于element UI
+/*.el-row {
+  margin: 0!important;
+  text-align: left;
+}
+.el-col{
+  padding: 0!important;
+}*/
+//父元素只有一个子元素实现水平垂直居中，利用flex实现
+.row-col-center{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+//滚动的文字
+.scroll-text{
+  width: 100%;
+  word-wrap: break-word;
+}
+h2 {
+  text-align: left;
+  font-size: 1.5rem
+}

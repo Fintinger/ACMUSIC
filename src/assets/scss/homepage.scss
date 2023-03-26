@@ -1,0 +1,103 @@
+//日推歌曲卡片样式
+@import "dailyTracksCard";
+//私人FM卡片样式
+@import "personalFmCard";
+
+@import "base/variables";
+
+.homePage {
+  & > div {
+    margin-bottom: 50px;
+  }
+
+  /*  //轮播图效果
+    $carouselMaxHeight: 280px;
+
+    .carousel {
+      .el-carousel__container {
+
+        max-height: $carouselMaxHeight;
+
+        .el-carousel__item {
+          //max-height: $carouselMaxHeight;
+        }
+
+        .el-carousel__mask {
+          width: 100%;
+          background-color: #000;
+          opacity: 0.34;
+          transition: .2s;
+          z-index: 9
+        }
+
+        .bannerPic {
+          position: relative;
+          border-radius: 5px;
+          overflow: hidden;
+          box-sizing: border-box;
+          min-height: $carouselMaxHeight;
+
+          img {
+            min-height: $carouselMaxHeight;
+          }
+
+          span {
+            position: absolute;
+            right: 0;
+            bottom: 35px;
+            color: #fff;
+            padding: 3px;
+            font-size: .8rem;
+          }
+        }
+      }
+    }*/
+
+  .recTracks-personalFM {
+    & > .el-col > .wrapper-for-click-event > .el-row {
+      width: 100%;
+      height: 300px;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+  }
+
+
+  //排行榜
+  .lists {
+    .el-row {
+      .el-col {
+        .topList {
+          padding: 30px;
+          padding-bottom: 10px;
+
+          .el-card {
+            border: none;
+
+            .img-wrapper {
+              border-radius: 8px;
+              overflow: hidden;
+            }
+            .info{
+              padding-top: 10px;
+              p{
+                line-height: 1.2rem;
+                margin-bottom: 10px;
+                font-size: .8rem;
+                color: $font-black-2;
+              }
+              .listName{
+                font: {
+                  size: 1.2rem;
+                  weight: bold;
+                };
+                color: $font-black;
+              }
+            }
+          }
+
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+.recTracks {
+
+  .el-row {
+    background: {
+      repeat: no-repeat;
+      position: top;
+      size: cover;
+      origin: padding-box;
+    }
+    animation: {
+      name: bgFloat;
+      timing-function: linear;
+      duration: 20s;
+      iteration-count: infinite;
+      direction: alternate;
+    };
+
+    @keyframes bgFloat {
+      from {
+        background-position: top;
+      }
+      to {
+        background-position: bottom;
+      }
+    }
+    $text-size: 5rem;
+    $letter-spacing: .8rem;
+
+    .el-col.text {
+      height: 100%;
+      font-size: $text-size;
+      text-align: center;
+      line-height: 1;
+      color: #FFFFFF;
+      font-weight: bolder;
+
+      span {
+        width: ($text-size+$letter-spacing)*2;
+        letter-spacing: $letter-spacing;
+        line-height: $text-size+$letter-spacing;
+      }
+    }
+
+    .play-tracks-btn {
+      height: 100%;
+      position: relative;
+
+      .btn-container {
+        width: 80px;
+        height: 80px;
+        position: absolute;
+        right: 1rem;
+        bottom: 1rem;
+      }
+    }
+  }
+}

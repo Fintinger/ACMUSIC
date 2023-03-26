@@ -1,0 +1,95 @@
+/**
+歌单布局样式
+ */
+@import "base/variables";
+
+ul {
+  li.playlist {
+    display: inline-block;
+    box-sizing: border-box;
+    color: $font-black;
+
+    .el-card {
+      overflow: hidden;
+      border: none;
+      position: relative;
+
+      .imgContainer {
+        border-radius: 15px;
+        position: relative;
+        cursor: pointer;
+
+
+        .playCount {
+          position: absolute;
+          top: 3px;
+          right: 5px;
+          border-radius: 15px;
+          padding: 3px 8px;
+          background: rgba(0, 0, 0, .3);
+          color: #dddddd;
+          font-weight: bold;
+          font-size: .8rem;
+          z-index: 3;
+
+          i {
+            font-size: .6rem;
+          }
+        }
+
+        .bookCount {
+          @extend .playCount;
+          top: unset;
+          bottom: 5px;
+
+          i {
+            font-size: .9rem;
+          }
+        }
+      }
+
+      .info {
+        //padding-left: 8px;
+
+
+        .listName {
+          padding: 6px 0px;
+          font-size: 1.1rem;
+          font-weight: bold;
+        }
+
+
+        .moreInfo {
+          color: $font-black-2;
+          font-size: .8rem;
+
+          p {
+            margin-top: .3rem;
+          }
+        }
+      }
+
+      .play-btn {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: none;
+      }
+
+      &:hover .play-btn {
+        display: inline-block;
+      }
+
+      img {
+        transition: all 3s;
+      }
+
+      &:hover img {
+        transform: scale(1.3);
+      }
+
+    }
+  }
+}
