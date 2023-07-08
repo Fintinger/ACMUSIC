@@ -15,7 +15,8 @@
 
 .player {
   z-index: 3;
-  position: fixed;
+  //修复mv播放界面悬浮BUG
+  //position: fixed;
   bottom: 0;
   width: 100%;
   height: auto;
