@@ -19,7 +19,8 @@
 
       <el-col :span="4">
         <div class="btn-send row-col-center">
-          <span @click="sendComment">发 送</span>
+          <button class="btn-cancel" type="button" @click="$emit('cancel')">取消</button>
+          <span @click="sendComment">发送</span>
         </div>
       </el-col>
     </el-row>

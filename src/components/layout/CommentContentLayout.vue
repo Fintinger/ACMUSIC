@@ -1,44 +1,48 @@
 <template>
   <div class="comment-content">
-    <el-row class="comment-item" v-for="cm in list" :key="cm.commentId" :gutter="20">
-      <el-col v-if="cm.user" :span="2" class="avatar"><img :src="cm.user.avatarUrl" alt=""></el-col>
-      <el-col v-if="cm.user" :span="20" class="main">
-        <el-row class="name">
+    <div class="comment-item" v-for="cm in list" :key="cm.commentId">
+      <div v-if="cm.user" class="avatar"><img :src="cm.user.avatarUrl" alt=""></div>
+      <div v-if="cm.user" class="main">
+        <div class="name">
           <span class="nickname" @click="uClk(cm.user.userId)">{{ cm.user.nickname }}</span>
-          <span v-if="cm.user.avatarDetail" class="identityIcon"><img :src="cm.user.avatarDetail.identityIconUrl"
-                                                                      alt=""
-                                                                      style="height: 1rem;width: auto;"></span>
-        </el-row>
-        <el-row class="content">{{ cm.content }}</el-row>
-        <el-row class="time-ribbon">
-          <el-col :span="12" class="time">
-            {{ cm.time | formatMs("YYYY年MM月DD日") }}
-          </el-col>
-          <el-col :span="12" class="ribbon">
+          <span v-if="cm.user.avatarDetail" class="identityIcon"><img :src="cm.user.avatarDetail.identityIconUrl" alt=""></span>
+          <span class="time-tag">{{ cm.time | formatMs("MM月DD日 HH:mm") }}</span>
+        </div>
+        <div class="content">{{ cm.content }}</div>
+        <div class="time-ribbon">
+          <div class="ribbon">
             <span class="comment-like">
               <span class="like" @click="handleLike($event,cm)">
-              <i v-if="!cm.liked" class="ac-font ac-like"></i>
-              <i v-if="cm.liked" class="ac-font ac-likefill"></i>
+                <i v-if="!cm.liked" class="ac-font ac-like"></i>
+                <i v-if="cm.liked" class="ac-font ac-likefill"></i>
               </span>
               <span class="like-count">{{ cm.likedCount | div1w }}</span>
             </span>
             <span class="comment-reply">
               <i class="ac-font ac-comment" @click="replyComment(cm)"></i>
-              <!--             -->
-              <el-dialog :key="cm.commentId" :visible.sync="openComment">
-                <span slot="title">回复{{ replyName }}</span>
-              <SendComment :comment-id="cm.commentId" :sid="id" :stype="type" :type="2" @reply="openComment=false"/>
-              </el-dialog>
-            <span class="reply-count">{{ cm.replyCount|div1w }}</span>
-          </span>
-<!--            <span>{{ cm.user.userId }}==={{ $store.state}}</span>-->
+              <span class="reply-count">{{ cm.replyCount | div1w }}</span>
+            </span>
             <span v-if="cm.user.userId===loggedUser.userId" class="comment-delete">
               <el-button size="mini" type="text" @click="deleteComment(cm)">删除</el-button>
             </span>
-          </el-col>
-        </el-row>
-      </el-col>
-    </el-row>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="replyTarget" class="comment-overlay" @click.self="replyTarget = null" @keydown.esc="replyTarget = null">
+      <div class="comment-dialog">
+        <div class="dialog-header">
+          <div>
+            <h3>回复 @{{ replyTarget.user.nickname }}</h3>
+            <p class="dialog-subtitle">文明交流，理性讨论。</p>
+          </div>
+          <button class="dialog-close" @click="replyTarget = null"><i class="el-icon-close"></i></button>
+        </div>
+        <div class="dialog-body">
+          <SendComment :comment-id="replyTarget.commentId" :sid="id" :stype="type" :type="2" @reply="replyTarget = null"/>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -68,8 +72,7 @@ export default {
   },
   data() {
     return {
-      openComment: false,
-      replyName: "",
+      replyTarget: null,
     }
   },
   methods: {
@@ -113,8 +116,7 @@ export default {
       this.$message.error("出现错误")
     },
     replyComment(cm) {
-      this.openComment = true;
-      this.replyName = cm.user.nickname;
+      this.replyTarget = cm;
     },
     deleteComment(cm) {
       this.$confirm('此操作将永久删除该评论, 是否继续?', '提示', {

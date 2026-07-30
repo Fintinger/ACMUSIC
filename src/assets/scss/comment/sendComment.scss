@@ -1,58 +1,52 @@
 @import "../base/variables";
 
-textarea {
-  font-size: 1.1rem;
-  font-weight: bold;
-
-  &:focus {
-    border-color: $color-main;
-  }
-}
-
 .comment {
-  height: 100%;
-
-  & > .el-row {
-    display: flex;
-    flex-direction: column;
-    justify-items: center;
-    align-items: center;
-
-    & > .el-col {
-      //margin-bottom: 2rem;
-    }
-  }
-
-  .avatar {
-    padding: 1.5rem;
-
-    img {
-      border-radius: 50%;
-    }
-  }
+  .el-row { display: flex; flex-direction: column; gap: 20px; }
+  .avatar { display: none; }
 
   .input-box {
-
-    margin-bottom: 1rem;
+    width: 100% !important;
+    .el-textarea .el-textarea__inner {
+      height: 220px; resize: none;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px; padding: 20px;
+      color: rgba(255,255,255,.88);
+      font-size: 16px; line-height: 1.8;
+      transition: border-color .25s ease, box-shadow .25s ease;
+      &::placeholder { color: rgba(255,255,255,.35); }
+      &:focus { border-color: $color-main; box-shadow: 0 0 0 3px rgba($color-main,.18); outline: none; }
+    }
+    .el-input__count {
+      display: flex; justify-content: flex-end; margin-top: 10px;
+      color: rgba(255,255,255,.45); font-size: 13px; background: transparent;
+      .el-input__count-inner { background: transparent; }
+    }
   }
 
   .btn-send {
-    span {
-      width: 100%;
-      text-align: center;
-      display: inline-block;
-      font-weight: bold;
-      color: $font-white;
-      background: $color-main;
-      padding: .5rem;
-      border-radius: 5px;
-      cursor: pointer;
-      transition: all .3s;
+    display: flex; justify-content: flex-end; gap: 12px; padding: 0;
 
+    .btn-cancel {
+      height: 44px; padding: 0 24px; min-width: 80px;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px; color: rgba(255,255,255,.6); font-size: 14px; cursor: pointer;
+      white-space: nowrap; line-height: 1; display: flex; align-items: center; justify-content: center;
+      transition: all .2s ease;
+      &:hover { background: rgba(255,255,255,.12); color: #fff; }
+    }
 
-      &:hover {
-        background: $color-main-1;
-      }
+    > span {
+      min-width: 110px; height: 44px; padding: 0 24px;
+      background: linear-gradient(135deg, $color-main, lighten($color-main, 8%));
+      color: #fff; border: none; border-radius: 999px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      white-space: nowrap; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 24px rgba($color-main,.28);
+      transition: transform .25s ease, box-shadow .25s ease;
+      &:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba($color-main,.38); }
+      &:active { transform: translateY(0); }
     }
   }
 }

@@ -1,30 +1,45 @@
 <template>
   <div class="comment-container">
-    <el-row class="send-top-comment clearfix">
-      <el-col :span="12">
-        <el-row class="send-comment">
-          <SendComment :sid="id" :stype="type" :type="1" @updateNewestComment="getCommentByParams"/>
-        </el-row>
-      </el-col>
-      <el-col :span="12">
-        <el-row class="top-comment">
-          <CommentContentLayout :id="id" :list="hotComment" :type="type"/>
-        </el-row>
-      </el-col>
-    </el-row>
+    <div class="comment-header-bar">
+      <h2>评论</h2>
+    </div>
 
-    <el-row v-if="newComment.length" class="comment-content-list">
-      <h2>最新评论({{ count }})</h2>
-      <!--点赞之后更新评论-->
+    <button class="floating-comment-btn" @click="showCommentModal = true">
+      <i class="el-icon-edit"></i> 写评论
+    </button>
+
+    <div v-if="hotComment.length" class="hot-comments-section">
+      <h3><span class="fire-icon">🔥</span> 热门评论</h3>
+      <CommentContentLayout :id="id" :list="hotComment" :type="type"/>
+      <div class="section-divider"></div>
+    </div>
+
+    <div v-if="newComment.length" class="new-comments-section">
+      <h3>最新评论 ({{ count }})</h3>
       <CommentContentLayout :id="id" :list="newComment" :type="type" @updateNewestComment="getCommentByParams"/>
-    </el-row>
-    <!--获取到评论为空-->
-    <el-row v-else>
+    </div>
+    <div v-else-if="!hotComment.length" class="empty-state">
       <p>暂无评论</p>
-    </el-row>
-    <el-row class="load-more">
+    </div>
+
+    <div class="load-more">
       <LoadMore :load="loadMoreNewComment" :loading="loading" :no-more="noMore"/>
-    </el-row>
+    </div>
+
+    <div v-if="showCommentModal" class="comment-overlay" @click.self="showCommentModal = false" @keydown.esc="showCommentModal = false">
+      <div class="comment-dialog">
+        <div class="dialog-header">
+          <div>
+            <h3>发表评论</h3>
+            <p class="dialog-subtitle">分享你的听歌感受，与大家一起交流音乐。</p>
+          </div>
+          <button class="dialog-close" @click="showCommentModal = false"><i class="el-icon-close"></i></button>
+        </div>
+        <div class="dialog-body">
+          <SendComment :sid="id" :stype="type" :type="1" @updateNewestComment="onCommentSent" @cancel="showCommentModal = false"/>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -37,44 +52,42 @@ import LoadMore from "@/components/LoadMore";
 export default {
   name: "CommentLayout",
   props: {
-    type: {
-      required: true,
-      type: String,
-    },
-    id: {
-      required: true,
-    },
+    type: { required: true, type: String },
+    id: { required: true },
   },
-  components: {SendComment, CommentContentLayout, LoadMore},
+  components: { SendComment, CommentContentLayout, LoadMore },
   data() {
     return {
       count: 0,
       newComment: [],
       hotComment: [],
-      like: false,
       cursor: "",
       loading: false,
       page: 1,
+      showCommentModal: false,
     }
   },
   watch: {
     id: {
       immediate: true,
       handler() {
+        this.page = 1
+        this.newComment = []
         this.getCommentByParams()
       }
+    },
+    showCommentModal(val) {
+      this.$emit(val ? 'modal-open' : 'modal-close')
     },
   },
   computed: {
     noMore() {
-      return this.hotComment.length === this.count
+      return this.newComment.length >= this.count
     }
   },
   methods: {
-    uClk(uid) {
-      this.$bus.$emit('uClk', uid)
-    },
     loadMoreNewComment() {
+      if (this.loading || this.noMore) return
       this.loading = true
       this.page++
       comment.gain(this.id, this.type, {
@@ -86,38 +99,34 @@ export default {
         this.cursor = res.data.data.cursor
         this.newComment.push(...res.data.data.comments)
         this.loading = false
-      })
+      }).catch(() => { this.loading = false })
     },
     getCommentByParams() {
       this.$axios.all([this.getNewestComment(), this.getHotComment()])
-          .then(this.$axios.spread((newestCm, hotCm) => {
-            //最新评论
-            this.count = newestCm.data.data.totalCount
-            this.cursor = newestCm.data.data.cursor
-            this.newComment = newestCm.data.data.comments
-            //热评
-            this.hotComment = hotCm.data.data.comments
-          }))
+        .then(this.$axios.spread((newestCm, hotCm) => {
+          this.count = newestCm.data.data.totalCount
+          this.cursor = newestCm.data.data.cursor
+          this.newComment = newestCm.data.data.comments || []
+          this.hotComment = hotCm.data.data.comments || []
+        }))
     },
-    //获取全部最新评论
     getNewestComment() {
       return comment.gain(this.id, this.type, {
-        pageNo: 1,
-        pageSize: 20,
-        sortType: 3,
-        //避免刷新走缓存
+        pageNo: 1, pageSize: 20, sortType: 3,
         t: new Date().getTime(),
       })
     },
-    //获取5条热度最高的评论
     getHotComment() {
       return comment.gain(this.id, this.type, {
-        pageNo: 1,
-        pageSize: 5,
-        sortType: 2,
-        //避免刷新走缓存
+        pageNo: 1, pageSize: 5, sortType: 2,
         t: new Date().getTime(),
       })
+    },
+    onCommentSent() {
+      this.showCommentModal = false
+      this.page = 1
+      this.newComment = []
+      this.getCommentByParams()
     },
   },
 }

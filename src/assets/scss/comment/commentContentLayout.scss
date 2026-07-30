@@ -2,67 +2,69 @@
 
 .comment-content {
   .comment-item {
-    padding-left: .8rem;
-    margin-bottom: 1rem;
-    .avatar {
-      border-radius: 50%;
-      overflow: hidden;
-      padding: 0 !important;
+    display: flex; gap: 16px; padding: 22px;
+    border-radius: 18px; background: rgba(255,255,255,.03);
+    margin-bottom: 18px;
+    transition: transform .25s ease, background .25s ease;
+    &:last-child { margin-bottom: 0; }
+    &:hover { transform: translateY(-2px); background: rgba(255,255,255,.06); }
+  }
 
-      width: 3rem;
-      height: 3rem;
+  .avatar {
+    flex-shrink: 0; width: 56px; height: 56px;
+    border-radius: 50%; overflow: hidden;
+    img { width: 100%; height: 100%; object-fit: cover; }
+  }
 
-      img {
-        width: 100%;
-      }
+  .main {
+    flex: 1; min-width: 0;
+    .name {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+      .nickname { font-size: 17px; font-weight: 600; color: rgba(255,255,255,.85); cursor: pointer; transition: color .2s; &:hover { color: $color-main; } }
+      .identityIcon img { height: 18px; width: auto; }
+      .time-tag { font-size: 13px; color: rgba(255,255,255,.35); }
     }
-    .main{
-      &>.el-row{
-        margin-bottom: .5rem;
-      }
-      .name{
-        font: {
-          size: 1.2rem;
-          weight: bold;
-        };
-        .nickname{
-          cursor: pointer;
-          &:hover{
-            text-decoration: underline;
-          }
-        }
-        .identityIcon{
-          margin-left: .5rem;
-        }
-      }
-
-      .content{
-        font-size: .95rem;
-        color: $font-black-1;
-        line-height: 1.1rem;
-      }
-      .time-ribbon{
-        .time{
-          font-size: .8rem;
-          color: $font-black-2;
-        }
-        .ribbon{
-          &>span{
-            margin-left: 1rem;
-            font-size: .85rem;
-            color: $font-black-1;
-          }
-          .like-count,.reply-count{
-            margin-left: .3rem;
-          }
-
-          .comment-delete{
-            .el-button{
-              color: $color-main;
-            }
-          }
-        }
-      }
+    .content { font-size: 15px; line-height: 1.9; color: rgba(255,255,255,.7); margin-bottom: 14px; word-break: break-word; }
+    .time-ribbon .ribbon {
+      display: flex; align-items: center; gap: 22px;
+      > span { display: flex; align-items: center; gap: 5px; font-size: 14px; color: rgba(255,255,255,.4); cursor: pointer; transition: color .2s; i { font-size: 16px; } &:hover { color: $color-main; } }
+      .comment-like .like i.ac-likefill { color: #ef4444; }
+      .comment-delete .el-button { color: rgba(255,255,255,.35); font-size: 13px; padding: 0; transition: color .2s; &:hover { color: #ef4444; } }
     }
   }
+
+  .comment-overlay {
+    position: fixed; inset: 0; z-index: 3100;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10,10,15,.55); backdrop-filter: blur(12px);
+    animation: modalFadeIn 200ms ease;
+  }
+
+  .comment-dialog {
+    position: relative; z-index: 3101;
+    width: 520px; max-width: 90vw; max-height: 85vh;
+    background: rgba(20,22,32,.72); backdrop-filter: blur(28px);
+    border: 1px solid rgba(255,255,255,.08); border-radius: 24px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.45); overflow: hidden; padding: 32px;
+    animation: modalSlideUp 250ms cubic-bezier(.22,.61,.36,1);
+  }
+
+  .dialog-header {
+    display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px;
+    h3 { font-size: 22px; font-weight: 700; color: rgba(255,255,255,.9); margin: 0 0 8px; }
+    .dialog-subtitle { font-size: 14px; color: rgba(255,255,255,.45); margin: 0; line-height: 1.4; }
+    .dialog-close {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.06);
+      color: rgba(255,255,255,.65); font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 220ms cubic-bezier(.22,.61,.36,1);
+      &:hover { background: rgba(255,255,255,.12); color: #fff; }
+    }
+  }
+
+  .dialog-body { display: flex; flex-direction: column; gap: 24px; }
 }
+
+@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalSlideUp { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }

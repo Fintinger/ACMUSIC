@@ -1,53 +1,120 @@
 @import "../base/variables";
+
 .comment-container {
-  margin-top: 1rem;
+  max-width: 1500px;
+  margin: 0 auto;
 
-  .send-top-comment {
-    .send-comment {
-      margin-right: 2rem;
-
-      height: 25rem;
-    }
-
-    .top-comment {
-      max-height: 25rem;
-      overflow-y: auto;
-      overflow-x: hidden;
-
-
-      &::-webkit-scrollbar {
-        width: 5px
-      }
-
-      &::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.04)
-      }
-
-      &::-webkit-scrollbar-thumb {
-        border-radius: 5px;
-        background: rgba(0, 0, 0, .3);
-      }
-    }
-  }
-
-  .comment-content-list {
-    position: relative;
-    padding-top: 2rem;
-    margin-top: 2rem;
-
-    &:before {
-      content: "";
-      position: absolute;
-      width: 50%;
-      height: 1px;
-      left: 25%;
-      top: 0px;
-      background: -webkit-linear-gradient(left, $color-theme -4%, $color-main 50%, $color-theme 100%);
-    }
+  .comment-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 40px;
 
     h2 {
-      margin-bottom: 2rem;
+      font-size: 22px;
+      font-weight: 700;
+      color: rgba(255,255,255,.85);
+      margin: 0;
     }
   }
 
+  .floating-comment-btn {
+    position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); z-index: 1000;
+    display: flex; align-items: center; gap: 8px;
+    height: 48px; padding: 0 26px;
+    background: linear-gradient(135deg, $color-main, lighten($color-main, 8%));
+    color: #fff; border: none; border-radius: 999px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 8px 24px rgba($color-main,.28);
+    transition: transform .25s ease, box-shadow .25s ease;
+    i { font-size: 16px; }
+    &:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 12px 30px rgba($color-main,.38); }
+    &:active { transform: translateX(-50%) translateY(0); }
+  }
+
+  .hot-comments-section {
+    margin-bottom: 36px;
+
+    h3 {
+      font-size: 18px; font-weight: 700;
+      color: rgba(255,255,255,.75);
+      margin: 0 0 20px;
+    }
+
+    .section-divider {
+      height: 1px;
+      margin-top: 36px;
+      background: linear-gradient(to right, rgba(255,255,255,.08), transparent);
+    }
+  }
+
+  .new-comments-section {
+    h3 {
+      font-size: 18px; font-weight: 700;
+      color: rgba(255,255,255,.75);
+      margin: 0 0 20px;
+    }
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px 0;
+    p { color: rgba(255,255,255,.3); font-size: 15px; margin: 0; }
+  }
+
+  .load-more {
+    text-align: center;
+    padding: 16px 0;
+
+    button {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.08);
+      color: rgba(255,255,255,.5);
+      padding: 10px 32px; border-radius: 24px;
+      font-size: 14px; cursor: pointer;
+      transition: all .25s ease;
+      &:hover { background: rgba(255,255,255,.1); color: rgba(255,255,255,.75); }
+    }
+
+    p { color: rgba(255,255,255,.3); font-size: 13px; margin: 8px 0; }
+  }
+
+  .comment-overlay {
+    position: fixed; inset: 0; z-index: 3000;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10,10,15,.55); backdrop-filter: blur(12px);
+    animation: modalFadeIn 200ms ease;
+  }
+
+  .comment-dialog {
+    position: relative; z-index: 3001;
+    width: 560px; max-width: 90vw; max-height: 85vh;
+    background: rgba(20,22,32,.72); backdrop-filter: blur(28px);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 24px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.45);
+    overflow: hidden;
+    padding: 32px;
+    animation: modalSlideUp 250ms cubic-bezier(.22,.61,.36,1);
+  }
+
+  .dialog-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 28px;
+    h3 { font-size: 22px; font-weight: 700; color: rgba(255,255,255,.9); margin: 0 0 8px; }
+    .dialog-subtitle { font-size: 14px; color: rgba(255,255,255,.45); margin: 0; line-height: 1.4; }
+    .dialog-close {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.06);
+      color: rgba(255,255,255,.65); font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 220ms cubic-bezier(.22,.61,.36,1);
+      &:hover { background: rgba(255,255,255,.12); color: #fff; }
+    }
+  }
+
+  .dialog-body { display: flex; flex-direction: column; gap: 24px; }
 }
+
+@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalSlideUp { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
