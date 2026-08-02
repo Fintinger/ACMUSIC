@@ -12,7 +12,8 @@
       </el-row>
     </div>
     <el-row class="mvList">
-      <MvLayout :list="renderedList"/>
+      <GridSkeleton v-if="loading && !renderedList.length" type="mv"/>
+      <MvLayout v-if="renderedList.length" :list="renderedList"/>
     </el-row>
 
     <div class="mv-load-more">
@@ -25,10 +26,11 @@
 
 <script>
 import MvLayout from "@/components/layout/MvLayout";
+import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 export default {
   name: "mvList",
-  components: {MvLayout},
+  components: {MvLayout, GridSkeleton},
   data() {
     return {
       renderedList: [],
@@ -67,17 +69,13 @@ export default {
     },
     //GET请求数据触发页面更新
     refreshTheRenderList() {
+      this.loading = true
       this.$axios.get('/mv/all', {
-        params: {
-          area: this.params.area,
-          order: this.params.order,
-          type: this.params.type,
-          limit: this.params.limit,
-        }
+        params: { area: this.params.area, order: this.params.order, type: this.params.type, limit: this.params.limit }
       }).then(res => {
         this.hasMore = res.data.hasMore
         this.renderedList = res.data.data
-      })
+      }).finally(() => { this.loading = false })
     },
     load() {
       this.loading = true
@@ -131,10 +129,10 @@ export default {
     }
   },
   beforeMount() {
-    //请求最新MV并存入(先设定获取100个)
+    this.loading = true
     this.$axios.get('/mv/first', {params: {limit: 100}}).then(res => {
       this.renderedList = res.data.data
-    })
+    }).finally(() => { this.loading = false })
   },
   updated() {
     console.log("update")

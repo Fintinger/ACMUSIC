@@ -11,7 +11,8 @@
       </el-row>
     </el-row>
     <el-row class="render-list">
-      <PlaylistLayout :list="renderList" pic-name="coverImgUrl"/>
+      <GridSkeleton v-if="loading && !renderList.length" type="playlist"/>
+      <PlaylistLayout v-if="renderList.length" :list="renderList" pic-name="coverImgUrl"/>
     </el-row>
     <el-row class="load-more">
       <LoadMore :load="load" :loading="loading" :no-more="noMore"/>
@@ -22,10 +23,11 @@
 <script>
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import LoadMore from "@/components/LoadMore";
+import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 export default {
   name: "AllList",
-  components: {PlaylistLayout, LoadMore},
+  components: {PlaylistLayout, LoadMore, GridSkeleton},
   data() {
     return {
       categories: [],
@@ -52,14 +54,11 @@ export default {
   },
   watch: {
     curTag(n) {
-      //初始化page
       this.page = 0;
       this.getListByClass(n).then(res => {
-        //
         this.renderList = res.data.playlists
-        //记录是否还有更多数据的量
         this.more = res.data.more
-      })
+      }).finally(() => { this.loading = false })
     }
   },
   methods: {
@@ -84,19 +83,18 @@ export default {
       })
     },
     concurrentRequests() {
-      //初步加载分类名和全部分类下的歌单
+      this.loading = true
       this.$axios.all([this.getCategories(), this.getListByClass("全部")])
           .then(this.$axios.spread((categories, list) => {
-            //处理获取到的分类数据
             this.handleCategoricalData(categories.data);
-            //初步加载全部分类歌单
             this.renderList = list.data.playlists
-            //记录是否还有更多数据的量
             this.more = list.data.more
           }))
+          .finally(() => { this.loading = false })
     },
     tagClick(tag) {
       this.curTag = tag
+      this.loading = true
     },
     load() {
       this.page++

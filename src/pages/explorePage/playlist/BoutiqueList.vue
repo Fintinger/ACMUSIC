@@ -7,7 +7,8 @@
       </li>
     </ul>
     <el-row class="list">
-      <PlaylistLayout :list="listForCurrentTag" pic-name="coverImgUrl"/>
+      <GridSkeleton v-if="loading && !listForCurrentTag.length" type="playlist"/>
+      <PlaylistLayout v-if="listForCurrentTag.length" :list="listForCurrentTag" pic-name="coverImgUrl"/>
     </el-row>
     <LoadMore :load="load" :loading="loading" :no-more="noMore"/>
   </div>
@@ -16,10 +17,11 @@
 <script>
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import LoadMore from "@/components/LoadMore";
+import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 export default {
   name: "BoutiquePlaylist",
-  components: {PlaylistLayout, LoadMore},
+  components: {PlaylistLayout, LoadMore, GridSkeleton},
   data() {
     return {
       loading: false,

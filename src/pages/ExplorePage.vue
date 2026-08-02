@@ -13,9 +13,11 @@
           @click="handleClick(c.linkName)"
         >{{ c.title }}</button>
       </div>
-      <keep-alive>
-        <router-view/>
-      </keep-alive>
+      <transition name="fade-up" mode="out-in">
+        <keep-alive>
+          <router-view/>
+        </keep-alive>
+      </transition>
     </div>
   </div>
 </template>

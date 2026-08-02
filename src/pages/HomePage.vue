@@ -42,7 +42,8 @@
       <!--每日推荐-推荐歌单-->
       <el-row>
         <h2>每日推荐-推荐歌单</h2>
-        <PlaylistLayout :list="personalPlaylist" pic-name="picUrl"/>
+        <GridSkeleton v-if="personalLoading" type="playlist" :count="5"/>
+        <PlaylistLayout v-if="personalPlaylist.length" :list="personalPlaylist" pic-name="picUrl"/>
       </el-row>
     </template>
 
@@ -50,31 +51,36 @@
     <div class="topPlayList">
       <el-row>
         <h2>网友精选碟</h2>
-        <PlaylistLayout :list="netizensFeaturedDiscs" pic-name="coverImgUrl"/>
+        <GridSkeleton v-if="discLoading" type="playlist" :count="5"/>
+        <PlaylistLayout v-if="netizensFeaturedDiscs.length" :list="netizensFeaturedDiscs" pic-name="coverImgUrl"/>
       </el-row>
     </div>
     <!--最新专辑-->
     <div class="topAlbum">
       <el-row>
         <h2>最新专辑</h2>
-        <AlbumLayout :list="albums"/>
+        <GridSkeleton v-if="albumLoading" type="album" :count="5"/>
+        <AlbumLayout v-if="albums.length" :list="albums"/>
       </el-row>
     </div>
     <!--推荐歌单-->
     <div class="recommendedPlaylist">
       <h2>推荐歌单</h2>
-      <PlaylistLayout :list="recommendedPlaylist"/>
+      <GridSkeleton v-if="playlistLoading" type="playlist" :count="5"/>
+      <PlaylistLayout v-if="recommendedPlaylist.length" :list="recommendedPlaylist"/>
     </div>
     <!--热门歌手-->
     <div class="hotArtists">
       <h2>热门歌手</h2>
-      <ArtistLayout :list="hotArtists"/>
+      <GridSkeleton v-if="artistLoading" type="artist" :count="5"/>
+      <ArtistLayout v-if="hotArtists.length" :list="hotArtists"/>
     </div>
     <!--获取排行榜-->
     <div class="lists">
       <el-row>
         <h2>排行榜</h2>
-        <el-col v-for="l in lists" :key="l.id" :span="4">
+        <GridSkeleton v-if="rankLoading" type="rank" :count="6"/>
+        <el-col v-if="lists.length" v-for="l in lists" :key="l.id" :span="4">
           <div class="topList" @click="plClk(l.id)">
             <el-card :body-style="{ padding: 0 }" shadow="never">
               <div class="img-wrapper">
@@ -101,6 +107,7 @@ import AlbumLayout from "@/components/layout/AlbumLayout";
 import ArtistLayout from "@/components/layout/ArtistLayout";
 
 import PersonalFM from "@/components/PersonalFM";
+import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 import playTracksBtn from "@/components/playTracksBtn";
 
@@ -116,10 +123,16 @@ export default {
       lists: [],
       personalPlaylist: [],
       personalFM: [],
-      dailySongs: []
+      dailySongs: [],
+      playlistLoading: true,
+      discLoading: true,
+      albumLoading: true,
+      artistLoading: true,
+      rankLoading: true,
+      personalLoading: true,
     }
   },
-  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, playTracksBtn},
+  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, GridSkeleton, playTracksBtn},
   computed: {
     isLogin() {
       return this.$store.getters["UserAbout/isLogin"];
@@ -212,27 +225,24 @@ export default {
       //请求不许登录
       this.$axios.all([this.getRecPlaylist(), this.getTopPlaylist(), this.getNewAlbum(), this.getTopAt(), this.getTopList(),])
           .then(this.$axios.spread((RecPlaylist, TopPlaylist, NewAlbum, TopAt, TopList) => {
-            // 推荐歌单
             this.recommendedPlaylist = RecPlaylist.data.result
-            // 网友精选碟
+            this.playlistLoading = false
             this.netizensFeaturedDiscs = TopPlaylist.data.playlists
-            // 本周最新专辑
+            this.discLoading = false
             this.limitNum(NewAlbum.data.albums, 10, el => this.albums.push(el))
-            // 热门歌手
+            this.albumLoading = false
             this.hotArtists = TopAt.data.artists
-            // 获取榜单
+            this.artistLoading = false
             this.limitNum(TopList.data.list, 6, el => this.lists.push(el))
+            this.rankLoading = false
           }))
 
       //请求需要登录
       this.$axios.all([this.getPersonalPlaylist(), this.getPersonalFM(), this.getDailySongs()])
           .then(this.$axios.spread((personalPlaylist, personalFM, dailySongs) => {
-            //每日推荐歌单
             this.limitNum(personalPlaylist.data.recommend,5,item=>this.personalPlaylist.push(item))
-            // this.personalPlaylist = personalPlaylist.data.recommend
-            //私人FM
+            this.personalLoading = false
             this.personalFM = personalFM.data.data
-            //每日推荐歌曲
             this.dailySongs = dailySongs.data.data.dailySongs
           }))
     }

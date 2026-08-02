@@ -1,7 +1,8 @@
 <template>
   <div v-cloak class="listDetail">
-    <div class="listInfo ">
-      <el-row>
+    <div class="listInfo">
+      <PlaylistInfoSkeleton v-if="infoLoading"/>
+      <el-row v-else>
         <el-col :span="6">
           <div class="imgContainer">
             <img :alt="listInfo.coverImgId" :src="listInfo.coverImgUrl">
@@ -27,8 +28,11 @@
     <div class="songs-comment">
       <el-tabs v-model="activeName">
         <el-tab-pane label="歌曲" name="songs">
-          <TracksLayout :list="songs"/>
-          <LoadMore :load="load" :loading="loading" :noMore="noMore"/>
+          <TrackListSkeleton v-if="initialLoading"/>
+          <template v-else>
+            <TracksLayout :list="songs"/>
+            <LoadMore :load="load" :loading="loading" :noMore="noMore"/>
+          </template>
         </el-tab-pane>
         <el-tab-pane label="评论" name="comment">
           <CommentLayout :id="id" type="2"/>
@@ -42,12 +46,14 @@
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
 import CommentLayout from "@/components/layout/CommentLayout";
+import PlaylistInfoSkeleton from "@/components/Skeleton/PlaylistInfoSkeleton";
+import TrackListSkeleton from "@/components/Skeleton/TrackListSkeleton";
 
 import scoText from "@/components/scoText";
 
 export default {
   name: "listDetail",
-  components: {LoadMore, TracksLayout,CommentLayout,scoText},
+  components: {LoadMore, TracksLayout, CommentLayout, PlaylistInfoSkeleton, TrackListSkeleton, scoText},
   data() {
     // const LIMIT = 50, OFFSET = 50;
     return {
@@ -57,6 +63,8 @@ export default {
       listInfo: {},
       creator: {},
       loading: false,
+      infoLoading: true,
+      initialLoading: true,
       params: {
         limit: this.LIMIT,
         offset: this.OFFSET
@@ -95,8 +103,9 @@ export default {
             this.songs.push(val)
           }
         })
-        this.loading = false
-        this.params.offset++
+      this.loading = false
+      this.initialLoading = false
+      this.params.offset++
       })
     },
     load() {
@@ -111,18 +120,17 @@ export default {
     }
   },
   activated() {
-    //初始化，以免携带上次数据
     this.songs = []
     this.listInfo = {}
     this.creator = {}
+    this.infoLoading = true
+    this.initialLoading = true
     this.params.limit = this.LIMIT
     this.params.offset = this.OFFSET
-    // console.log(this.params.limit);
-    //获取歌单详情
     this.$axios.get('/playlist/detail', {params: {id: this.id}}).then(res => {
       this.listInfo = res.data.playlist
       this.creator = res.data.playlist.creator
-    })
+    }).finally(() => { this.infoLoading = false })
     this.loadSongs(this.id)
   }
 }

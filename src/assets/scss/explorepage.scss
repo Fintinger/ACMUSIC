@@ -11,6 +11,11 @@
     .explore-subtitle { font-size: 15px; color: $font-black-2; margin: 0; }
   }
 
+  .fade-up-enter-active { transition: opacity .25s ease, transform .25s ease; }
+  .fade-up-leave-active { transition: opacity .15s ease, transform .15s ease; }
+  .fade-up-enter { opacity: 0; transform: translateY(12px); }
+  .fade-up-leave-to { opacity: 0; transform: translateY(-8px); }
+
   .explore-tabs {
     display: flex; gap: 0; margin-bottom: 32px;
     border-bottom: 1px solid rgba(0,0,0,.06);

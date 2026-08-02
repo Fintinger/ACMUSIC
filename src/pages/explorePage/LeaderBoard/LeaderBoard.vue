@@ -1,6 +1,7 @@
 <template>
   <div class="topList">
-    <PlaylistLayout :list="topList" pic-name="coverImgUrl">
+    <GridSkeleton v-if="loading" type="playlist"/>
+    <PlaylistLayout v-if="!loading && topList.length" :list="topList" pic-name="coverImgUrl">
       <template v-slot:top>
         <li class="playlist" @click="showArtists()">
           <el-card :body-style="{ padding: 0} " shadow="hover">
@@ -20,15 +21,16 @@
 
 <script>
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
+import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 export default {
   name: "LeaderBoard",
-  components: {PlaylistLayout},
+  components: {PlaylistLayout, GridSkeleton},
   data() {
     return {
       topArtists: {},
       topList: [],
-      // topRewardList: {},
+      loading: false,
     }
   },
   methods: {
@@ -41,13 +43,11 @@ export default {
     }
   },
   beforeMount() {
-    //获取所有排行榜详情
+    this.loading = true
     this.$axios.get('/toplist/detail').then(res => {
-      console.log(res);
       this.topArtists = res.data.artistToplist
-      // this.topRewardList = res.data.rewardToplist
       this.topList = res.data.list
-    })
+    }).finally(() => { this.loading = false })
   },
 }
 </script>

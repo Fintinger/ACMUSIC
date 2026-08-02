@@ -4,9 +4,10 @@
           <el-button v-for="t in tags" :key="t.id" class="video-tag-btn" size="small" @click="tagClick(t.id)">{{ t.name }}</el-button>
     </el-row>
     <el-row class="video-result">
-      <VideoLayout :list="renderList"/>
-      <LoadMore v-if="!curId" :load="loadRec" :loading="loading" :no-more="noMore"/>
-      <LoadMore v-else :load="load" :loading="loading" :no-more="noMore"/>
+      <GridSkeleton v-if="loading && !renderList.length" type="video"/>
+      <VideoLayout v-if="renderList.length" :list="renderList"/>
+      <LoadMore v-if="renderList.length && !curId" :load="loadRec" :loading="loadingMore" :no-more="noMore"/>
+      <LoadMore v-if="renderList.length && curId" :load="load" :loading="loadingMore" :no-more="noMore"/>
     </el-row>
   </div>
 </template>
@@ -14,10 +15,11 @@
 <script>
 import VideoLayout from "@/components/layout/VideoLayout";
 import LoadMore from "@/components/LoadMore";
+import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 export default {
   name: "VideoList",
-  components: {VideoLayout, LoadMore},
+  components: {VideoLayout, LoadMore, GridSkeleton},
   data() {
     return {
       tags: [],
@@ -25,6 +27,7 @@ export default {
       offset: 0,
       renderList: [],
       loading: false,
+      loadingMore: false,
       more: true
     }
   },
@@ -54,7 +57,7 @@ export default {
     },
     loadRec() {
       this.offset++;
-      this.loading = true
+      this.loadingMore = true
       this.getRecommendedVideos().then(res => {
         console.log(res);
         res.data.datas.forEach(val => {
@@ -63,14 +66,13 @@ export default {
           }
         })
         this.more = res.data.hasmore
-        this.loading = false
+        this.loadingMore = false
       })
     },
     load() {
       this.offset++;
-      this.loading = true
+      this.loadingMore = true
       this.getVideoByTagId(this.curId).then(res => {
-        console.log(res);
         res.data.datas.forEach(val => {
           if (this.renderList.findIndex(item => item.vid === val.vid) === -1) {
             this.renderList.push(val.data)
@@ -84,17 +86,17 @@ export default {
       return this.$axios('/video/timeline/recommend', {params: {offset: this.offset}})
     },
     concurrentRequests() {
+      this.loading = true
       this.renderList = []
       this.$axios.all([this.getVideoTags(), this.getRecommendedVideos()])
           .then(this.$axios.spread((tags, recommend) => {
-            //标签列表
             this.tags = tags.data.data
-            //推荐视频
             recommend.data.datas.map(val => {
               this.renderList.push(val.data)
             })
             this.more = recommend.data.hasmore
           }))
+          .finally(() => { this.loading = false })
     }
   },
   activated() {
