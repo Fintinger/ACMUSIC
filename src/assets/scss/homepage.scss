@@ -10,6 +10,26 @@
     margin-bottom: 50px;
   }
 
+  .home-module {
+    min-height: 320px;
+
+    h2 + * {
+      margin-top: 20px;
+    }
+  }
+
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  .fade-slide-enter {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  .fade-slide-leave-to {
+    opacity: 0;
+  }
+
   /*  //轮播图效果
     $carouselMaxHeight: 280px;
 

@@ -12,8 +12,9 @@
                   </div>
                 </el-carousel-item>
               </el-carousel>
-            </el-col>
-          </el-row>
+        </el-col>
+        </transition>
+      </el-row>
         </div>-->
     <!--每日推荐-->
     <template v-if="isLogin">
@@ -42,48 +43,60 @@
       <!--每日推荐-推荐歌单-->
       <el-row>
         <h2>每日推荐-推荐歌单</h2>
-        <GridSkeleton v-if="personalLoading" type="playlist" :count="5"/>
-        <PlaylistLayout v-if="personalPlaylist.length" :list="personalPlaylist" pic-name="picUrl"/>
+        <transition name="fade-slide" mode="out-in">
+          <GridSkeleton v-if="personalLoading || !personalReady" key="skeleton" type="playlist" :count="5" :title="false"/>
+          <PlaylistLayout v-else key="content" :list="personalPlaylist" pic-name="picUrl"/>
+        </transition>
       </el-row>
     </template>
 
     <!--网友精选碟-->
-    <div class="topPlayList">
+    <div class="topPlayList home-module">
       <el-row>
         <h2>网友精选碟</h2>
-        <GridSkeleton v-if="discLoading" type="playlist" :count="5"/>
-        <PlaylistLayout v-if="netizensFeaturedDiscs.length" :list="netizensFeaturedDiscs" pic-name="coverImgUrl"/>
+        <transition name="fade-slide" mode="out-in">
+          <GridSkeleton v-if="discLoading || !discReady" key="skeleton" type="playlist" :count="5" :title="false"/>
+          <PlaylistLayout v-else key="content" :list="netizensFeaturedDiscs" pic-name="coverImgUrl"/>
+        </transition>
       </el-row>
     </div>
     <!--最新专辑-->
-    <div class="topAlbum">
+    <div class="topAlbum home-module">
       <el-row>
         <h2>最新专辑</h2>
-        <GridSkeleton v-if="albumLoading" type="album" :count="5"/>
-        <AlbumLayout v-if="albums.length" :list="albums"/>
+        <transition name="fade-slide" mode="out-in">
+          <GridSkeleton v-if="albumLoading || !albumReady" key="skeleton" type="album" :count="5" :title="false"/>
+          <AlbumLayout v-else key="content" :list="albums"/>
+        </transition>
       </el-row>
     </div>
     <!--推荐歌单-->
-    <div class="recommendedPlaylist">
+    <div class="recommendedPlaylist home-module">
       <h2>推荐歌单</h2>
-      <GridSkeleton v-if="playlistLoading" type="playlist" :count="5"/>
-      <PlaylistLayout v-if="recommendedPlaylist.length" :list="recommendedPlaylist"/>
+      <transition name="fade-slide" mode="out-in">
+        <GridSkeleton v-if="playlistLoading || !playlistReady" key="skeleton" type="playlist" :count="5" :title="false"/>
+        <PlaylistLayout v-else key="content" :list="recommendedPlaylist"/>
+      </transition>
     </div>
     <!--热门歌手-->
-    <div class="hotArtists">
+    <div class="hotArtists home-module">
       <h2>热门歌手</h2>
-      <GridSkeleton v-if="artistLoading" type="artist" :count="5"/>
-      <ArtistLayout v-if="hotArtists.length" :list="hotArtists"/>
+      <transition name="fade-slide" mode="out-in">
+        <GridSkeleton v-if="artistLoading || !artistReady" key="skeleton" type="artist" :count="5" :title="false"/>
+        <ArtistLayout v-else key="content" :list="hotArtists"/>
+      </transition>
     </div>
     <!--获取排行榜-->
-    <div class="lists">
+    <div class="lists home-module">
       <el-row>
         <h2>排行榜</h2>
-        <GridSkeleton v-if="rankLoading" type="rank" :count="6"/>
-        <el-col v-if="lists.length" v-for="l in lists" :key="l.id" :span="4">
+        <transition name="fade-slide" mode="out-in">
+          <GridSkeleton v-if="rankLoading || !rankReady" key="skeleton" type="rank" :count="6" :title="false"/>
+          <div v-else key="content">
+            <el-col v-for="l in lists" :key="l.id" :span="4">
           <div class="topList" @click="plClk(l.id)">
             <el-card :body-style="{ padding: 0 }" shadow="never">
-              <div class="img-wrapper">
+              <div class="img-wrapper" style="aspect-ratio:1;overflow:hidden">
                 <img :src="l.coverImgUrl"
                      class="image">
               </div>
@@ -94,6 +107,8 @@
             </el-card>
           </div>
         </el-col>
+          </div>
+        </transition>
       </el-row>
     </div>
 
@@ -130,6 +145,12 @@ export default {
       artistLoading: true,
       rankLoading: true,
       personalLoading: true,
+      discReady: false,
+      albumReady: false,
+      artistReady: false,
+      rankReady: false,
+      personalReady: false,
+      playlistReady: false,
     }
   },
   components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, GridSkeleton, playTracksBtn},
@@ -202,6 +223,19 @@ export default {
     getDailySongs() {
       return this.$axios('/recommend/songs')
     },
+    revealAfterImages(selector, readyKey) {
+      const el = this.$el.querySelector(selector)
+      if (!el) { this[readyKey] = true; return }
+      const imgs = el.querySelectorAll('img')
+      if (!imgs.length) { this[readyKey] = true; return }
+      let pending = imgs.length
+      const done = () => { pending--; if (pending <= 0) this[readyKey] = true }
+      imgs.forEach(img => {
+        if (img.complete) done()
+        else { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }) }
+      })
+      setTimeout(() => { if (pending > 0) { pending = 0; this[readyKey] = true } }, 3000)
+    },
     goDailySongs() {
       console.log('goDailySongs');
       //路由到每日推荐界面
@@ -227,14 +261,19 @@ export default {
           .then(this.$axios.spread((RecPlaylist, TopPlaylist, NewAlbum, TopAt, TopList) => {
             this.recommendedPlaylist = RecPlaylist.data.result
             this.playlistLoading = false
+            this.$nextTick(() => this.revealAfterImages('.recommendedPlaylist', 'playlistReady'))
             this.netizensFeaturedDiscs = TopPlaylist.data.playlists
             this.discLoading = false
+            this.$nextTick(() => this.revealAfterImages('.topPlayList', 'discReady'))
             this.limitNum(NewAlbum.data.albums, 10, el => this.albums.push(el))
             this.albumLoading = false
+            this.$nextTick(() => this.revealAfterImages('.topAlbum', 'albumReady'))
             this.hotArtists = TopAt.data.artists
             this.artistLoading = false
+            this.$nextTick(() => this.revealAfterImages('.hotArtists', 'artistReady'))
             this.limitNum(TopList.data.list, 6, el => this.lists.push(el))
             this.rankLoading = false
+            this.$nextTick(() => this.revealAfterImages('.lists', 'rankReady'))
           }))
 
       //请求需要登录
@@ -242,6 +281,7 @@ export default {
           .then(this.$axios.spread((personalPlaylist, personalFM, dailySongs) => {
             this.limitNum(personalPlaylist.data.recommend,5,item=>this.personalPlaylist.push(item))
             this.personalLoading = false
+            this.$nextTick(() => this.revealAfterImages('.recTracks-personalFM + .el-row', 'personalReady'))
             this.personalFM = personalFM.data.data
             this.dailySongs = dailySongs.data.data.dailySongs
           }))
