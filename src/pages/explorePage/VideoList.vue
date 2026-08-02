@@ -1,9 +1,9 @@
 <template>
   <div class="video-list">
-    <el-row>
-          <el-button v-for="t in tags" :key="t.id" type="small" @click="tagClick(t.id)">{{ t.name }}</el-button>
+    <el-row class="video-tags">
+          <el-button v-for="t in tags" :key="t.id" class="video-tag-btn" size="small" @click="tagClick(t.id)">{{ t.name }}</el-button>
     </el-row>
-    <el-row>
+    <el-row class="video-result">
       <VideoLayout :list="renderList"/>
       <LoadMore v-if="!curId" :load="loadRec" :loading="loading" :no-more="noMore"/>
       <LoadMore v-else :load="load" :loading="loading" :no-more="noMore"/>

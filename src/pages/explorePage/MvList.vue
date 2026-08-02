@@ -15,9 +15,11 @@
       <MvLayout :list="renderedList"/>
     </el-row>
 
-    <button v-if="!loading&&hasMore" @click="load()">加载更多</button>
-    <p v-if="loading">加载中...</p>
-    <p v-if="!hasMore">没有更多了</p>
+    <div class="mv-load-more">
+      <button v-if="!loading&&hasMore" @click="load()">加载更多</button>
+      <p v-if="loading">加载中...</p>
+      <p v-if="!hasMore">没有更多了</p>
+    </div>
   </div>
 </template>
 

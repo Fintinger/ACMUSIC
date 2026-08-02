@@ -1,0 +1,274 @@
+@import "base/variables";
+
+.categoryPage {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+
+  .explore-hero {
+    padding: 48px 0 36px;
+    .explore-title { font-size: 32px; font-weight: 700; color: $font-black; margin: 0 0 8px; }
+    .explore-subtitle { font-size: 15px; color: $font-black-2; margin: 0; }
+  }
+
+  .explore-tabs {
+    display: flex; gap: 0; margin-bottom: 32px;
+    border-bottom: 1px solid rgba(0,0,0,.06);
+    button {
+      padding: 12px 24px; border: none; background: transparent;
+      color: $font-black-2; font-size: 15px; font-weight: 500; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color .2s, border-color .2s;
+      &:hover { color: $font-black-1; }
+      &.active { color: $color-main; font-weight: 600; border-bottom-color: $color-main; }
+    }
+  }
+
+  /* ---------- 二级导航 ---------- */
+  .playlist > .el-row:first-child {
+    display: flex; gap: 4px; margin-bottom: 24px;
+    border-bottom: none;
+    .el-col {
+      flex: none; max-width: none;
+      a {
+        display: inline-block; padding: 6px 16px;
+        font-size: 13px; font-weight: 400; color: lighten($font-black-2, 15%);
+        border-radius: 14px;
+        text-decoration: none; transition: background .2s, color .2s;
+        &:hover { color: $font-black-2; }
+        &.router-link-active { color: $color-main; font-weight: 500; background: rgba($color-main,.06); }
+      }
+    }
+  }
+
+  /* ---------- fix grid li padding from reset.scss ---------- */
+  .gridLayout > li,
+  .mvList.gridLayout > li {
+    padding: 0;
+    min-width: 0;
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  /* ---------- pill tag buttons (shared) ---------- */
+  .all-list .cat-item .el-button,
+  .boutiquePlaylist .playlist-tag-btn,
+  .recommendPlaylist .MvCategories .itemBtn,
+  .video-list .video-tag-btn {
+    padding: 6px 16px; border-radius: 20px; font-size: 13px;
+    background: #f5f5f7; border: 1px solid transparent; color: $font-black-2;
+    transition: all .2s;
+    &:hover { background: rgba($color-main,.08); color: $color-main; }
+  }
+
+  /* ---------- AllList 全部歌单 ---------- */
+  .all-list {
+    .cat-list .cat {
+      display: flex; align-items: flex-start; margin-bottom: 14px;
+      .cat-name { font-size: 14px; font-weight: 600; color: $font-black-1; min-width: 56px; padding-top: 6px; }
+      .cat-item { display: flex; flex-wrap: wrap; gap: 8px; }
+    }
+    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .load-more { text-align: center; padding: 28px 0; }
+  }
+
+  /* ---------- BoutiqueList 精品歌单 ---------- */
+  .boutiquePlaylist {
+    .listTags {
+      display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 20px; margin: 0; list-style: none;
+      li { display: inline-block; }
+    }
+    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .playlist-load-more { text-align: center; padding: 28px 0; }
+  }
+
+  /* ---------- MvList MV ---------- */
+  .recommendPlaylist {
+    .MvCategories .el-row {
+      display: flex; align-items: center; margin-bottom: 14px;
+      h2 { font-size: 14px; font-weight: 600; color: $font-black-1; margin: 0; min-width: 56px; }
+      .el-col { display: flex; flex-wrap: wrap; gap: 8px; }
+    }
+    .mvList.gridLayout {
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 24px;
+
+      li.list-item.mv {
+        padding: 0; width: 100%;
+
+        .el-card {
+          border-radius: 16px;
+          overflow: hidden;
+          border: 1px solid rgba(0,0,0,.06);
+          background: #fff;
+          transition: transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s;
+          &:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 30px rgba(0,0,0,.1);
+            .imgContainer img { transform: scale(1.05); }
+          }
+        }
+
+        .imgContainer {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          overflow: hidden;
+          border-radius: 16px 16px 0 0;
+          img {
+            width: 100%; height: 100%;
+            object-fit: cover; display: block;
+            transition: transform .35s cubic-bezier(.22,.61,.36,1);
+          }
+        }
+
+        .playCount {
+          position: absolute;
+          top: 12px; right: 14px;
+          background: rgba(0,0,0,.35);
+          color: #fff;
+          border-radius: 12px;
+          padding: 3px 8px;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .moreInfo {
+          padding: 12px 14px 14px;
+
+          .mvName {
+            font-size: 15px; font-weight: 600; color: $font-black;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            line-height: 1.4; margin-bottom: 6px;
+          }
+
+          .mvArtist {
+            font-size: 13px; color: $font-black-2;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            line-height: 1.4; margin-bottom: 12px;
+          }
+
+          .duration {
+            display: inline-block;
+            font-size: 12px; color: $font-black-1;
+            margin-right: 12px;
+          }
+
+          .pb-time {
+            display: inline-block;
+            font-size: 12px; color: #999;
+          }
+        }
+      }
+    }
+    .mv-load-more { text-align: center; padding: 28px 0; }
+  }
+
+  /* ---------- VideoList 视频 ---------- */
+  .video-list {
+    .video-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    .video-result .mvList.gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  }
+
+  /* ---------- LeaderBoard 榜单 ---------- */
+  .topList {
+    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .gridLayout > li:first-child {
+      grid-column: span 2;
+      .imgContainer img {
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+      }
+      .moreInfo {
+        padding: 12px 16px;
+        .listName { font-size: 14px; font-weight: 600; color: $font-black; }
+        p { font-size: 12px; color: $font-black-2; }
+      }
+    }
+  }
+
+  /* ---------- playlist card overrides ---------- */
+  .gridLayout li.playlist .el-card {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,.06);
+    background: #fff;
+    transition: transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s;
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.1);
+      .play-btn { opacity: 1; }
+    }
+  }
+
+  .gridLayout li.playlist .imgContainer {
+    border-radius: 12px 12px 0 0;
+    overflow: hidden;
+    img {
+      display: block; width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      transition: transform .35s cubic-bezier(.22,.61,.36,1);
+    }
+    &:hover img { transform: scale(1.04); }
+  }
+
+  .gridLayout li.playlist .info {
+    padding: 12px 14px 14px;
+
+    .listName .marquee-content {
+      font-size: 14px; font-weight: 600; color: $font-black;
+      line-height: 1.4;
+    }
+
+    .moreInfo p {
+      font-size: 12px; color: $font-black-2;
+      line-height: 1.4; margin-top: 4px;
+    }
+  }
+
+  /* ---------- load-more buttons ---------- */
+  .mv-load-more,
+  .playlist-load-more {
+    button {
+      padding: 8px 32px; border-radius: 20px; font-size: 14px;
+      background: #f5f5f7; border: 1px solid rgba(0,0,0,.06); color: $font-black-2; cursor: pointer;
+      transition: all .2s;
+      &:hover { background: rgba($color-main,.08); color: $color-main; }
+    }
+    p { color: $font-black-2; font-size: 13px; }
+  }
+
+  /* responsive */
+  @media (max-width: 1100px) {
+    .all-list .gridLayout,
+    .boutiquePlaylist .gridLayout,
+    .recommendPlaylist .mvList.gridLayout,
+    .video-list .video-result .mvList.gridLayout { grid-template-columns: repeat(3, 1fr); }
+    .topList .gridLayout { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  @media (max-width: 768px) {
+    padding: 0 16px 60px;
+    .explore-hero { padding: 32px 0 24px; }
+    .explore-title { font-size: 26px; }
+    .explore-tabs button { padding: 10px 14px; font-size: 14px; }
+
+    .all-list .gridLayout,
+    .boutiquePlaylist .gridLayout,
+    .recommendPlaylist .mvList.gridLayout,
+    .video-list .video-result .mvList.gridLayout,
+    .topList .gridLayout { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+
+    .all-list .cat-list .cat { flex-direction: column; gap: 6px; }
+    .recommendPlaylist .MvCategories .el-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+    .playlist > .el-row:first-child .el-col a { padding: 8px 14px; font-size: 14px; }
+  }
+
+  @media (max-width: 480px) {
+    .all-list .gridLayout,
+    .boutiquePlaylist .gridLayout,
+    .recommendPlaylist .mvList.gridLayout,
+    .video-list .video-result .mvList.gridLayout,
+    .topList .gridLayout { grid-template-columns: repeat(1, 1fr); }
+  }
+}

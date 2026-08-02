@@ -124,19 +124,39 @@ export default {
 .all-list {
   .cat-list {
     .cat {
-      margin-top: 30px;
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 16px;
 
       .cat-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: #555;
+        min-width: 56px;
+        padding-top: 6px;
       }
 
       .cat-item {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+
         .el-button {
-          margin-top: 10px;
+          padding: 6px 16px;
+          border-radius: 20px;
+          font-size: 13px;
+          background: #f5f5f7;
+          border: 1px solid transparent;
+          color: #888;
+          transition: all .2s;
+
+          &:hover {
+            color: #8685EF;
+            background: rgba(134,133,239,.08);
+          }
         }
       }
     }
-
   }
 }
-
 </style>

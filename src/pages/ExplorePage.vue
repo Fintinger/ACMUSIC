@@ -1,30 +1,31 @@
 <template>
-  <el-container class="categoryPage">
-    <el-header><h2>发现更多可能</h2></el-header>
-    <el-main>
-      <el-row class="sort-title">
-        <el-col v-for="(c, index) in sort" :key="index" :span="2">
-          <el-button type="primary" @click="handleClick(c.linkName)">{{ c.title }}</el-button>
-        </el-col>
-      </el-row>
+  <div class="categoryPage">
+    <div class="explore-hero">
+      <h1 class="explore-title">发现音乐</h1>
+      <p class="explore-subtitle">探索音乐、发现热门歌单、MV 和排行榜</p>
+    </div>
+    <div class="explore-content">
+      <div class="explore-tabs">
+        <button
+          v-for="(c, index) in sort"
+          :key="index"
+          :class="{ active: $route.name === c.linkName }"
+          @click="handleClick(c.linkName)"
+        >{{ c.title }}</button>
+      </div>
       <keep-alive>
         <router-view/>
       </keep-alive>
-    </el-main>
-  </el-container>
+    </div>
+  </div>
 </template>
 
 <script>
-
 export default {
   name: "CategoryPage",
   methods: {
-    handleClick(name) {
-      this.$router.push({name})
-    },
-    showArtistList() {
-      this.$router.push({name: "artistList"})
-    }
+    handleClick(name) { this.$router.push({name}) },
+    showArtistList() { this.$router.push({name: "artistList"}) }
   },
   data() {
     return {
@@ -43,16 +44,5 @@ export default {
 </script>
 
 <style lang="scss">
-.categoryPage {
-
-  .el-main {
-    width: 100%;
-    margin: 0;
-
-    .categoryTitle {
-      margin-bottom: 50px;
-    }
-  }
-
-}
+@import "src/assets/scss/explorepage";
 </style>

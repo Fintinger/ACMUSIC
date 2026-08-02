@@ -3,24 +3,23 @@
     <!--    精品歌单tags-->
     <ul class="listTags">
       <li v-for="t in BoutiquePlaylistTags" :key="t.id">
-        <el-button size="small" type="success" @click="getListForCurrentTag(t.name)">{{ t.name }}</el-button>
+        <el-button class="playlist-tag-btn" size="small" @click="getListForCurrentTag(t.name)">{{ t.name }}</el-button>
       </li>
     </ul>
     <el-row class="list">
       <PlaylistLayout :list="listForCurrentTag" pic-name="coverImgUrl"/>
     </el-row>
-    <button v-if="!loading&&!noMore" @click="load(currentTag,lastTime)">加载更多</button>
-    <p v-if="loading">加载中...</p>
-    <p v-if="noMore">没有更多了</p>
+    <LoadMore :load="load" :loading="loading" :no-more="noMore"/>
   </div>
 </template>
 
 <script>
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
+import LoadMore from "@/components/LoadMore";
 
 export default {
   name: "BoutiquePlaylist",
-  components: {PlaylistLayout},
+  components: {PlaylistLayout, LoadMore},
   data() {
     return {
       loading: false,
@@ -37,9 +36,10 @@ export default {
   },
   methods: {
     //加载更多
-    load(cat, before) {
+    load() {
+      if (this.loading || this.noMore) return
       this.loading = true
-      this.getList(cat, before).then(res => {
+      this.getList(this.currentTag, this.lastTime).then(res => {
         this.loadCallback(res.data)
       })
     },
