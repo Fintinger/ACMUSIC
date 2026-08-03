@@ -15,7 +15,8 @@ export default {
     return {
       detail: {},
       url: "",
-      simiMvs: []
+      simiMvs: [],
+      loading: true
     }
   },
   methods: {
@@ -33,26 +34,43 @@ export default {
     }
   },
   activated() {
+    this.loading = true
     this.$axios.all([this.getDetail(this.id), this.getUrl(this.id), this.getSimiMv(this.id)])
         .then(this.$axios.spread((detail, url, simiMv) => {
-          //获取MV详情
           this.detail = detail.data.data
-          // 获取Url
           this.url = url.data.data.url
-          // 获取相似mv
           this.simiMvs = simiMv.data.mvs
         }))
+        .finally(() => { this.loading = false })
   },
 }
 </script>
 
 <style lang="scss" scoped>
 .mvPlay {
-  text-align: left;
-  height: 100%;
+  text-align: left; height: 100%;
 }
 
-.simiMV {
-  margin-bottom: 30px;
+.simiMV { margin-bottom: 30px; }
+
+.mvPlaySkeleton {
+  max-width: 1280px; margin: 0 auto; padding: 24px 0;
+  .skelPlayer {
+    width: 100%; aspect-ratio: 16/9; border-radius: 16px;
+    background: linear-gradient(90deg, #e8e8e8 25%, #f0f0f0 50%, #e8e8e8 75%);
+    background-size: 200% 100%; animation: shimmer 1.5s infinite;
+  }
+  .skelLine {
+    height: 16px; border-radius: 8px; margin-top: 16px;
+    background: linear-gradient(90deg, #e8e8e8 25%, #f0f0f0 50%, #e8e8e8 75%);
+    background-size: 200% 100%; animation: shimmer 1.5s infinite;
+    &--long { width: 50%; }
+    &--short { width: 30%; height: 12px; }
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 </style>

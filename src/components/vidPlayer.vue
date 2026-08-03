@@ -19,9 +19,10 @@ export default {
         id: 'player',
         url: this.url,
         definitionActive: 'click',
-        fluid: true,
-        fitVideoSize: 'fixWidth',
-        // autoplay: true,
+        fluid: false,
+        width: '100%',
+        height: '100%',
+        fitVideoSize: 'auto',
         poster: this.poster,
         playbackRate: [0.5, 0.75, 1, 1.5, 2],
         defaultPlaybackRate: 1,
@@ -45,7 +46,7 @@ export default {
   },
   mounted() {
     this.initPlayer()
-    // this.ply.play()
+    this.$nextTick(() => { if (this.ply && this.ply.resize) this.ply.resize() })
   },
   beforeDestroy() {
     this.ply.destroy()
@@ -55,6 +56,15 @@ export default {
 
 <style scoped>
 #player{
-  height: 100%!important;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+#player ::v-deep .xgplayer,
+#player ::v-deep video {
+  width: 100% !important;
+  height: 100% !important;
+}
+#player ::v-deep video {
+  object-fit: contain;
 }
 </style>
