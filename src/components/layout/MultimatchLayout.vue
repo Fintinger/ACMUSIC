@@ -37,5 +37,15 @@ export default {
 </script>
 
 <style scoped>
+.multimatch {
+  min-width: 160px;
+  animation: fadeScale .4s ease;
+  ::v-deep .gridLayout {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  ::v-deep li { padding: 0 !important; transition: transform .25s; &:hover { transform: translateY(-4px); } }
+}
 
+@keyframes fadeScale { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
 </style>
