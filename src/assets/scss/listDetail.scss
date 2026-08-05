@@ -102,4 +102,60 @@
       }
     }
   }
+
+  /* comment light theme overrides for ListDetail */
+  ::v-deep .comment-container {
+    .comment-header-bar h2 {
+      display: none;
+    }
+    .hot-comments-section h3,
+    .new-comments-section h3 {
+      color: $font-black-1 !important;
+    }
+    .empty-state p {
+      color: $font-black-2 !important;
+    }
+    .section-divider {
+      background: linear-gradient(to right, rgba(0,0,0,.06), transparent) !important;
+    }
+    .load-more button {
+      background: $color-theme-sec !important;
+      border-color: rgba(0,0,0,.06) !important;
+      color: $font-black-2 !important;
+      &:hover { background: darken($color-theme-sec, 3%) !important; color: $font-black-1 !important; }
+    }
+    .load-more p {
+      color: $font-black-2 !important;
+    }
+    .floating-comment-btn {
+      bottom: 60px !important;
+    }
+  }
+
+  ::v-deep .comment-content {
+    .comment-item {
+      background: $color-theme-sec !important;
+      &:hover { background: darken($color-theme-sec, 3%) !important; transform: none !important; }
+    }
+    .main {
+      .name .nickname {
+        color: $font-black-1 !important;
+        &:hover { color: $color-main !important; }
+      }
+      .name .time-tag {
+        color: $font-black-2 !important;
+      }
+      .content {
+        color: $font-black-1 !important;
+      }
+      .time-ribbon .ribbon > span {
+        color: $font-black-2 !important;
+        &:hover { color: $font-black-1 !important; }
+      }
+      .comment-delete .el-button {
+        color: $font-black-2 !important;
+        &:hover { color: #ef4444 !important; }
+      }
+    }
+  }
 }

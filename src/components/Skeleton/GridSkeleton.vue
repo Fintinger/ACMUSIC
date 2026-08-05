@@ -98,7 +98,7 @@ export default {
 }
 
 .skel-body {
-  padding: 12px 14px 14px;
+  padding: 14px 14px 16px;
 
   .skel-card--artist & {
     padding: 10px 4px 14px;
