@@ -16,7 +16,7 @@
             <el-row v-else-if="v.creator" :key="v.creator.userId" class="vCreator">{{ v.creator.userName }}</el-row>
             <el-row class="playCount">{{ v.playTime | Div1w(v.playTime) }}</el-row>
             <el-row class="duration">{{ v.durationms }}</el-row>
-            <el-row class="pb-time">{{ v.publishTime }}</el-row>
+            <el-row class="pb-time">{{ v.publishTime | formatMs("YYYY年MM月DD日") }}</el-row>
           </div>
         </el-card>
       </li>
@@ -34,7 +34,7 @@
             </el-row>
             <el-row class="playCount">{{ v.playTime | Div1w(v.playTime) }}</el-row>
             <el-row class="duration">{{ v.resource.mlogBaseData.duration }}</el-row>
-            <el-row class="pb-time">{{ v.resource.mlogBaseData.pubTime }}
+            <el-row class="pb-time">{{ v.resource.mlogBaseData.pubTime | formatMs("YYYY年MM月DD日") }}
             </el-row>
           </div>
         </el-card>

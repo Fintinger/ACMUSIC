@@ -10,7 +10,7 @@
           <el-row class="mvArtist">{{ mv.artistName }}</el-row>
           <el-row class="playCount">{{ mv.playCount | Div1w(mv.playCount) }}</el-row>
           <el-row class="duration">{{ mv.duration }}</el-row>
-          <el-row class="pb-time">{{ mv.publishTime }}</el-row>
+          <el-row class="pb-time">{{ mv.publishTime | formatMs("YYYY年MM月DD日") }}</el-row>
         </div>
       </el-card>
     </li>
