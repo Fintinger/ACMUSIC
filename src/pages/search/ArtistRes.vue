@@ -38,5 +38,4 @@ export default {
 
 <style scoped>
 ::v-deep .gridLayout { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important; gap: 20px; }
-::v-deep .gridLayout li { padding: 0 !important; }
 </style>

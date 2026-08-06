@@ -21,6 +21,9 @@
               <i class="el-icon-star-off"></i> {{ playlist.subscribedCount | Div1w(playlist.subscribedCount) }}</p>
           </template>
           <img :src="playlist[picName]" class="image">
+          <div class="play-btn">
+            <playTracksBtn :type="1" :val="playlist"/>
+          </div>
         </div>
         <div class="info">
           <!--歌单名-->
@@ -36,9 +39,6 @@
             <p v-if="playlist.updateFrequency" class="updateFrequency">{{ playlist.upateFrequency }}</p>
             <!--          <p v-if="playlist.description" class="copywriter">{{ playlist.description }}</p>-->
           </div>
-        </div>
-        <div class="play-btn">
-          <playTracksBtn :type="1" :val="playlist"/>
         </div>
       </el-card>
     </li>

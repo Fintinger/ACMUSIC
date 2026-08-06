@@ -34,6 +34,7 @@ Vue.filter('Div1w', filters.formatCount)
 Vue.filter('formatMs', filters.formatMs)
 Vue.filter('formatS', filters.format_s)
 Vue.filter('fromNow', filters.fromNow)
+Vue.filter('formatDuration', filters.formatDurationMs)
 
 new Vue({
     render: h => h(App),

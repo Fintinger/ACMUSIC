@@ -65,9 +65,10 @@ export default {
           .then(res => {
             res.data.result.orders.map(val => {
               if (val === "new_mlog") {
-                res.data.result.new_mlog.forEach(val => {
-                  this.multiRes.push({name: 'new_mlog', data:[ val.baseInfo]})
-                })
+                const mlogData = res.data.result.new_mlog || []
+                if (mlogData.length) {
+                  this.multiRes.push({name: 'new_mlog', data: mlogData.map(item => item.baseInfo)})
+                }
               } else {
                 this.multiRes.push({name: val, data: res.data.result[val]})
               }
@@ -93,11 +94,19 @@ export default {
 }
 
 .multimatch-section {
-  background: #fff; border-radius: 16px; padding: 24px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.04);
   margin-bottom: 28px;
   h2 { font-size: 18px; font-weight: 700; color: $font-black-1; margin: 0 0 16px; }
-  .resContainer { display: flex; flex-wrap: wrap; gap: 12px; }
+  .resContainer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 24px;
+    width: 100%;
+    padding: 24px;
+    box-sizing: border-box;
+    background: #f7f8fa;
+    border-radius: 24px;
+  }
 }
 
 .search-tabs {
@@ -116,17 +125,10 @@ export default {
 
 .search-content { margin-top: 8px; min-height: 500px; }
 ::v-deep h2 + * { margin-top: 20px; }
-::v-deep .gridLayout li,
-::v-deep .mvList li,
 ::v-deep .user-list > *,
 ::v-deep .tracksContainer .tracks {
   animation: fadeUp .35s ease both;
 }
-::v-deep .gridLayout li:nth-child(1) { animation-delay: .02s; }
-::v-deep .gridLayout li:nth-child(2) { animation-delay: .06s; }
-::v-deep .gridLayout li:nth-child(3) { animation-delay: .10s; }
-::v-deep .gridLayout li:nth-child(4) { animation-delay: .14s; }
-::v-deep .gridLayout li:nth-child(5) { animation-delay: .18s; }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 </style>

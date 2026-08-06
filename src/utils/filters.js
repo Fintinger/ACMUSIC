@@ -12,6 +12,7 @@ dayjs.locale('zh-cn') // 使用本地化语言
  * @returns {string|*}
  */
 export function formatCount(num) {
+    num = Number(num) || 0
     let res = "";
     if (num < 10000) {
         res = num
@@ -43,6 +44,13 @@ export function format_s(s, rule = 'mm:ss') {
         minutes:dayjs.duration(s).minutes(),
         // hours:dayjs.duration(s).hours(),
     }).format(rule);
+}
+
+export function formatDurationMs(ms) {
+    const totalSeconds = Math.floor((Number(ms) || 0) / 1000)
+    const m = Math.floor(totalSeconds / 60)
+    const s = totalSeconds % 60
+    return m + ':' + String(s).padStart(2, '0')
 }
 
 /**

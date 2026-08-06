@@ -95,75 +95,8 @@
       .el-col { display: flex; flex-wrap: wrap; gap: 8px; }
     }
     .mvList.gridLayout {
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       gap: 24px;
-
-      li.list-item.mv {
-        padding: 0; width: 100%;
-
-        .el-card {
-          border-radius: 16px;
-          overflow: hidden;
-          border: 1px solid rgba(0,0,0,.06);
-          background: #fff;
-          transition: transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s;
-          &:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 30px rgba(0,0,0,.1);
-            .imgContainer img { transform: scale(1.05); }
-          }
-        }
-
-        .imgContainer {
-          position: relative;
-          aspect-ratio: 16 / 9;
-          overflow: hidden;
-          border-radius: 16px 16px 0 0;
-          img {
-            width: 100%; height: 100%;
-            object-fit: cover; display: block;
-            transition: transform .35s cubic-bezier(.22,.61,.36,1);
-          }
-        }
-
-        .playCount {
-          position: absolute;
-          top: 12px; right: 14px;
-          background: rgba(0,0,0,.35);
-          color: #fff;
-          border-radius: 12px;
-          padding: 3px 8px;
-          font-size: 12px;
-          line-height: 1.4;
-        }
-
-        .moreInfo {
-          padding: 12px 14px 14px;
-
-          .mvName {
-            font-size: 15px; font-weight: 600; color: $font-black;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            line-height: 1.4; margin-bottom: 6px;
-          }
-
-          .mvArtist {
-            font-size: 13px; color: $font-black-2;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            line-height: 1.4; margin-bottom: 12px;
-          }
-
-          .duration {
-            display: inline-block;
-            font-size: 12px; color: $font-black-1;
-            margin-right: 12px;
-          }
-
-          .pb-time {
-            display: inline-block;
-            font-size: 12px; color: #999;
-          }
-        }
-      }
     }
     .mv-load-more { text-align: center; padding: 28px 0; }
   }
@@ -171,12 +104,13 @@
   /* ---------- VideoList 视频 ---------- */
   .video-list {
     .video-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-    .video-result .mvList.gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .video-result .mvList.gridLayout { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 24px; }
   }
 
   /* ---------- LeaderBoard 榜单 ---------- */
   .topList {
     .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .gridLayout > li { cursor: pointer; }
     .gridLayout > li:first-child {
       grid-column: span 2;
       .imgContainer img {
@@ -197,12 +131,6 @@
     overflow: hidden;
     border: 1px solid rgba(0,0,0,.06);
     background: #fff;
-    transition: transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s;
-    &:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 24px rgba(0,0,0,.1);
-      .play-btn { opacity: 1; }
-    }
   }
 
   .gridLayout li.playlist .imgContainer {
@@ -212,9 +140,7 @@
       display: block; width: 100%;
       aspect-ratio: 1;
       object-fit: cover;
-      transition: transform .35s cubic-bezier(.22,.61,.36,1);
     }
-    &:hover img { transform: scale(1.04); }
   }
 
   .gridLayout li.playlist .info {
