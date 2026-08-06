@@ -6,6 +6,8 @@
 </template>
 
 <script>
+import {setLogin} from "@/utils/auth";
+
 export default {
   name: "qrcodeLogin",
   data() {
@@ -66,6 +68,8 @@ export default {
         if (res.data.code === 803) {
           console.log("%cCookie：","color:#335eea;background-color:#eaeffd")
           console.log(res.data);
+          // 统一写入登录态, 由 setLogin 解析 cookie
+          setLogin(res.data.cookie)
           this.$bus.$emit('loggedIn', res.data.cookie)
         }
       })

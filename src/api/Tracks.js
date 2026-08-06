@@ -1,4 +1,4 @@
-import axios from "axios";
+import request from "./request";
 
 /**
  * 获取歌词
@@ -7,7 +7,7 @@ import axios from "axios";
  * @returns {AxiosPromise}
  */
 export function lyric(id) {
-    return axios('/lyric', {params: {id}})
+    return request('/lyric', {params: {id}})
 }
 
 /**
@@ -17,7 +17,7 @@ export function lyric(id) {
  * @returns {AxiosPromise}
  */
 export function simiTracks(id) {
-    return axios('/simi/song', {params: {id}})
+    return request('/simi/song', {params: {id}})
 }
 
 /**
@@ -28,7 +28,7 @@ export function simiTracks(id) {
  * @param sid(可选) 要开始播放的歌曲的 id
  */
 export function smartPlay(id, pid, sid) {
-    return axios('/playmode/intelligence/list', {params: {id, pid, sid}})
+    return request('/playmode/intelligence/list', {params: {id, pid, sid}})
 }
 
 /**
@@ -38,7 +38,7 @@ export function smartPlay(id, pid, sid) {
  * @returns {AxiosPromise}
  */
 export function like(id, like = true) {
-    return axios('/like', {params: {id, like}})
+    return request('/like', {params: {id, like}})
 }
 
 /**
@@ -47,7 +47,7 @@ export function like(id, like = true) {
  * @returns {AxiosPromise}
  */
 export function fmTrash(id) {
-    return axios("/fm_trash",{params:{id}})
+    return request("/fm_trash",{params:{id}})
 }
 
 /**
@@ -58,5 +58,5 @@ export function fmTrash(id) {
  * @returns {AxiosPromise}
  */
 export function updateListenedRanks(id,sourceid,time) {
-    return axios('/scrobble',{params:{id,sourceid,time}})
+    return request('/scrobble',{params:{id,sourceid,time}})
 }

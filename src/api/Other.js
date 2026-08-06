@@ -1,4 +1,4 @@
-import axios from "axios";
+import request from "./request";
 
 /**
  * 歌手粉丝数量
@@ -6,5 +6,5 @@ import axios from "axios";
  * @returns {AxiosPromise}
  */
 export function fansCount(id) {
-    return axios('/artist/follow/count',{params:{id}})
+    return request('/artist/follow/count',{params:{id}})
 }

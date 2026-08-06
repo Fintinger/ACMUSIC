@@ -60,3 +60,18 @@ export function formatDurationMs(ms) {
 export function fromNow(ms) {
     return dayjs(ms).fromNow()
 }
+
+/**
+ * 网易云图片缩略: 附加 ?param=宽y高, 减小体积提升加载速度
+ * 例: imgParam('https://p1.music.126.net/xxx.jpg', '300y300')
+ * 非网易 CDN 或已带参数的原样返回
+ * @param {String} url
+ * @param {String} size 如 '300y300'
+ * @returns {String}
+ */
+export function imgParam(url, size = '300y300') {
+    if (!url || url.indexOf('?') > -1) return url
+    // 仅对网易云 CDN 域名生效
+    if (!/music\.126\.net|\.netease\.com/.test(url)) return url
+    return url + `?param=${size}`
+}

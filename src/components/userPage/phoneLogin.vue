@@ -22,6 +22,8 @@
 </template>
 
 <script>
+import {setLogin} from "@/utils/auth";
+
 export default {
   name: "phoneLogin",
   data() {
@@ -127,8 +129,10 @@ export default {
       }
     },
     login(phone, captcha) {
-      this.$axios.post('/login/cellphone', {phone, captcha})
+      this.$axios.post('/login/cellphone', {phone, captcha, timestamp: new Date().getTime()})
           .then(res => {
+            // 统一写入登录态
+            setLogin(res.data.cookie)
             this.$bus.$emit('loggedIn', res.data.cookie)
             // console.log("%cphoneLoginData:","color:#335eea;background-color:#eaeffd")
             // console.log(res.data);

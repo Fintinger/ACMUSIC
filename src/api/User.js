@@ -1,14 +1,14 @@
-import axios from "axios";
+import request from "./request";
 
 /**
  * 收藏的歌手列表,调用此接口,可获取收藏的歌手列表
  * @returns {AxiosPromise}
  */
 export function subArtistList() {
-    return axios('/artist/sublist')
+    return request('/artist/sublist')
 }
 export function subAlbumList(limit = 2000, offset = 0) {
-    return axios('/album/sublist')
+    return request('/album/sublist')
 }
 /**
  * 收藏的专栏
@@ -17,7 +17,7 @@ export function subAlbumList(limit = 2000, offset = 0) {
  * @returns {AxiosPromise}
  */
 export function subTopicList(limit = 50, offset = 0) {
-    return axios('/topic/sublist', {params: {limit, offset}})
+    return request('/topic/sublist', {params: {limit, offset}})
 }
 
 /**
@@ -25,7 +25,7 @@ export function subTopicList(limit = 50, offset = 0) {
  * @returns {AxiosPromise}
  */
 export function subMvList() {
-    return axios('/mv/sublist')
+    return request('/mv/sublist')
 }
 
 /**
@@ -35,7 +35,7 @@ export function subMvList() {
  * @param t(可选) 1-关注,其他为取消关注
  */
 export function followUser(id, t = 1) {
-    return axios('/follow', {params: {id, t}})
+    return request('/follow', {params: {id, t}})
 }
 
 /**
@@ -44,7 +44,7 @@ export function followUser(id, t = 1) {
  * @param type type=1返回 weekData, type=0返回 allData
  */
 export function record(uid, type = 0) {
-    return axios('/user/record', {params: {uid, type}})
+    return request('/user/record', {params: {uid, type}})
 }
 
 /**
@@ -54,7 +54,7 @@ export function record(uid, type = 0) {
  * @returns {AxiosPromise}
  */
 export function getCloud(limit = 200, offset = 0) {
-    return axios('/user/cloud', {params: {limit, offset}})
+    return request('/user/cloud', {params: {limit, offset}})
 }
 
 /**
@@ -63,7 +63,7 @@ export function getCloud(limit = 200, offset = 0) {
  * @returns {AxiosPromise}
  */
 export function cloudDetail(id) {
-    return axios('/user/cloud/detail', {params: {id}})
+    return request('/user/cloud/detail', {params: {id}})
 }
 
 /**
@@ -72,5 +72,5 @@ export function cloudDetail(id) {
  * @returns {AxiosPromise}
  */
 export function cloudDel(id) {
-    return axios('/user/cloud/del', {params: {id}})
+    return request('/user/cloud/del', {params: {id}})
 }

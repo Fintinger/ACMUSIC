@@ -12,7 +12,7 @@
       <!-- 歌单 -->
       <ul v-else-if="name === 'playlist'" class="mm-list mm-playlist">
         <li v-for="pl in list" :key="pl.id" class="mm-card mm-playlist-card" @click="$bus.$emit('plClk', pl.id)">
-          <img class="mm-cover" :src="pl.coverImgUrl || pl.picUrl" alt="">
+          <img class="mm-cover" :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" alt="">
           <div class="mm-info">
             <div class="mm-name">{{ pl.name }}</div>
             <div class="mm-meta"><i class="ac-font ac-play1"></i>{{ pl.playCount | Div1w(pl.playCount) }}</div>
@@ -22,7 +22,7 @@
       <!-- 专辑 -->
       <ul v-else-if="name === 'album'" class="mm-list mm-album">
         <li v-for="al in list" :key="al.id" class="mm-card mm-album-card" @click="$bus.$emit('alClk', al.id)">
-          <img class="mm-cover" :src="al.picUrl" alt="">
+          <img class="mm-cover" :src="al.picUrl | imgParam('200y200')" alt="">
           <div class="mm-info">
             <div class="mm-name">{{ al.name }}</div>
             <div class="mm-meta">{{ albumArtists(al) }}</div>
@@ -32,7 +32,7 @@
       <!-- MV -->
       <ul v-else-if="name === 'new_mlog'" class="mm-list mm-mv">
         <li v-for="mv in list" :key="mv.id" class="mm-card mm-mv-card" @click="$bus.$emit('vClk', mv.id)">
-          <img class="mm-img" :src="mv.resource.mlogBaseData.coverUrl" alt="">
+          <img class="mm-img" :src="mv.resource.mlogBaseData.coverUrl | imgParam('500y280')" alt="">
           <div class="mm-info">
             <div class="mm-name">{{ mv.resource.mlogBaseData.text }}</div>
             <div class="mm-meta">

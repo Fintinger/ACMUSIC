@@ -13,7 +13,7 @@
           <div class="coverWrapper">
             <div class="coverGlow"></div>
             <div class="coverArt">
-              <img ref="coverImg" :src="coverUrl" alt="" @load="onCoverLoad" crossorigin="anonymous" />
+              <img ref="coverImg" :src="coverUrl | imgParam('400y400')" alt="" @load="onCoverLoad" crossorigin="anonymous" />
             </div>
           </div>
           <div class="songMeta">
@@ -54,11 +54,11 @@
             </div>
             <div v-show="rightTab === 'tracks'" class="tabPanel">
               <div v-if="!simiTracks.length" class="panelEmpty"><p>暂无相似歌曲</p></div>
-              <div v-else class="cardScroll"><div v-for="t in simiTracks" :key="t.id" class="musicCard" @click="playSimilarTrack(t)"><div class="cardCover"><img :src="trackAlbumPic(t)" loading="lazy" /><div class="cardOverlay"><i class="el-icon-video-play"></i></div></div><p class="cardTitle">{{ t.name }}</p><p class="cardSubtitle">{{ trackArtists(t) }}</p></div></div>
+              <div v-else class="cardScroll"><div v-for="t in simiTracks" :key="t.id" class="musicCard" @click="playSimilarTrack(t)"><div class="cardCover"><img :src="trackAlbumPic(t) | imgParam('200y200')" loading="lazy" /><div class="cardOverlay"><i class="el-icon-video-play"></i></div></div><p class="cardTitle">{{ t.name }}</p><p class="cardSubtitle">{{ trackArtists(t) }}</p></div></div>
             </div>
             <div v-show="rightTab === 'playlist'" class="tabPanel">
               <div v-if="!simiPlaylist.length" class="panelEmpty"><p>暂无相似歌单</p></div>
-              <div v-else class="cardScroll"><div v-for="pl in simiPlaylist" :key="pl.id" class="musicCard" @click="plClk(pl.id)"><div class="cardCover"><img :src="pl.coverImgUrl || pl.picUrl" loading="lazy" /><div class="cardOverlay"><i class="el-icon-video-play"></i></div></div><p class="cardTitle">{{ pl.name }}</p><p class="cardSubtitle">{{ pl.creator && pl.creator.nickname || '' }}</p></div></div>
+              <div v-else class="cardScroll"><div v-for="pl in simiPlaylist" :key="pl.id" class="musicCard" @click="plClk(pl.id)"><div class="cardCover"><img :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" loading="lazy" /><div class="cardOverlay"><i class="el-icon-video-play"></i></div></div><p class="cardTitle">{{ pl.name }}</p><p class="cardSubtitle">{{ pl.creator && pl.creator.nickname || '' }}</p></div></div>
             </div>
           </div>
         </div>

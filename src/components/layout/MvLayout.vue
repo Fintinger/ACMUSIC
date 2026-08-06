@@ -3,7 +3,7 @@
     <li v-for="mv in list" :key="mv.id" class="list-item mv" @click="mvClk(mv.id)">
       <el-card :body-style="{ padding: 0 }">
         <div class="imgContainer">
-          <img :src="mv[picName]" class="image">
+          <img :src="mv[picName] | imgParam('500y280')" class="image">
         </div>
         <div class="moreInfo">
           <div class="mvName">{{ mv.name }}</div>

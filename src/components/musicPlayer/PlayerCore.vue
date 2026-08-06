@@ -15,7 +15,7 @@
     <div class="fullBar" v-show="showBar">
       <div class="barLeft">
         <div class="barCover" @click="showSongDetail">
-          <img v-if="coverUrl" :src="coverUrl" alt="" />
+          <img v-if="coverUrl" :src="coverUrl | imgParam('200y200')" alt="" />
           <div v-else class="coverPlaceholder"><i class="el-icon-video-play"></i></div>
         </div>
         <div class="barInfo" @click="showSongDetail">
@@ -85,6 +85,8 @@
 <script>
 import pubsub from "pubsub-js";
 import { mapState } from "vuex"
+import { normalizeTrack } from "@/utils/normalize"
+import config from "@/config"
 
 const FALLBACK_BG = '#1a1a2e'
 
@@ -126,9 +128,10 @@ export default {
     },
   },
   watch: {
-    song(val) { this.currentSong = val },
+    song(val) { this.currentSong = normalizeTrack(val) },
     currentSong(val) {
       if (val.id) {
+        this.currentSong = normalizeTrack(this.currentSong)
         this.pauseSong()
         this.pushPromise(this.checkSong(this.currentSong.id))
         this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id) === -1
@@ -197,7 +200,27 @@ export default {
         }).catch(() => { alert("暂无版权！"); resolve("暂无版权！") })
       })
     },
-    getSongUrl(id, br = 320000) { return this.$axios('/song/url', { params: { id, br } }) },
+    getSongUrl(id, br = 320000) {
+      // 优先走新版接口: 支持音质等级 + 灰色歌曲解锁
+      return this.$axios('/song/url/v1', {
+        params: {
+          id,
+          level: config.player.level,
+          unblock: true,
+          timestamp: Date.now()
+        }
+      }).then(res => {
+        const url = res.data && res.data.data && res.data.data[0] && res.data.data[0].url
+        if (!url) {
+          // v1 未返回可用地址 -> 回退旧接口
+          return this.$axios('/song/url', { params: { id, br } })
+        }
+        return res
+      }).catch(() => {
+        // v1 报错 -> 回退旧接口
+        return this.$axios('/song/url', { params: { id, br } })
+      })
+    },
     initAudioByOuterUrl(id) { this.sel.src = location.origin + "/api/song/media/outer/url?id=" + id },
     playSong() {
       if (JSON.stringify(this.currentSong) === "{}" && this.currentPlaylist.length) this.currentSong = this.currentPlaylist[0]

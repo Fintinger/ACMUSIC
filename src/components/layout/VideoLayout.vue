@@ -4,7 +4,7 @@
       <li v-for="v in list" :key="v.vid" class="list-item v" @click="vClk(v.vid)">
         <el-card :body-style="{ padding: 0 }">
           <div class="imgContainer">
-            <img :src="v[coverImg]" alt="" class="image">
+            <img :src="v[coverImg] | imgParam('500y280')" alt="" class="image">
           </div>
           <div class="moreInfo">
             <div class="title">{{ v.title }}</div>
@@ -23,7 +23,7 @@
       <li v-for="v in list" :key="v.id" class="list-item v" @click="vClk(v.id)">
         <el-card :body-style="{ padding: 0 }">
           <div class="imgContainer">
-            <img :src="v.resource.mlogBaseData.coverUrl" alt="" class="image">
+            <img :src="v.resource.mlogBaseData.coverUrl | imgParam('500y280')" alt="" class="image">
           </div>
           <div class="moreInfo">
             <div class="title">{{ v.resource.mlogBaseData.text }}</div>

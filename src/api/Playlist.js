@@ -1,4 +1,4 @@
-import axios from "axios";
+import request from "./request";
 
 /**
  * 新建歌单
@@ -8,7 +8,7 @@ import axios from "axios";
  * @param type 歌单类型,默认'NORMAL',传 'VIDEO'则为视频歌单,传 'SHARED'则为共享歌单
  */
 export function create(name, privacy, type = 'NORMAL') {
-    return axios('/playlist/create', {params: {name, privacy, type}})
+    return request('/playlist/create', {params: {name, privacy, type}})
 }
 
 /**
@@ -16,7 +16,7 @@ export function create(name, privacy, type = 'NORMAL') {
  * @param id
  */
 export function del(id) {
-    return axios('/playlist/delete', {params: {id}})
+    return request('/playlist/delete', {params: {id}})
 }
 
 /**
@@ -27,7 +27,7 @@ export function del(id) {
  * @returns {AxiosPromise}
  */
 export function subscribe(t = 1, id) {
-    return axios('/playlist/subscribe', {params: {t, id}})
+    return request('/playlist/subscribe', {params: {t, id}})
 }
 
 /**
@@ -39,7 +39,7 @@ export function subscribe(t = 1, id) {
  * @returns {AxiosPromise}
  */
 export function addTracks(op = 'add', pid, tracks) {
-    return axios('/playlist/tracks', {params: {op, pid, tracks}})
+    return request('/playlist/tracks', {params: {op, pid, tracks}})
 }
 
 /**
@@ -48,7 +48,7 @@ export function addTracks(op = 'add', pid, tracks) {
  * @returns {AxiosPromise}
  */
 export function open(id) {
-    return axios('/playlist/privacy',{params:{id}})
+    return request('/playlist/privacy',{params:{id}})
 }
 
 /**
@@ -59,5 +59,5 @@ export function open(id) {
  * @returns {AxiosPromise}
  */
 export function getAllTrack(id,params={}){
-    return axios('/playlist/track/all',{params:{id,...params}})
+    return request('/playlist/track/all',{params:{id,...params}})
 }

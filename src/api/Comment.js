@@ -1,4 +1,4 @@
-import axios from "axios";
+import request from "./request";
 
 /**
  * 新版评论接口
@@ -12,7 +12,7 @@ import axios from "axios";
  * cursor: 当sortType为 3 时且页数不是第一页时需传入,值为上一条数据的 time
  */
 export function gain(id, type, args = {}) {
-    return axios('/comment/new', {params: {id, type, ...args}})
+    return request('/comment/new', {params: {id, type, ...args}})
 }
 
 /**
@@ -24,7 +24,7 @@ export function gain(id, type, args = {}) {
  * @returns {AxiosPromise}
  */
 export function like(id, cid, t = 1, type) {
-    return axios('/comment/like', {params: {id, cid, t, type}})
+    return request('/comment/like', {params: {id, cid, t, type}})
 }
 
 /**
@@ -34,7 +34,7 @@ export function like(id, cid, t = 1, type) {
  * @param sid 资源 id
  */
 export function hug(uid, cid, sid) {
-    return axios('/hug/comment', {params: {uid, cid, sid}})
+    return request('/hug/comment', {params: {uid, cid, sid}})
 }
 
 /**
@@ -47,7 +47,7 @@ export function hug(uid, cid, sid) {
  * @returns {AxiosPromise}
  */
 export function send(t = 1, type, id, content, commentId) {
-    return axios('/comment', {params: {t, type, id, content, commentId}})
+    return request('/comment', {params: {t, type, id, content, commentId}})
 }
 
 /**
@@ -58,5 +58,5 @@ export function send(t = 1, type, id, content, commentId) {
  * @returns {AxiosPromise}
  */
 export function del(type, id, commentId) {
-    return axios('comment', {params: {t: 0, type, id, commentId}})
+    return request('/comment', {params: {t: 0, type, id, commentId}})
 }

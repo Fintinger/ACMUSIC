@@ -1,4 +1,4 @@
-import axios from "axios";
+import request from "./request";
 
 /**
  * 获取专辑详情
@@ -6,5 +6,5 @@ import axios from "axios";
  * @returns {AxiosPromise}
  */
 export function getDetail(id) {
-    return axios('/album', {params: {id}})
+    return request('/album', {params: {id}})
 }

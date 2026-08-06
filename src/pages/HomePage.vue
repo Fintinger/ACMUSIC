@@ -126,6 +126,8 @@ import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 import playTracksBtn from "@/components/playTracksBtn";
 
+import {normalizeTrack, normalizePlaylist, normalizeArtist} from "@/utils/normalize";
+
 export default {
   name: "HomePage",
   data() {
@@ -259,16 +261,16 @@ export default {
       //请求不许登录
       this.$axios.all([this.getRecPlaylist(), this.getTopPlaylist(), this.getNewAlbum(), this.getTopAt(), this.getTopList(),])
           .then(this.$axios.spread((RecPlaylist, TopPlaylist, NewAlbum, TopAt, TopList) => {
-            this.recommendedPlaylist = RecPlaylist.data.result
+            this.recommendedPlaylist = (RecPlaylist.data.result || []).map(normalizePlaylist)
             this.playlistLoading = false
             this.$nextTick(() => this.revealAfterImages('.recommendedPlaylist', 'playlistReady'))
-            this.netizensFeaturedDiscs = TopPlaylist.data.playlists
+            this.netizensFeaturedDiscs = (TopPlaylist.data.playlists || []).map(normalizePlaylist)
             this.discLoading = false
             this.$nextTick(() => this.revealAfterImages('.topPlayList', 'discReady'))
             this.limitNum(NewAlbum.data.albums, 10, el => this.albums.push(el))
             this.albumLoading = false
             this.$nextTick(() => this.revealAfterImages('.topAlbum', 'albumReady'))
-            this.hotArtists = TopAt.data.artists
+            this.hotArtists = (TopAt.data.artists || []).map(normalizeArtist)
             this.artistLoading = false
             this.$nextTick(() => this.revealAfterImages('.hotArtists', 'artistReady'))
             this.limitNum(TopList.data.list, 6, el => this.lists.push(el))
@@ -279,11 +281,11 @@ export default {
       //请求需要登录
       this.$axios.all([this.getPersonalPlaylist(), this.getPersonalFM(), this.getDailySongs()])
           .then(this.$axios.spread((personalPlaylist, personalFM, dailySongs) => {
-            this.limitNum(personalPlaylist.data.recommend,5,item=>this.personalPlaylist.push(item))
+            this.limitNum(personalPlaylist.data.recommend,5,item=>this.personalPlaylist.push(normalizeTrack(item)))
             this.personalLoading = false
             this.$nextTick(() => this.revealAfterImages('.recTracks-personalFM + .el-row', 'personalReady'))
             this.personalFM = personalFM.data.data
-            this.dailySongs = dailySongs.data.data.dailySongs
+            this.dailySongs = (dailySongs.data.data.dailySongs || []).map(normalizeTrack)
           }))
     }
   },

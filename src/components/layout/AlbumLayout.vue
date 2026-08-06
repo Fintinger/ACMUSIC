@@ -7,7 +7,7 @@
             class="img-wrapper"
             @click="alClk(album.id)"
         >
-          <img :src="album.picUrl"
+          <img :src="album.picUrl | imgParam('300y300')"
                alt="" class="image">
         </div>
         <div class="info">
