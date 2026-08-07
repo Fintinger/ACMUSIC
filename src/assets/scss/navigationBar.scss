@@ -8,16 +8,22 @@
   .el-container {
     .el-header.nav-bar {
       background: $color-theme;
-      padding: 0 70px;
+      padding: 0;
 
       .el-row {
         height: 100%;
+        width: 80%;
+        margin: 0 auto;
+        box-sizing: border-box;
 
         & > div {
           height: 100%;
         }
 
         .logo {
+          display: flex;
+          align-items: center;
+
           img {
             width: auto;
             height: 100%;
