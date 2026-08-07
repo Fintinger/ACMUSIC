@@ -11,13 +11,13 @@
           <el-col :span="8" class="nav-link">
             <el-row>
               <el-col :span="8">
-                <router-link to="/">首 页</router-link>
+                <router-link to="/"><BaseIcon name="home"/>首 页</router-link>
               </el-col>
               <el-col :span="8">
-                <router-link to="/explore/playlist/all">发 现</router-link>
+                <router-link to="/explore/playlist/all"><BaseIcon name="explore"/>发 现</router-link>
               </el-col>
               <el-col :span="8">
-                <router-link to="/user">我 的</router-link>
+                <router-link to="/user"><BaseIcon name="user"/>我 的</router-link>
               </el-col>
             </el-row>
           </el-col>
@@ -28,7 +28,7 @@
                 <div class="input-container">
                   <input placeholder="搜索单曲、歌手、专辑、MV等" type="text"
                          @focus="showSearch=true">
-                  <i class="ac-font ac-Search"></i>
+                  <BaseIcon name="search"/>
                 </div>
               </el-col>
               <el-col :span="4" class="avatar row-col-center">

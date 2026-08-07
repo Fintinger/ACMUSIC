@@ -1,6 +1,6 @@
 <template>
   <div class="playIcon row-col-center">
-    <i class="ac-font ac-play1" @click.stop="playAllTracks(val)"></i>
+    <BaseIcon name="play" @click.stop="playAllTracks(val)"/>
   </div>
 </template>
 

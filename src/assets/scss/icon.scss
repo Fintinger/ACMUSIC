@@ -1,0 +1,22 @@
+/**
+ * ACMUSIC Icon System 样式规范
+ * 通过 BaseIcon 渲染的图标统一使用 .ac-icon 类
+ */
+.ac-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  vertical-align: middle;
+  flex-shrink: 0;
+  transition: color .2s ease, opacity .2s ease, transform .2s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+
+  &:active {
+    transform: scale(.95);
+  }
+}

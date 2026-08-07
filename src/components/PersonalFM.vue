@@ -27,7 +27,7 @@
         </el-row>
       </el-carousel-item>
     </el-carousel>
-    <span class="text-personalFM"><i class="ac-font ac-diantai"></i> 私人FM</span>
+    <span class="text-personalFM"><BaseIcon name="radio"/> 私人FM</span>
   </div>
 </template>
 

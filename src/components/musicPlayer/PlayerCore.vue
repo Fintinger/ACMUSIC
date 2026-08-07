@@ -12,29 +12,29 @@
         <div class="miniFill" :style="{ width: progress + '%' }"></div>
       </div>
     </div>
-    <div class="fullBar" v-show="showBar">
+    <div class="fullBar" v-show="showBar" :style="miniBgStyle ? { background: miniBgStyle } : null">
       <div class="barLeft">
         <div class="barCover" @click="showSongDetail">
           <img v-if="coverUrl" :src="coverUrl | imgParam('200y200')" alt="" />
-          <div v-else class="coverPlaceholder"><i class="el-icon-video-play"></i></div>
+          <div v-else class="coverPlaceholder"><BaseIcon name="play"/></div>
         </div>
         <div class="barInfo" @click="showSongDetail">
           <p class="barTitle">{{ songName }}</p>
           <p class="barArtist">{{ artistNames }}</p>
         </div>
         <i :class="['likeBtn', { liked: isLiked }]" :title="isLiked?'取消收藏':'收藏'" @click.stop="toggleLike">
-          <span v-if="isLiked" class="ac-font ac-likefill"></span>
-          <span v-else class="ac-font ac-like"></span>
+          <BaseIcon v-if="isLiked" name="likeFill"/>
+          <BaseIcon v-else name="like"/>
         </i>
       </div>
       <div class="barCenter">
         <div class="barControls">
-          <i class="el-icon-caret-left" @click="preSong"></i>
+          <BaseIcon name="prev" @click="preSong"/>
           <div class="barPlay" @click="togglePlay">
-            <i v-if="!isPlay" class="el-icon-video-play"></i>
-            <i v-else class="el-icon-video-pause"></i>
+            <BaseIcon v-if="!isPlay" name="play"/>
+            <BaseIcon v-else name="pause"/>
           </div>
-          <i class="el-icon-caret-right" @click="nextSong"></i>
+          <BaseIcon name="next" @click="nextSong"/>
         </div>
         <div class="barProgress">
           <span class="barTime">{{ formatTime(timeNow) }}</span>
@@ -48,7 +48,7 @@
       </div>
       <div class="barRight">
         <div class="barItem volumeWrap">
-          <i class="el-icon-microphone" @click="showVolume = !showVolume"></i>
+          <BaseIcon name="volume" @click="showVolume = !showVolume"/>
           <div v-show="showVolume" class="volumeSlider" @click.stop>
             <input v-model="volume" type="range" min="0" max="100" @input="onInteract" />
           </div>
@@ -56,7 +56,7 @@
         <div class="barItem playlistWrap">
           <el-dropdown v-if="currentPlaylist.length" trigger="click" placement="top" @command="handleCommand" @visible-change="onDropdownToggle">
             <span class="playlistTrigger">
-              <i class="ac-font ac-play1"></i>
+              <BaseIcon name="play"/>
               <span class="plCount">{{ currentPlaylist.length }}</span>
             </span>
             <el-dropdown-menu slot="dropdown" class="playlistDropdown">
@@ -87,6 +87,7 @@ import pubsub from "pubsub-js";
 import { mapState } from "vuex"
 import { normalizeTrack } from "@/utils/normalize"
 import config from "@/config"
+import { buildBackground } from "@/utils/colorExtractor"
 
 const FALLBACK_BG = '#1a1a2e'
 
@@ -109,6 +110,7 @@ export default {
       isLiked: false,
       hideTimer: null,
       isDropdownOpen: false,
+      miniBgStyle: '',
     }
   },
   computed: {
@@ -128,10 +130,14 @@ export default {
     },
   },
   watch: {
-    song(val) { this.currentSong = normalizeTrack(val) },
+    song(val) {
+      this.currentSong = normalizeTrack(val)
+      this.updateMiniBackground()
+    },
     currentSong(val) {
       if (val.id) {
         this.currentSong = normalizeTrack(this.currentSong)
+        this.updateMiniBackground()
         this.pauseSong()
         this.pushPromise(this.checkSong(this.currentSong.id))
         this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id) === -1
@@ -168,6 +174,24 @@ export default {
     getArtistStr(s) {
       const ar = s.ar || s.artists
       return ar && ar.length ? ar.map(a => a.name).join(' / ') : ''
+    },
+    updateMiniBackground() {
+      const s = this.currentSong
+      const cover = (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || s.coverImgUrl || ''
+      if (!cover) {
+        // 无封面保持默认深色
+        this.miniBgStyle = ''
+        return
+      }
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => {
+        this.miniBgStyle = buildBackground(img)
+      }
+      img.onerror = () => {
+        this.miniBgStyle = ''
+      }
+      img.src = cover
     },
     init() { this.promiseList = []; this.isPlay = false; this.timeDuration = 0; this.timeNow = 0 },
     pushPromise(promise) { this.promiseList.unshift(promise) },
@@ -323,6 +347,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     padding: 0 20px; gap: 10px;
     backdrop-filter: blur(20px);
     animation: slideUp 260ms cubic-bezier(0.22,0.61,0.36,1);
+    transition: background 500ms ease;
   }
 }
 
@@ -376,13 +401,13 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 200px;
   .barControls {
     display: flex; align-items: center; gap: 22px; color: $text;
-    > i { font-size: 19px; cursor: pointer; opacity: 0.5; transition: all 160ms ease; &:hover { opacity: 0.85; transform: scale(1.1); } }
+    > i { font-size: 20px; cursor: pointer; opacity: 0.5; transition: all 160ms ease; &:hover { opacity: 0.85; transform: scale(1.1); } }
     .barPlay {
       width: 36px; height: 36px; border-radius: 50%; background: $accent; color: #fff;
       display: flex; align-items: center; justify-content: center; cursor: pointer;
       box-shadow: 0 2px 12px rgba($accent, 0.3);
       transition: all 200ms cubic-bezier(0.22,0.61,0.36,1);
-      i { font-size: 17px; margin-left: 1px; }
+      i { font-size: 24px; margin-left: 1px; }
       &:hover { transform: scale(1.1); box-shadow: 0 4px 18px rgba($accent, 0.45); }
       &:active { transform: scale(0.94); }
     }

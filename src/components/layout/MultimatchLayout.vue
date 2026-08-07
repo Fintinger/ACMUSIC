@@ -15,7 +15,7 @@
           <img class="mm-cover" :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" alt="">
           <div class="mm-info">
             <div class="mm-name">{{ pl.name }}</div>
-            <div class="mm-meta"><i class="ac-font ac-play1"></i>{{ pl.playCount | Div1w(pl.playCount) }}</div>
+            <div class="mm-meta"><BaseIcon name="play"/>{{ pl.playCount | Div1w(pl.playCount) }}</div>
           </div>
         </li>
       </ul>
@@ -36,7 +36,7 @@
           <div class="mm-info">
             <div class="mm-name">{{ mv.resource.mlogBaseData.text }}</div>
             <div class="mm-meta">
-              <span class="mm-meta-item"><i class="ac-font ac-play1"></i>{{ mv.playTime | Div1w(mv.playTime) }}</span>
+              <span class="mm-meta-item"><BaseIcon name="play"/>{{ mv.playTime | Div1w(mv.playTime) }}</span>
               <span class="mm-meta-item"><i class="icon-time"></i>{{ mv.resource.mlogBaseData.duration | formatDuration }}</span>
             </div>
           </div>

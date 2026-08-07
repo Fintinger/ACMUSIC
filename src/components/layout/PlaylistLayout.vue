@@ -8,17 +8,17 @@
           <!--播放量-->
           <template playCount>
             <!--离谱的key名-->
-            <p v-if="playlist.playCount" class="playCount"><i class="ac-font ac-play"></i>
+            <p v-if="playlist.playCount" class="playCount"><BaseIcon name="play"/>
               {{ playlist.playCount | Div1w(playlist.playCount) }}</p>
-            <p v-if="playlist.playcount" class="playCount"><i class="ac-font ac-play"></i>
+            <p v-if="playlist.playcount" class="playCount"><BaseIcon name="play"/>
               {{ playlist.playcount | Div1w(playlist.playcount) }}</p>
           </template>
           <!--收藏数-->
           <template>
             <p v-if="playlist.bookCount" class="bookCount">
-              <i class="el-icon-star-off"></i> {{ playlist.bookCount | Div1w(playlist.bookCount) }}</p>
+              <BaseIcon name="like"/> {{ playlist.bookCount | Div1w(playlist.bookCount) }}</p>
             <p v-else-if="playlist.subscribedCount" class="bookCount">
-              <i class="el-icon-star-off"></i> {{ playlist.subscribedCount | Div1w(playlist.subscribedCount) }}</p>
+              <BaseIcon name="like"/> {{ playlist.subscribedCount | Div1w(playlist.subscribedCount) }}</p>
           </template>
           <img :src="playlist[picName] | imgParam('300y300')" class="image">
           <div class="play-btn">

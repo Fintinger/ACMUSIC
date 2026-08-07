@@ -13,13 +13,13 @@
           <div class="ribbon">
             <span class="comment-like">
               <span class="like" @click="handleLike($event,cm)">
-                <i v-if="!cm.liked" class="ac-font ac-like"></i>
-                <i v-if="cm.liked" class="ac-font ac-likefill"></i>
+                <BaseIcon v-if="!cm.liked" name="like"/>
+                <BaseIcon v-if="cm.liked" name="likeFill"/>
               </span>
               <span class="like-count">{{ cm.likedCount | div1w }}</span>
             </span>
             <span class="comment-reply">
-              <i class="ac-font ac-comment" @click="replyComment(cm)"></i>
+              <BaseIcon name="comment" @click="replyComment(cm)"/>
               <span class="reply-count">{{ cm.replyCount | div1w }}</span>
             </span>
             <span v-if="cm.user.userId===loggedUser.userId" class="comment-delete">
@@ -36,7 +36,7 @@
             <h3>回复 @{{ replyTarget.user.nickname }}</h3>
             <p class="dialog-subtitle">文明交流，理性讨论。</p>
           </div>
-          <button class="dialog-close" @click="replyTarget = null"><i class="el-icon-close"></i></button>
+          <button class="dialog-close" @click="replyTarget = null"><BaseIcon name="close"/></button>
         </div>
         <div class="dialog-body">
           <SendComment :comment-id="replyTarget.commentId" :sid="id" :stype="type" :type="2" @reply="replyTarget = null"/>

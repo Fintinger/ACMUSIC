@@ -6,7 +6,7 @@
         <el-row class="name">
           {{ ar.name }}
           <span @click="uClk(ar.accountId)" title="用户主页" v-if="ar.accountId" class="accountId">
-            <i class="el-icon-user-solid"></i>
+            <BaseIcon name="user"/>
           </span>
         </el-row>
       </el-card>

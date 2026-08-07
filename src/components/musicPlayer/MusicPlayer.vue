@@ -5,7 +5,7 @@
     </div>
     <div v-if="isExpand" class="expandedOverlay" ref="scrollEl" @wheel="onWheel">
       <button class="closeBtn" @click="closePlayer" title="关闭 (Esc)">
-        <i class="el-icon-close"></i>
+        <BaseIcon name="close"/>
       </button>
 
       <section class="heroSection">
@@ -28,20 +28,20 @@
             <div class="progressTimes"><span>{{ formatTime(timeNow) }}</span><span>{{ formatTime(duration) }}</span></div>
           </div>
           <div class="controlsRow">
-            <i class="el-icon-caret-left" @click="prevTrack"></i>
-            <div class="playBtn" @click="togglePlay"><i :class="isPlaying ? 'el-icon-video-pause' : 'el-icon-video-play'"></i></div>
-            <i class="el-icon-caret-right" @click="nextTrack"></i>
+            <BaseIcon name="prev" :size="20" @click="prevTrack"/>
+            <div class="playBtn" @click="togglePlay"><BaseIcon v-if="!isPlaying" name="play"/><BaseIcon v-else name="pause"/></div>
+            <BaseIcon name="next" :size="20" @click="nextTrack"/>
           </div>
           <div class="actionsRow">
-            <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><i :class="isLiked ? 'ac-font ac-likefill' : 'ac-font ac-like'"></i><span>{{ likedCount | Div1w }}</span></button>
-            <button class="actionBtn" @click="shareSong"><i class="ac-font ac-jia"></i><span>分享</span></button>
+            <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>{{ likedCount | Div1w }}</span></button>
+            <button class="actionBtn" @click="shareSong"><BaseIcon name="share"/><span>分享</span></button>
           </div>
         </div>
         <div class="heroRight">
           <div class="rightTabs">
-            <span :class="{ active: rightTab === 'lyric' }" @click="rightTab = 'lyric'"><i class="ac-font ac-music"></i> 歌词</span>
-            <span :class="{ active: rightTab === 'tracks' }" @click="rightTab = 'tracks'"><i class="ac-font ac-play1"></i> 相似歌曲</span>
-            <span :class="{ active: rightTab === 'playlist' }" @click="rightTab = 'playlist'"><i class="ac-font ac-jia"></i> 相似歌单</span>
+            <span :class="{ active: rightTab === 'lyric' }" @click="rightTab = 'lyric'"><BaseIcon name="radio"/> 歌词</span>
+            <span :class="{ active: rightTab === 'tracks' }" @click="rightTab = 'tracks'"><BaseIcon name="play"/> 相似歌曲</span>
+            <span :class="{ active: rightTab === 'playlist' }" @click="rightTab = 'playlist'"><BaseIcon name="share"/> 相似歌单</span>
           </div>
           <div class="rightContent">
             <div v-show="rightTab === 'lyric'" class="tabPanel">
@@ -54,11 +54,11 @@
             </div>
             <div v-show="rightTab === 'tracks'" class="tabPanel">
               <div v-if="!simiTracks.length" class="panelEmpty"><p>暂无相似歌曲</p></div>
-              <div v-else class="cardScroll"><div v-for="t in simiTracks" :key="t.id" class="musicCard" @click="playSimilarTrack(t)"><div class="cardCover"><img :src="trackAlbumPic(t) | imgParam('200y200')" loading="lazy" /><div class="cardOverlay"><i class="el-icon-video-play"></i></div></div><p class="cardTitle">{{ t.name }}</p><p class="cardSubtitle">{{ trackArtists(t) }}</p></div></div>
+              <div v-else class="cardScroll"><div v-for="t in simiTracks" :key="t.id" class="musicCard" @click="playSimilarTrack(t)"><div class="cardCover"><img :src="trackAlbumPic(t) | imgParam('200y200')" loading="lazy" /><div class="cardOverlay"><BaseIcon name="play" :size="34"/></div></div><p class="cardTitle">{{ t.name }}</p><p class="cardSubtitle">{{ trackArtists(t) }}</p></div></div>
             </div>
             <div v-show="rightTab === 'playlist'" class="tabPanel">
               <div v-if="!simiPlaylist.length" class="panelEmpty"><p>暂无相似歌单</p></div>
-              <div v-else class="cardScroll"><div v-for="pl in simiPlaylist" :key="pl.id" class="musicCard" @click="plClk(pl.id)"><div class="cardCover"><img :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" loading="lazy" /><div class="cardOverlay"><i class="el-icon-video-play"></i></div></div><p class="cardTitle">{{ pl.name }}</p><p class="cardSubtitle">{{ pl.creator && pl.creator.nickname || '' }}</p></div></div>
+              <div v-else class="cardScroll"><div v-for="pl in simiPlaylist" :key="pl.id" class="musicCard" @click="plClk(pl.id)"><div class="cardCover"><img :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" loading="lazy" /><div class="cardOverlay"><BaseIcon name="play" :size="34"/></div></div><p class="cardTitle">{{ pl.name }}</p><p class="cardSubtitle">{{ pl.creator && pl.creator.nickname || '' }}</p></div></div>
             </div>
           </div>
         </div>
@@ -74,10 +74,10 @@
 
     <!-- Overlay buttons -->
     <button v-if="isExpand && fsm === 'TOP'" class="overlayBtn bottomBtn" @click="scrollToComments">
-      <i class="el-icon-arrow-down"></i> 查看评论
+      <BaseIcon name="arrowDown"/> 查看评论
     </button>
     <button v-if="isExpand && fsm !== 'TOP'" class="overlayBtn topBtn" @click="scrollToTop">
-      <i class="el-icon-arrow-up"></i> 返回顶部
+      <BaseIcon name="arrowUp"/> 返回顶部
     </button>
   </div>
 </template>
@@ -375,7 +375,7 @@ export default {
     position: fixed; top: 28px; right: 36px; z-index: 20;
     width: 44px; height: 44px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05);
-    color: rgba(255,255,255,0.5); font-size: 18px; cursor: pointer;
+    color: rgba(255,255,255,0.5); font-size: 20px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(12px); transition: all 220ms ease;
     &:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); transform: scale(1.05); }
@@ -418,8 +418,8 @@ export default {
 
   .controlsRow {
     display: flex; align-items: center; justify-content: center; gap: 28px; color: rgba(255,255,255,0.85);
-    > i { font-size: 20px; cursor: pointer; opacity: 0.55; transition: all 180ms ease; &:hover { opacity: 0.9; transform: scale(1.12); } }
-    .playBtn { width: 48px; height: 48px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 22px; margin-left: 1px; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
+    > i { font-size: 24px; cursor: pointer; opacity: 0.55; transition: all 180ms ease; &:hover { opacity: 0.9; transform: scale(1.12); } }
+    .playBtn { width: 48px; height: 48px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 32px; margin-left: 1px; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
   }
 
   .actionsRow {

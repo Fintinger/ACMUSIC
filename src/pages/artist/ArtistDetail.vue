@@ -38,7 +38,7 @@
       <div class="section-head">
         <h2>热门歌曲</h2>
         <span class="section-more" @click="expanded.songs=!expanded.songs">
-          {{ expanded.songs ? '收起' : '全部' }} <i :class="expanded.songs?'el-icon-arrow-up':'el-icon-arrow-right'"></i>
+          {{ expanded.songs ? '收起' : '全部' }} <BaseIcon :name="expanded.songs ? 'arrowUp' : 'arrowRight'"/>
         </span>
       </div>
       <TracksLayout v-if="top50songs.length" :list="expanded.songs ? top50songs : top50songs.slice(0,5)"/>
@@ -48,7 +48,7 @@
       <div class="section-head">
         <h2>专辑</h2>
         <span v-if="hotAlbums.length>8" class="section-more" @click="expanded.albums=!expanded.albums">
-          {{ expanded.albums ? '收起' : '更多' }} <i :class="expanded.albums?'el-icon-arrow-up':'el-icon-arrow-right'"></i>
+          {{ expanded.albums ? '收起' : '更多' }} <BaseIcon :name="expanded.albums ? 'arrowUp' : 'arrowRight'"/>
         </span>
       </div>
       <AlbumLayout v-if="hotAlbums.length" :list="expanded.albums ? hotAlbums : hotAlbums.slice(0,8)"/>
@@ -58,7 +58,7 @@
       <div class="section-head">
         <h2>MV</h2>
         <span v-if="mvs.length>8" class="section-more" @click="expanded.mvs=!expanded.mvs">
-          {{ expanded.mvs ? '收起' : '更多' }} <i :class="expanded.mvs?'el-icon-arrow-up':'el-icon-arrow-right'"></i>
+          {{ expanded.mvs ? '收起' : '更多' }} <BaseIcon :name="expanded.mvs ? 'arrowUp' : 'arrowRight'"/>
         </span>
       </div>
       <MvLayout v-if="mvs.length" :list="expanded.mvs ? mvs : mvs.slice(0,8)" pic-name="imgurl16v9"/>

@@ -2,8 +2,8 @@
   <div class="tracksContainer">
     <el-row v-if="needBtn" class="btns">
       <div class="btn-container">
-        <i class="ac-font ac-play1" @click="playAllTracks(list)"> 播放全部</i>
-        <i class="ac-font ac-jia" @click="pushAllTracks(list)"></i>
+        <BaseIcon name="play" @click="playAllTracks(list)"/><span> 播放全部</span>
+        <BaseIcon name="share" @click="pushAllTracks(list)"/>
       </div>
       <!--      <el-button type="warning" @click="playAllTracks(list)">播放全部</el-button>-->
       <!--      <el-button type="warning" @click="pushAllTracks(list)">添加到播放列表</el-button>-->

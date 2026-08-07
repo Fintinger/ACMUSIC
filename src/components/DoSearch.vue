@@ -12,7 +12,7 @@
                      @focus="toggleSearch(true)"
                      @keypress.enter="search(keyword)"
               >
-              <i class="ac-font ac-Search" @click="search(keyword)"></i>
+              <BaseIcon name="search" @click="search(keyword)"/>
             </el-row>
             <el-row v-show="keyword" class="search-suggest scrollbar-outer">
               <el-row v-if="suggest.songs.length" class="songs">

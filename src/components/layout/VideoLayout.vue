@@ -11,7 +11,7 @@
             <div v-if="Array.isArray(v.creator)" class="vCreator"><span v-for="u in v.creator" :key="u.id||u.userId">{{ u.userName }}</span></div>
             <div v-else-if="v.creator" :key="v.creator.userId" class="vCreator">{{ v.creator.userName }}</div>
             <div class="meta-row">
-              <span class="meta-item"><i class="ac-font ac-play1"></i>{{ v.playTime | Div1w(v.playTime) }}</span>
+              <span class="meta-item"><BaseIcon name="play"/>{{ v.playTime | Div1w(v.playTime) }}</span>
               <span class="meta-item"><i class="icon-time"></i>{{ v.durationms | formatDuration }}</span>
               <span class="meta-item"><i class="icon-date"></i>{{ v.publishTime | formatMs("YYYY年MM月DD日") }}</span>
             </div>
@@ -29,7 +29,7 @@
             <div class="title">{{ v.resource.mlogBaseData.text }}</div>
             <div v-if="v.creator" class="vCreator"><span v-for="u in v.creator" :key="u.id">{{ u.userName }}</span></div>
             <div class="meta-row">
-              <span class="meta-item"><i class="ac-font ac-play1"></i>{{ v.playTime | Div1w(v.playTime) }}</span>
+              <span class="meta-item"><BaseIcon name="play"/>{{ v.playTime | Div1w(v.playTime) }}</span>
               <span class="meta-item"><i class="icon-time"></i>{{ v.resource.mlogBaseData.duration | formatDuration }}</span>
               <span class="meta-item"><i class="icon-date"></i>{{ v.resource.mlogBaseData.pubTime | formatMs("YYYY年MM月DD日") }}</span>
             </div>

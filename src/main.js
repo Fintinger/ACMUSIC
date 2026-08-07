@@ -19,6 +19,9 @@ import "animate.css"
 import 'element-ui/lib/theme-chalk/index.css';
 //Tools(用于过滤器)
 import * as filters from './utils/filters'
+//Icon 系统
+import BaseIcon from "./components/common/BaseIcon"
+import "./assets/scss/icon.scss"
 
 //axios处理
 Vue.prototype.$axios = request
@@ -37,6 +40,8 @@ Vue.filter('formatS', filters.format_s)
 Vue.filter('fromNow', filters.fromNow)
 Vue.filter('formatDuration', filters.formatDurationMs)
 Vue.filter('imgParam', filters.imgParam)
+//全局图标组件
+Vue.component('BaseIcon', BaseIcon)
 
 new Vue({
     render: h => h(App),

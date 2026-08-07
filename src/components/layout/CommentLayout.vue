@@ -5,7 +5,7 @@
     </div>
 
     <button class="floating-comment-btn" @click="showCommentModal = true">
-      <i class="el-icon-edit"></i> 写评论
+      <BaseIcon name="edit"/> 写评论
     </button>
 
     <div v-if="hotComment.length" class="hot-comments-section">
@@ -33,7 +33,7 @@
             <h3>发表评论</h3>
             <p class="dialog-subtitle">分享你的听歌感受，与大家一起交流音乐。</p>
           </div>
-          <button class="dialog-close" @click="showCommentModal = false"><i class="el-icon-close"></i></button>
+          <button class="dialog-close" @click="showCommentModal = false"><BaseIcon name="close"/></button>
         </div>
         <div class="dialog-body">
           <SendComment :sid="id" :stype="type" :type="1" @updateNewestComment="onCommentSent" @cancel="showCommentModal = false"/>

@@ -9,7 +9,7 @@
           <div class="mvName">{{ mv.name }}</div>
           <div class="mvArtist">{{ mv.artistName }}</div>
           <div class="meta-row">
-            <span class="meta-item"><i class="ac-font ac-play1"></i>{{ mv.playCount | Div1w(mv.playCount) }}</span>
+            <span class="meta-item"><BaseIcon name="play"/>{{ mv.playCount | Div1w(mv.playCount) }}</span>
             <span class="meta-item"><i class="icon-time"></i>{{ mv.duration | formatDuration }}</span>
             <span class="meta-item"><i class="icon-date"></i>{{ mv.publishTime | formatMs("YYYY年MM月DD日") }}</span>
           </div>
