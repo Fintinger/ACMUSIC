@@ -30,49 +30,6 @@
     opacity: 0;
   }
 
-  /*  //轮播图效果
-    $carouselMaxHeight: 280px;
-
-    .carousel {
-      .el-carousel__container {
-
-        max-height: $carouselMaxHeight;
-
-        .el-carousel__item {
-          //max-height: $carouselMaxHeight;
-        }
-
-        .el-carousel__mask {
-          width: 100%;
-          background-color: #000;
-          opacity: 0.34;
-          transition: .2s;
-          z-index: 9
-        }
-
-        .bannerPic {
-          position: relative;
-          border-radius: 5px;
-          overflow: hidden;
-          box-sizing: border-box;
-          min-height: $carouselMaxHeight;
-
-          img {
-            min-height: $carouselMaxHeight;
-          }
-
-          span {
-            position: absolute;
-            right: 0;
-            bottom: 35px;
-            color: #fff;
-            padding: 3px;
-            font-size: .8rem;
-          }
-        }
-      }
-    }*/
-
   .recTracks-personalFM {
     & > .el-col > .wrapper-for-click-event > .el-row {
       width: 100%;

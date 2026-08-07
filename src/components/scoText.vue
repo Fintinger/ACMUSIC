@@ -1,66 +1,81 @@
 <template>
-  <div class="marquee">
-    <div class="marquee-wrap">
-      <div class="marquee-content ">
-        <slot></slot>
-      </div>
+  <div ref="marquee" class="marquee">
+    <div
+        ref="content"
+        class="marquee-content"
+        :class="{scrolling: isOverflow}"
+        :style="isOverflow ? { '--dist': dist + 'px' } : null"
+    >
+      <slot></slot>
     </div>
   </div>
 </template>
 
 <script>
 export default {
-  name: "scoText"
+  name: "scoText",
+  data() {
+    return {
+      isOverflow: false,
+      dist: 0
+    }
+  },
+  mounted() {
+    this.checkOverflow()
+    this.$bus && this.$bus.$on && this.$bus.$on('resize', this.checkOverflow)
+  },
+  beforeDestroy() {
+    this.$bus && this.$bus.$off && this.$bus.$off('resize', this.checkOverflow)
+  },
+  methods: {
+    checkOverflow() {
+      this.$nextTick(() => {
+        const content = this.$refs.content
+        const container = this.$refs.marquee
+        if (content && container) {
+          const diff = content.scrollWidth - container.clientWidth
+          this.isOverflow = diff > 1
+          this.dist = this.isOverflow ? diff : 0
+        }
+      })
+    }
+  }
 }
 </script>
 
 <style scoped lang="scss">
 .marquee {
   overflow: hidden;
-}
-
-.marquee .marquee-wrap {
-  width: 100%;
-  animation: marquee-wrap 8s infinite linear;
-
-  &:hover{
-    animation-play-state: paused;
-  }
-}
-
-.marquee .marquee-content {
-  float: left;
   white-space: nowrap;
-  min-width: 100%;
-  animation: marquee-content 8s infinite linear;
-  &:hover{
-    animation-play-state: paused;
-  }
+  width: 100%;
 }
 
-@keyframes marquee-wrap {
-
-  0%,
-  30% {
-    transform: translateX(0);
-  }
-
-  70%,
-  100% {
-    transform: translateX(100%);
-  }
+.marquee-content {
+  display: inline-block;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-@keyframes marquee-content {
+.marquee-content.scrolling {
+  text-overflow: clip;
+  animation: marquee-scroll 8s linear infinite;
+  animation-delay: 1.2s;
+}
 
-  0%,
-  30% {
+@keyframes marquee-scroll {
+  0% {
     transform: translateX(0);
   }
-
-  70%,
+  20% {
+    transform: translateX(0);
+  }
+  80% {
+    transform: translateX(calc(-1 * var(--dist)));
+  }
   100% {
-    transform: translateX(-100%);
+    transform: translateX(calc(-1 * var(--dist)));
   }
 }
 </style>

@@ -1,21 +1,5 @@
 <template>
   <div class="homePage">
-    <!--轮播图-->
-    <!--    <div class="carousel">
-          <el-row>
-            <el-col :span="24">
-              <el-carousel :autoplay="false" indicator-position="outside" type="card">
-                <el-carousel-item v-for="(b,ind) in banners" :key="ind">
-                  <div class="bannerPic" @click="carouselClick(b)">
-                    <img :src="b.imageUrl" alt="">
-                    <span :style={background:b.titleColor} v-text="b.typeTitle"></span>
-                  </div>
-                </el-carousel-item>
-              </el-carousel>
-        </el-col>
-        </transition>
-      </el-row>
-        </div>-->
     <!--每日推荐-->
     <template v-if="isLogin">
       <!--每日推荐-推荐歌曲X每日推荐-私人FM-->
@@ -132,7 +116,6 @@ export default {
   name: "HomePage",
   data() {
     return {
-      banners: [],
       recommendedPlaylist: [],
       netizensFeaturedDiscs: [],
       albums: [],
@@ -162,15 +145,6 @@ export default {
     }
   },
   methods: {
-    //轮播图点击
-    carouselClick(i) {
-      /*targetType(不是歌单类的处理)
-      * 3000=>数字专辑,有url跳转
-      * 1=>新歌首发,有targetId
-      * 10=>新碟首发,有targetId
-      * */
-      console.log(i);
-    },
     //歌单点击
     plClk(id) {
       this.$bus.$emit('plClk', id)
@@ -184,10 +158,6 @@ export default {
     arClk(id) {
       this.$bus.$emit('arClk', id)
     },
-    //请求banner
-    /*  getBanner(){
-        return this.$axios('./banner')
-      },*/
     //请求推荐歌单
     getRecPlaylist() {
       return this.$axios('/personalized?limit=10')
