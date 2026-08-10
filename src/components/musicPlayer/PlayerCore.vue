@@ -63,6 +63,12 @@
             <input v-model="volume" type="range" min="0" max="100" @input="onInteract" />
           </div>
         </div>
+        <div class="barItem qualityWrap">
+          <button class="qualityBtn" @click.stop="showQualityMenu = !showQualityMenu">
+            {{ currentQualityShort }}
+          </button>
+          <QualityMenu :visible="showQualityMenu" :selected="config.player.level" @select="onQualitySelect"/>
+        </div>
         <div class="barItem playlistWrap">
           <el-dropdown v-if="currentPlaylist.length" trigger="click" placement="top" @command="handleCommand" @visible-change="onDropdownToggle">
             <span class="playlistTrigger">
@@ -98,12 +104,14 @@ import { mapState } from "vuex"
 import { normalizeTrack } from "@/utils/normalize"
 import config from "@/config"
 import { buildBackground } from "@/utils/colorExtractor"
+import QualityMenu from "@/components/musicPlayer/QualityMenu"
 
 const FALLBACK_BG = '#1a1a2e'
 
 export default {
   name: "PlayCore",
   props: ["song", "isExpand"],
+  components: { QualityMenu },
   data() {
     return {
       currentSong: {},
@@ -121,6 +129,12 @@ export default {
       hideTimer: null,
       isDropdownOpen: false,
       miniBgStyle: '',
+      playRequestId: 0,
+      pendingUrlRequests: new Map(),
+      urlCache: new Map(),
+      currentQuality: { requested: '', actual: '' },
+      showQualityMenu: false,
+      currentLevel: config.player.level,
     }
   },
   computed: {
@@ -138,6 +152,12 @@ export default {
       if (ar && ar.length) return ar.map(a => a.name).join(' / ')
       return ''
     },
+    config() { return config },
+    currentQualityShort() {
+      const opts = config.player.qualityOptions || []
+      const f = opts.find(o => o.key === this.currentLevel)
+      return f ? f.short : '标'
+    },
   },
   watch: {
     song(val) {
@@ -149,7 +169,8 @@ export default {
         this.currentSong = normalizeTrack(this.currentSong)
         this.updateMiniBackground()
         this.pauseSong()
-        this.pushPromise(this.checkSong(this.currentSong.id))
+        this.playRequestId++
+        this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
         this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id) === -1
           ? 0 : this.currentPlaylist.findIndex(item => item.id === this.currentSong.id)
         if (this.currentPlaylist.findIndex(item => item.id === val.id) === -1) {
@@ -205,60 +226,180 @@ export default {
     },
     init() { this.promiseList = []; this.isPlay = false; this.timeDuration = 0; this.timeNow = 0 },
     pushPromise(promise) { this.promiseList.unshift(promise) },
-    async checkSong(id) {
-      await new Promise(resolve => {
-        if (this.isLogin) this.checkSongLoggedIn(id).then(res => resolve(res))
-        else this.checkSongDntLogin(id).then(res => resolve(res))
+    async checkSong(id, requestId) {
+      const pending = this.pendingUrlRequests.get(id)
+      if (pending) {
+        await pending
+        return
+      }
+      const self = this
+      const promise = new Promise(resolve => {
+        console.log('[CheckSong]', JSON.stringify({ id, requestId, isLogin: self.isLogin, hasCookie: !!document.cookie.match(/MUSIC_U/) }))
+        if (self.isLogin) self.checkSongLoggedIn(id, requestId).then(res => resolve(res))
+        else self.checkSongDntLogin(id, requestId).then(res => resolve(res))
       })
+      this.pendingUrlRequests.set(id, promise)
+      try {
+        await promise
+      } finally {
+        this.pendingUrlRequests.delete(id)
+      }
     },
-    checkSongDntLogin(id) {
+    checkSongDntLogin(id, requestId) {
+      const self = this
       return new Promise(resolve => {
         this.$axios.get('/song/detail?ids=' + id).then(res => {
+          if (requestId !== self.playRequestId) { resolve("cancelled"); return }
           switch (res.data.songs[0].fee) {
             case 1: alert("VIP歌曲"); resolve("VIP歌曲"); break
-            case 8: this.initAudioByOuterUrl(id); resolve("initAudioByOuterUrl"); break
+            case 8: self.initAudioByOuterUrl(id, requestId); resolve("initAudioByOuterUrl"); break
             case 4: alert("购买专辑才能听"); resolve("购买专辑才能听"); break
-            case 0: this.initAudioByOuterUrl(id); resolve("initAudioByOuterUrl"); break
+            case 0: self.initAudioByOuterUrl(id, requestId); resolve("initAudioByOuterUrl"); break
             default: alert("未知错误"); resolve("未知错误"); break
           }
         })
       })
     },
-    checkSongLoggedIn(id) {
+    checkSongLoggedIn(id, requestId) {
+      const self = this
       return new Promise(resolve => {
         this.$axios('/check/music', { params: { id } }).then(res => {
+          if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
           if (res.data.success) {
-            this.getSongUrl(id).then(res => { this.sel.src = res.data.data[0].url; resolve() })
-              .catch(() => { this.checkSongDntLogin(id) })
+            self.getSongUrl(id, requestId).then(res => {
+              if (res && res.cancelled) { resolve({ cancelled: true }); return }
+              if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
+              const data = res && res.data && res.data.data
+              const item = data && data[0]
+              const newUrl = item && item.url
+              if (!newUrl) {
+                console.error('[PlayError]', { songId: id, stage: 'NO_AUDIO', requestId })
+                if (requestId === self.playRequestId) alert("暂无可用音源")
+                resolve("no_url")
+                return
+              }
+              console.log('[QualitySwitch]', { action: 'srcSet', oldSrc: self.sel.src ? self.sel.src.slice(0, 80) : '', newSrc: newUrl.slice(0, 80), songId: id, playRequestId: requestId })
+              self.sel.src = newUrl
+              self.sel.load()
+              resolve()
+            }).catch(err => {
+              if (err && err.message === 'REQUEST_CANCELLED') { resolve({ cancelled: true }); return }
+              const isNoResource = err && err.message === 'NO_RESOURCE'
+              console.error('[PlayError]', { songId: id, stage: isNoResource ? 'NO_RESOURCE' : 'NETWORK_ERROR', requestId, error: err && err.message || String(err) })
+              if (requestId === self.playRequestId) alert(isNoResource ? "暂无可用音源" : "播放失败，请稍后重试")
+              resolve("url_fail")
+            })
+          } else {
+            console.error('[PlayError]', { songId: id, stage: 'NO_COPYRIGHT', requestId })
+            if (requestId === self.playRequestId) alert("暂无版权")
+            resolve("no_rights")
           }
-        }).catch(() => { alert("暂无版权！"); resolve("暂无版权！") })
+        }).catch(err => {
+          console.error('[PlayError]', { songId: id, stage: 'API_ERROR', requestId, error: err && err.message || String(err) })
+          if (requestId === self.playRequestId) alert("暂无版权！")
+          resolve("check_fail")
+        })
       })
     },
-    getSongUrl(id, br = 320000) {
-      // 优先走新版接口: 支持音质等级 + 灰色歌曲解锁
-      return this.$axios('/song/url/v1', {
-        params: {
-          id,
-          level: config.player.level,
-          unblock: true,
-          timestamp: Date.now()
+    getSongUrl(id, requestId, br = 0) {
+      if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
+
+      const preferred = config.player.level
+      const levels = config.player.fallbackLevels
+        ? config.player.qualityLevels.slice(config.player.qualityLevels.indexOf(preferred))
+        : [preferred]
+
+      // fallback br 根据 level 映射 (仅 /song/url 兜底时使用)
+      const BR_MAP = { hires: 999000, lossless: 999000, exhigh: 320000, higher: 192000, standard: 128000 }
+      const fallbackBr = br || BR_MAP[preferred] || 320000
+
+      const self = this
+      const CACHE_TTL = 10 * 60 * 1000
+
+      const tryLevel = (index) => {
+        if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
+        if (index >= levels.length) {
+          return self.requestFallbackUrl(id, fallbackBr).catch(() => {
+            return self.requestMatchSongUrl(id)
+          })
         }
-      }).then(res => {
-        const url = res.data && res.data.data && res.data.data[0] && res.data.data[0].url
-        if (!url) {
-          // v1 未返回可用地址 -> 回退旧接口
-          return this.$axios('/song/url', { params: { id, br } })
+
+        const lv = levels[index]
+        const ck = id + '_' + lv
+        const cached = self.urlCache.get(ck)
+        console.log('[Quality]', { songId: id, requestedLevel: lv, preferred, cacheKey: ck, cacheHit: !!(cached && Date.now() < cached.expire) })
+        if (cached && Date.now() < cached.expire) {
+          if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
+          console.log('[SongURL Response]', JSON.stringify({ id, requestedLevel: lv, responseLevel: cached.level || lv, br: cached.br, size: cached.size, url: cached.url ? cached.url.slice(0, 100) : '', cached: true }))
+          self.currentQuality = { requested: preferred, actual: lv }
+          return Promise.resolve({ data: { data: [{ url: cached.url }] } })
         }
-        return res
-      }).catch(() => {
-        // v1 报错 -> 回退旧接口
-        return this.$axios('/song/url', { params: { id, br } })
+
+        return self.$axios('/song/url/v1', {
+          params: { id, level: lv, unblock: true, timestamp: Date.now() }
+        }).then(res => {
+          if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
+          const d = res.data && res.data.data && res.data.data[0]
+          console.log('[SongURL Response]', JSON.stringify({
+            id, requestedLevel: lv, responseLevel: d && d.level,
+            br: d && d.br, size: d && d.size, type: d && d.type,
+            url: d && d.url ? d.url.slice(0, 100) : 'null'
+          }))
+          const url = d && d.url
+          if (!url) return tryLevel(index + 1)
+          self.urlCache.set(ck, { url, level: lv, br: d && d.br, size: d && d.size, expire: Date.now() + CACHE_TTL })
+          self.currentQuality = { requested: preferred, actual: lv }
+          return res
+        }).catch(err => {
+          if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
+          console.error('[PlayError]', { songId: id, stage: 'TRY_LEVEL_FAIL', level: lv, requestId, error: err && err.message || String(err) })
+          return tryLevel(index + 1)
+        })
+      }
+
+      return tryLevel(0)
+    },
+    requestFallbackUrl(id, br) {
+      const ck = id + '_fallback'
+      return this.$axios('/song/url', { params: { id, br } }).then(r => {
+        const fbUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
+        if (!fbUrl) return Promise.reject(new Error('FALLBACK_EMPTY'))
+        this.urlCache.set(ck, { url: fbUrl, level: 'fallback', expire: Date.now() + 10 * 60 * 1000 })
+        return r
+      }).catch(err => {
+        console.error('[PlayError]', { songId: id, stage: 'FALLBACK_FAIL', requestId: this.playRequestId, reason: err && err.message || String(err) })
+        throw err
       })
     },
-    initAudioByOuterUrl(id) { this.sel.src = location.origin + "/api/song/media/outer/url?id=" + id },
+    requestMatchSongUrl(id) {
+      const ck = id + '_match'
+      const cached = this.urlCache.get(ck)
+      if (cached && Date.now() < cached.expire) {
+        console.log('[SongURL Response]', JSON.stringify({ id, source: 'match', url: cached.url.slice(0, 100), cached: true }))
+        return Promise.resolve({ data: { data: [{ url: cached.url }] }, source: 'match' })
+      }
+      return this.$axios('/song/url/match', { params: { id } }).then(r => {
+        const matchUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
+        if (!matchUrl) return Promise.reject(new Error('NO_RESOURCE'))
+        this.urlCache.set(ck, { url: matchUrl, level: 'match', source: 'match', expire: Date.now() + 10 * 60 * 1000 })
+        return { data: r.data, source: 'match' }
+      }).catch(err => {
+        console.error('[PlayError]', { songId: id, stage: 'MATCH_FAIL', reason: err && err.message || String(err) })
+        throw err
+      })
+    },
+    initAudioByOuterUrl(id, requestId) {
+      if (requestId !== this.playRequestId) return
+      this.sel.src = location.origin + "/api/song/media/outer/url?id=" + id
+      this.sel.load()
+    },
     playSong() {
       if (JSON.stringify(this.currentSong) === "{}" && this.currentPlaylist.length) this.currentSong = this.currentPlaylist[0]
-      this.isPlay = true; this.sel.play()
+      this.isPlay = true
+      const playPromise = this.sel.play()
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {})
+      }
     },
     pauseSong() { this.isPlay = false; this.sel.pause() },
     togglePlay() { this.onInteract(); this.isPlay ? this.pauseSong() : this.playSong() },
@@ -276,6 +417,26 @@ export default {
     onMouseLeave() { this.scheduleHide() },
     onMouseMove() { this.clearHideTimer(); if (!this.showBar) this.showBar = true },
     onInteract() { this.clearHideTimer() },
+    onQualitySelect(key) {
+      const oldLevel = this.currentLevel
+      const oldSrc = this.sel.src
+      console.log('[QualitySwitch]', { action: 'select', oldLevel, newLevel: key, songId: this.currentSong.id, oldSrc: oldSrc ? oldSrc.slice(0, 80) : '', playRequestId: this.playRequestId })
+      config.player.level = key
+      this.currentLevel = key
+      localStorage.setItem('acmusic_player_quality', JSON.stringify({ level: key }))
+      this.showQualityMenu = false
+      if (this.currentSong.id) {
+        this.pauseSong()
+        this.sel.src = ''
+        this.pendingUrlRequests.delete(this.currentSong.id)
+        for (const lv of config.player.qualityLevels) {
+          this.urlCache.delete(this.currentSong.id + '_' + lv)
+        }
+        this.urlCache.delete(this.currentSong.id + '_fallback')
+        this.playRequestId++
+        this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
+      }
+    },
     onDropdownToggle(visible) {
       this.isDropdownOpen = visible
       if (visible) {
@@ -342,6 +503,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+@import "../../assets/scss/base/motion";
 $bar-h: 60px; $mini-h: 4px; $accent: #8685EF;
 $bg: #1c1d28; $text: rgba(255,255,255,0.9); $text-sec: rgba(255,255,255,0.44); $text-ter: rgba(255,255,255,0.24);
 $border: rgba(255,255,255,0.06); $radius: 12px;
@@ -492,6 +654,17 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     display: flex; align-items: center; gap: 3px;
     i { font-size: 16px; }
     .plCount { font-size: 10px; background: rgba(255,255,255,0.1); color: $text; border-radius: 8px; padding: 1px 5px; min-width: 14px; text-align: center; }
+  }
+  .qualityWrap .qualityBtn {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: $text-sec;
+    font-size: 11px; font-weight: 600;
+    padding: 3px 7px; border-radius: 6px;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: all 180ms $ease-standard;
+    &:hover { background: rgba(255, 255, 255, 0.1); color: $text; border-color: rgba(255, 255, 255, 0.18); }
   }
 }
 

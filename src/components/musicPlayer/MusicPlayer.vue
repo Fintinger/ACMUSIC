@@ -149,7 +149,7 @@ export default {
     },
     expanded() {
       document.body.style.overflow = 'hidden'
-      this.$refs.pgPanel.$on('tUpdate', this.timeUpdate)
+      this.$refs.pgPanel.$on('tUpdate', (t) => this.timeUpdate(t))
       this.$nextTick(() => this.setupScrollObserver())
     },
     minified() {

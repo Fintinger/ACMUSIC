@@ -18,6 +18,25 @@ export default {
     },
     player: {
         // 音质等级: standard | higher | exhigh | lossless | hires | jyeffect
-        level: 'exhigh'
+        level: initPlayerLevel(),
+        // 降级链：请求失败时依次尝试 lower level
+        qualityLevels: ['hires', 'lossless', 'exhigh', 'higher', 'standard'],
+        // 是否启用多级 fallback
+        fallbackLevels: true,
+        // 音质选项
+        qualityOptions: [
+            { key: 'hires', label: '高清臻音', short: 'HD', desc: 'Spatial Audio', bitrate: '96kHz/24bit' },
+            { key: 'lossless', label: '高解析度无损', short: 'SQ', desc: 'Hi-Res', bitrate: '192kHz/24bit' },
+            { key: 'exhigh', label: '极高', short: 'HQ', desc: 'HQ', bitrate: '320kbps' },
+            { key: 'standard', label: '标准', short: '标', bitrate: '128kbps' },
+        ]
     }
+}
+
+function initPlayerLevel() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('acmusic_player_quality') || '{}')
+        if (saved.level) return saved.level
+    } catch (e) { /* ignore */ }
+    return 'standard'
 }
