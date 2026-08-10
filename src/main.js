@@ -44,6 +44,14 @@ Vue.filter('imgParam', filters.imgParam)
 //全局图标组件
 Vue.component('BaseIcon', BaseIcon)
 
+// 全局登录失效处理 (api:unauthorized 事件由 request.js 拦截器发射)
+window.addEventListener('api:unauthorized', () => {
+    if (isLoggedIn()) {
+        doLogout()
+        ElementUI.Message.warning('登录状态已失效，请重新登录')
+    }
+})
+
 new Vue({
     render: h => h(App),
     beforeCreate() {

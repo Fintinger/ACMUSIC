@@ -166,6 +166,7 @@ export default {
     },
     currentSong(val) {
       if (val.id) {
+        console.log('%c▶ 歌曲切换 %c%s %c登录:%s', 'background:#2563eb;color:#fff;padding:2px 6px', '', val.id, '', this.isLogin)
         this.currentSong = normalizeTrack(this.currentSong)
         this.updateMiniBackground()
         this.pauseSong()
@@ -234,7 +235,6 @@ export default {
       }
       const self = this
       const promise = new Promise(resolve => {
-        console.log('[CheckSong]', JSON.stringify({ id, requestId, isLogin: self.isLogin, hasCookie: !!document.cookie.match(/MUSIC_U/) }))
         if (self.isLogin) self.checkSongLoggedIn(id, requestId).then(res => resolve(res))
         else self.checkSongDntLogin(id, requestId).then(res => resolve(res))
       })
@@ -248,15 +248,35 @@ export default {
     checkSongDntLogin(id, requestId) {
       const self = this
       return new Promise(resolve => {
-        this.$axios.get('/song/detail?ids=' + id).then(res => {
-          if (requestId !== self.playRequestId) { resolve("cancelled"); return }
-          switch (res.data.songs[0].fee) {
-            case 1: alert("VIP歌曲"); resolve("VIP歌曲"); break
-            case 8: self.initAudioByOuterUrl(id, requestId); resolve("initAudioByOuterUrl"); break
-            case 4: alert("购买专辑才能听"); resolve("购买专辑才能听"); break
-            case 0: self.initAudioByOuterUrl(id, requestId); resolve("initAudioByOuterUrl"); break
-            default: alert("未知错误"); resolve("未知错误"); break
+        // 未登录用户也走完整 fallback 链 (v1 → /song/url → /song/url/match)
+        self.getSongUrl(id, requestId).then(res => {
+          if (res && res.cancelled) { resolve({ cancelled: true }); return }
+          if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
+          const data = res && res.data && res.data.data
+          const url = data && data[0] && data[0].url
+          if (url) {
+            self.sel.src = url
+            self.sel.load()
+            resolve()
+            return
           }
+          // 所有 fallback 均失败 → 查询 song detail 判断原因
+          self.$axios.get('/song/detail?ids=' + id).then(detailRes => {
+            if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
+            const fee = detailRes.data && detailRes.data.songs && detailRes.data.songs[0] && detailRes.data.songs[0].fee
+            if (fee === 1) self.$message.warning("VIP歌曲，尝试解锁失败")
+            else if (fee === 4) self.$message.warning("专辑歌曲，暂无资源")
+            else self.$message.warning("暂无可用音源")
+            resolve("no_url")
+          }).catch(() => {
+            if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
+            resolve("no_url")
+          })
+        }).catch(err => {
+          if (err && err.message === 'REQUEST_CANCELLED') { resolve({ cancelled: true }); return }
+          console.error('[PlayError]', { songId: id, stage: 'DNT_LOGIN_FAIL', error: err && err.message || String(err) })
+          if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
+          resolve("dnt_fail")
         })
       })
     },
@@ -264,6 +284,7 @@ export default {
       const self = this
       return new Promise(resolve => {
         this.$axios('/check/music', { params: { id } }).then(res => {
+          console.log('%c▶ 版权判断 %c/check/music?id=%s %s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', id, res.data.success ? '✅有版权' : '❌无版权')
           if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
           if (res.data.success) {
             self.getSongUrl(id, requestId).then(res => {
@@ -274,11 +295,11 @@ export default {
               const newUrl = item && item.url
               if (!newUrl) {
                 console.error('[PlayError]', { songId: id, stage: 'NO_AUDIO', requestId })
-                if (requestId === self.playRequestId) alert("暂无可用音源")
+                if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
                 resolve("no_url")
                 return
               }
-              console.log('[QualitySwitch]', { action: 'srcSet', oldSrc: self.sel.src ? self.sel.src.slice(0, 80) : '', newSrc: newUrl.slice(0, 80), songId: id, playRequestId: requestId })
+              console.log('%c✅ 播放就绪 %cid=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id)
               self.sel.src = newUrl
               self.sel.load()
               resolve()
@@ -286,17 +307,17 @@ export default {
               if (err && err.message === 'REQUEST_CANCELLED') { resolve({ cancelled: true }); return }
               const isNoResource = err && err.message === 'NO_RESOURCE'
               console.error('[PlayError]', { songId: id, stage: isNoResource ? 'NO_RESOURCE' : 'NETWORK_ERROR', requestId, error: err && err.message || String(err) })
-              if (requestId === self.playRequestId) alert(isNoResource ? "暂无可用音源" : "播放失败，请稍后重试")
+              if (requestId === self.playRequestId) self.$message.warning(isNoResource ? "暂无可用音源" : "播放失败，请稍后重试")
               resolve("url_fail")
             })
           } else {
             console.error('[PlayError]', { songId: id, stage: 'NO_COPYRIGHT', requestId })
-            if (requestId === self.playRequestId) alert("暂无版权")
+            if (requestId === self.playRequestId) self.$message.warning("暂无版权")
             resolve("no_rights")
           }
         }).catch(err => {
           console.error('[PlayError]', { songId: id, stage: 'API_ERROR', requestId, error: err && err.message || String(err) })
-          if (requestId === self.playRequestId) alert("暂无版权！")
+          if (requestId === self.playRequestId) self.$message.warning("暂无版权！")
           resolve("check_fail")
         })
       })
@@ -309,6 +330,8 @@ export default {
         ? config.player.qualityLevels.slice(config.player.qualityLevels.indexOf(preferred))
         : [preferred]
 
+      console.log('%c▶ 获取音源 %c/song/url/v1?id=%s&level=%s&unblock=true', 'background:#059669;color:#fff;padding:2px 6px', '', id, preferred)
+
       // fallback br 根据 level 映射 (仅 /song/url 兜底时使用)
       const BR_MAP = { hires: 999000, lossless: 999000, exhigh: 320000, higher: 192000, standard: 128000 }
       const fallbackBr = br || BR_MAP[preferred] || 320000
@@ -319,18 +342,16 @@ export default {
       const tryLevel = (index) => {
         if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
         if (index >= levels.length) {
-          return self.requestFallbackUrl(id, fallbackBr).catch(() => {
-            return self.requestMatchSongUrl(id)
+          return self.requestFallbackUrl(id, fallbackBr, requestId).catch(() => {
+            return self.requestMatchSongUrl(id, requestId)
           })
         }
 
         const lv = levels[index]
         const ck = id + '_' + lv
         const cached = self.urlCache.get(ck)
-        console.log('[Quality]', { songId: id, requestedLevel: lv, preferred, cacheKey: ck, cacheHit: !!(cached && Date.now() < cached.expire) })
         if (cached && Date.now() < cached.expire) {
           if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
-          console.log('[SongURL Response]', JSON.stringify({ id, requestedLevel: lv, responseLevel: cached.level || lv, br: cached.br, size: cached.size, url: cached.url ? cached.url.slice(0, 100) : '', cached: true }))
           self.currentQuality = { requested: preferred, actual: lv }
           return Promise.resolve({ data: { data: [{ url: cached.url }] } })
         }
@@ -340,13 +361,11 @@ export default {
         }).then(res => {
           if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
           const d = res.data && res.data.data && res.data.data[0]
-          console.log('[SongURL Response]', JSON.stringify({
-            id, requestedLevel: lv, responseLevel: d && d.level,
-            br: d && d.br, size: d && d.size, type: d && d.type,
-            url: d && d.url ? d.url.slice(0, 100) : 'null'
-          }))
           const url = d && d.url
-          if (!url) return tryLevel(index + 1)
+          if (!url) {
+            console.log('%c↓ 降级 %s→%s', 'background:#d97706;color:#fff;padding:2px 6px', lv, levels[index + 1] || 'fallback')
+            return tryLevel(index + 1)
+          }
           self.urlCache.set(ck, { url, level: lv, br: d && d.br, size: d && d.size, expire: Date.now() + CACHE_TTL })
           self.currentQuality = { requested: preferred, actual: lv }
           return res
@@ -359,10 +378,14 @@ export default {
 
       return tryLevel(0)
     },
-    requestFallbackUrl(id, br) {
+    requestFallbackUrl(id, br, requestId) {
+      if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
       const ck = id + '_fallback'
+      console.log('%c▶ 旧接口兜底 %c/song/url?id=%s&br=%s', 'background:#ea580c;color:#fff;padding:2px 6px', '', id, br)
       return this.$axios('/song/url', { params: { id, br } }).then(r => {
+        if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
         const fbUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
+        console.log('%c  %s %s', '', fbUrl ? '✅成功' : '❌失败', fbUrl ? '' : '→尝试match')
         if (!fbUrl) return Promise.reject(new Error('FALLBACK_EMPTY'))
         this.urlCache.set(ck, { url: fbUrl, level: 'fallback', expire: Date.now() + 10 * 60 * 1000 })
         return r
@@ -371,14 +394,16 @@ export default {
         throw err
       })
     },
-    requestMatchSongUrl(id) {
+    requestMatchSongUrl(id, requestId) {
+      if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
       const ck = id + '_match'
+      console.log('%c▶ 匹配解灰 %c/song/url/match?id=%s', 'background:#dc2626;color:#fff;padding:2px 6px', '', id)
       const cached = this.urlCache.get(ck)
       if (cached && Date.now() < cached.expire) {
-        console.log('[SongURL Response]', JSON.stringify({ id, source: 'match', url: cached.url.slice(0, 100), cached: true }))
         return Promise.resolve({ data: { data: [{ url: cached.url }] }, source: 'match' })
       }
       return this.$axios('/song/url/match', { params: { id } }).then(r => {
+        if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
         const matchUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
         if (!matchUrl) return Promise.reject(new Error('NO_RESOURCE'))
         this.urlCache.set(ck, { url: matchUrl, level: 'match', source: 'match', expire: Date.now() + 10 * 60 * 1000 })
