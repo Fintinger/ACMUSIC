@@ -6,6 +6,7 @@
       :class="[icon.class, customClass]"
       :style="iconStyle"
       v-bind="$attrs"
+      v-on="$listeners"
   />
   <!-- SVG 图标 -->
   <i
@@ -14,6 +15,7 @@
       :class="customClass"
       :style="svgStyle"
       v-bind="$attrs"
+      v-on="$listeners"
   >
     <svg :width="svgSize" :height="svgSize" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path :d="icon.path" :fill="icon.fill || 'currentColor'" :stroke="icon.stroke || 'currentColor'" :stroke-width="icon.strokeWidth || 0" stroke-linecap="round" stroke-linejoin="round"/>
@@ -26,6 +28,7 @@
       :class="customClass"
       :style="iconStyle"
       v-bind="$attrs"
+      v-on="$listeners"
   />
 </template>
 

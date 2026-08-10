@@ -27,6 +27,11 @@ $shimmer-color-end: #f0f0f0;
 $player-expand-scale: .96;
 $player-expand-shift: 20px;
 
+// Modal / Overlay Token
+$modal-scale-start: .96;
+$modal-slide-distance: 30px;
+$overlay-opacity: .45;
+
 // 全局页面切换动画
 .page-fade-enter-active,
 .page-fade-leave-active {
@@ -63,4 +68,44 @@ $player-expand-shift: 20px;
 @keyframes skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+// Overlay Fade (遮罩层统一淡入淡出)
+.overlay-fade-enter-active,
+.overlay-fade-leave-active {
+  transition: opacity $motion-normal $ease-standard;
+}
+
+.overlay-fade-enter,
+.overlay-fade-leave-to {
+  opacity: 0;
+}
+
+// Modal Slide (弹窗内容统一滑入)
+.modal-slide-enter-active,
+.modal-slide-leave-active {
+  transition:
+    opacity $motion-normal $ease-standard,
+    transform $motion-normal $ease-standard;
+}
+
+.modal-slide-enter {
+  opacity: 0;
+  transform:
+    translateY($modal-slide-distance)
+    scale($modal-scale-start);
+}
+
+.modal-slide-enter-to {
+  opacity: 1;
+  transform:
+    translateY(0)
+    scale(1);
+}
+
+.modal-slide-leave-to {
+  opacity: 0;
+  transform:
+    translateY($modal-slide-distance)
+    scale(.98);
 }

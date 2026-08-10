@@ -26,20 +26,24 @@
       <LoadMore :load="loadMoreNewComment" :loading="loading" :no-more="noMore"/>
     </div>
 
-    <div v-if="showCommentModal" class="comment-overlay" @click.self="showCommentModal = false" @keydown.esc="showCommentModal = false">
-      <div class="comment-dialog">
-        <div class="dialog-header">
-          <div>
-            <h3>发表评论</h3>
-            <p class="dialog-subtitle">分享你的听歌感受，与大家一起交流音乐。</p>
+    <transition name="overlay-fade">
+      <div v-if="showCommentModal" class="comment-overlay" @click.self="showCommentModal = false" @keydown.esc="showCommentModal = false">
+        <transition name="modal-slide">
+          <div v-if="showCommentModal" class="comment-dialog">
+            <div class="dialog-header">
+              <div>
+                <h3>发表评论</h3>
+                <p class="dialog-subtitle">分享你的听歌感受，与大家一起交流音乐。</p>
+              </div>
+              <button class="dialog-close" @click="showCommentModal = false"><BaseIcon name="close"/></button>
+            </div>
+            <div class="dialog-body">
+              <SendComment :sid="id" :stype="type" :type="1" @updateNewestComment="onCommentSent" @cancel="showCommentModal = false"/>
+            </div>
           </div>
-          <button class="dialog-close" @click="showCommentModal = false"><BaseIcon name="close"/></button>
-        </div>
-        <div class="dialog-body">
-          <SendComment :sid="id" :stype="type" :type="1" @updateNewestComment="onCommentSent" @cancel="showCommentModal = false"/>
-        </div>
+        </transition>
       </div>
-    </div>
+    </transition>
   </div>
 </template>
 

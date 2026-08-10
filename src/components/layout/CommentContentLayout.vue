@@ -29,20 +29,24 @@
         </div>
       </div>
     </div>
-    <div v-if="replyTarget" class="comment-overlay" @click.self="replyTarget = null" @keydown.esc="replyTarget = null">
-      <div class="comment-dialog">
-        <div class="dialog-header">
-          <div>
-            <h3>回复 @{{ replyTarget.user.nickname }}</h3>
-            <p class="dialog-subtitle">文明交流，理性讨论。</p>
+    <transition name="overlay-fade">
+      <div v-if="replyTarget" class="comment-overlay" @click.self="replyTarget = null" @keydown.esc="replyTarget = null">
+        <transition name="modal-slide">
+          <div v-if="replyTarget" class="comment-dialog">
+            <div class="dialog-header">
+              <div>
+                <h3>回复 @{{ replyTarget.user.nickname }}</h3>
+                <p class="dialog-subtitle">文明交流，理性讨论。</p>
+              </div>
+              <button class="dialog-close" @click="replyTarget = null"><BaseIcon name="close"/></button>
+            </div>
+            <div class="dialog-body">
+              <SendComment :comment-id="replyTarget.commentId" :sid="id" :stype="type" :type="2" @reply="replyTarget = null"/>
+            </div>
           </div>
-          <button class="dialog-close" @click="replyTarget = null"><BaseIcon name="close"/></button>
-        </div>
-        <div class="dialog-body">
-          <SendComment :comment-id="replyTarget.commentId" :sid="id" :stype="type" :type="2" @reply="replyTarget = null"/>
-        </div>
+        </transition>
       </div>
-    </div>
+    </transition>
   </div>
 </template>
 

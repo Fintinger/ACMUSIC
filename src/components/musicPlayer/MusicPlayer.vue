@@ -3,13 +3,7 @@
     <div class="mainWin">
       <PlayCore ref="pgPanel" :isExpand="isExpand" :song="song"/>
     </div>
-    <transition
-        name="player-expand"
-        @enter="onExpandEnter"
-        @after-enter="onExpandAfterEnter"
-        @leave="onExpandLeave"
-        @after-leave="onExpandAfterLeave"
-    >
+    <transition name="player-expand">
       <div v-if="isExpand" class="expandedOverlay" ref="scrollEl" @wheel="onWheel">
       <button class="closeBtn" @click="closePlayer" title="关闭 (Esc)">
         <BaseIcon name="close"/>
@@ -20,7 +14,7 @@
           <div class="coverWrapper">
             <div class="coverGlow"></div>
             <div class="coverArt">
-              <img ref="coverImg" :src="coverUrl | imgParam('400y400')" alt="" @load="onCoverLoad" crossorigin="anonymous" />
+              <img ref="coverImg" :src="coverUrl | imgParam('400y400')" alt="" @load="onCoverLoad" crossorigin="anonymous" class="playerCover" />
             </div>
           </div>
           <div class="songMeta">
@@ -117,6 +111,7 @@ export default {
       scrollObserver: null,
       wheelAccum: 0,
       transitioning: false,
+      colorSongId: null,
     }
   },
   computed: {
@@ -150,34 +145,7 @@ export default {
       this.lastActiveIdx = -1
       this.fsm = 'TOP'
       this.wheelAccum = 0
-    },
-    // Vue transition JS hooks (不依赖 transitionend/RAF, 更可靠)
-    onExpandEnter(el, done) {
-      el.style.opacity = 0
-      el.style.transform = 'scale(.96) translateY(20px)'
-      setTimeout(() => {
-        el.style.transition = 'opacity 300ms cubic-bezier(.22,.61,.36,1), transform 300ms cubic-bezier(.22,.61,.36,1)'
-        el.style.opacity = 1
-        el.style.transform = 'scale(1) translateY(0)'
-        setTimeout(done, 320)
-      }, 20)
-    },
-    onExpandAfterEnter(el) {
-      // 清除 transform, 避免 expandedOverlay 残留 transform 破坏内部 fixed 定位
-      el.style.transition = ''
-      el.style.opacity = ''
-      el.style.transform = ''
-    },
-    onExpandLeave(el, done) {
-      el.style.transition = 'opacity 300ms cubic-bezier(.22,.61,.36,1), transform 300ms cubic-bezier(.22,.61,.36,1)'
-      el.style.opacity = 0
-      el.style.transform = 'scale(.98) translateY(20px)'
-      setTimeout(done, 320)
-    },
-    onExpandAfterLeave(el) {
-      el.style.transition = ''
-      el.style.opacity = ''
-      el.style.transform = ''
+      this.colorSongId = null
     },
     expanded() {
       document.body.style.overflow = 'hidden'
@@ -279,6 +247,9 @@ export default {
     updateBackground() {
       const img = this.$refs.coverImg
       if (!img || !img.complete) return
+      const sid = this.currentSong.id
+      if (!sid || sid === this.colorSongId) return
+      this.colorSongId = sid
       this.bgStyle = buildBackground(img)
     },
     parseLyric(ly) {
@@ -376,7 +347,7 @@ export default {
   },
   mounted() {
     this.$refs.pgPanel.$on('SDClk', this.showSongDetail)
-    this.$refs.pgPanel.$on('songChange', (s) => { this.currentSong = s; this.lastActiveIdx = -1 })
+    this.$refs.pgPanel.$on('songChange', (s) => { this.currentSong = s; this.lastActiveIdx = -1; this.colorSongId = null })
     this.$refs.pgPanel.$on('getLyric', this.getLyric)
     this.$refs.pgPanel.$on('getSimi', this.concurrentRequestsGetSimi)
   },
@@ -391,15 +362,47 @@ export default {
 @import "../../assets/scss/base/motion";
 
 .playerWrapper {
+  transition: background $motion-slow $ease-smooth;
+}
+
+.playerWrapper {
   .expandedOverlay { display: none; }
 }
 
-// Expanded Player 进入/离开动画由 JS hooks (onExpandEnter/onExpandLeave) 控制
-// (不使用 CSS transition/animation 类, 避免 Vue 2 走 CSS 模式依赖 transitionend)
+// Player Expand Transition (CSS-based, Vue 2 transition classes)
+.player-expand-enter-active,
+.player-expand-leave-active {
+  transition: opacity $motion-normal $ease-standard, transform $motion-normal $ease-standard;
+}
+
+.player-expand-enter {
+  opacity: 0;
+  transform: scale($player-expand-scale) translateY($player-expand-shift);
+}
+
+.player-expand-enter-to {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.player-expand-leave-to {
+  opacity: 0;
+  transform: scale(.98) translateY($player-expand-shift);
+}
+
+// Cover Animation (expanded 进入时从缩放到完整)
+.expandWindow .playerCover {
+  transition: transform $motion-normal $ease-standard, opacity $motion-normal $ease-standard;
+  transform: scale(1);
+  opacity: 1;
+}
+.player-expand-enter .playerCover {
+  transform: scale(.92);
+  opacity: .8;
+}
 
 .playerWrapper.expandWindow {
   position: fixed; inset: 0; z-index: 200;
-  transition: background 500ms ease;
 
   .mainWin { display: none; }
 

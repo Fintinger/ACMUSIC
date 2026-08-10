@@ -15,12 +15,20 @@
     <div class="fullBar" v-show="showBar" :style="miniBgStyle ? { background: miniBgStyle } : null">
       <div class="barLeft">
         <div class="barCover" @click="showSongDetail">
-          <img v-if="coverUrl" :src="coverUrl | imgParam('200y200')" alt="" />
-          <div v-else class="coverPlaceholder"><BaseIcon name="play"/></div>
+          <transition name="cover-fade" mode="out-in">
+            <img v-if="coverUrl" :key="coverUrl" :src="coverUrl | imgParam('200y200')" alt="" />
+            <div v-else key="placeholder" class="coverPlaceholder"><BaseIcon name="play"/></div>
+          </transition>
         </div>
         <div class="barInfo" @click="showSongDetail">
-          <p class="barTitle">{{ songName }}</p>
-          <p class="barArtist">{{ artistNames }}</p>
+          <div class="barInfoInner">
+            <transition name="slide-up" mode="out-in">
+              <p class="barTitle" :key="currentSong.id">{{ songName }}</p>
+            </transition>
+            <transition name="slide-up" mode="out-in">
+              <p class="barArtist" :key="currentSong.id">{{ artistNames }}</p>
+            </transition>
+          </div>
         </div>
         <i :class="['likeBtn', { liked: isLiked }]" :title="isLiked?'取消收藏':'收藏'" @click.stop="toggleLike">
           <BaseIcon v-if="isLiked" name="likeFill"/>
@@ -31,8 +39,10 @@
         <div class="barControls">
           <BaseIcon name="prev" @click="preSong"/>
           <div class="barPlay" @click="togglePlay">
-            <BaseIcon v-if="!isPlay" name="play"/>
-            <BaseIcon v-else name="pause"/>
+            <transition name="btn-swap" mode="out-in">
+              <BaseIcon v-if="!isPlay" key="play" name="play"/>
+              <BaseIcon v-else key="pause" name="pause"/>
+            </transition>
           </div>
           <BaseIcon name="next" @click="nextSong"/>
         </div>
@@ -374,6 +384,32 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+// Cover fade transition (歌曲切换时封面渐隐渐显)
+.cover-fade-enter-active,
+.cover-fade-leave-active {
+  transition: opacity 240ms cubic-bezier(0.22,0.61,0.36,1), transform 240ms cubic-bezier(0.22,0.61,0.36,1);
+}
+.cover-fade-enter { opacity: 0; transform: scale(.94); }
+.cover-fade-leave-to { opacity: 0; transform: scale(.94); }
+
+// Song title/artist slide-up transition
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: opacity 220ms cubic-bezier(0.22,0.61,0.36,1), transform 220ms cubic-bezier(0.22,0.61,0.36,1);
+}
+.slide-up-enter { opacity: 0; transform: translateY(8px); }
+.slide-up-leave-to { opacity: 0; transform: translateY(-8px); }
+
+// Play/pause button swap transition
+.btn-swap-enter-active,
+.btn-swap-leave-active {
+  transition: opacity 180ms cubic-bezier(0.22,0.61,0.36,1), transform 180ms cubic-bezier(0.22,0.61,0.36,1);
+}
+.btn-swap-enter { opacity: 0; transform: scale(.6); }
+.btn-swap-leave-to { opacity: 0; transform: scale(.6); }
+
+.barInfoInner { overflow: hidden; }
 
 .barLeft {
   flex: 0 0 230px; width: 230px; display: flex; align-items: center; gap: 12px; min-width: 0;
