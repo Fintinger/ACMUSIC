@@ -135,6 +135,7 @@ export default {
       currentQuality: { requested: '', actual: '' },
       showQualityMenu: false,
       currentLevel: config.player.level,
+      currentSongSource: 'unknown',
     }
   },
   computed: {
@@ -161,23 +162,28 @@ export default {
   },
   watch: {
     song(val) {
+      console.log('[SongState]', { action: 'song_watch', currentSongId: this.currentSong.id || null, playlistFirstId: this.currentPlaylist[0] && this.currentPlaylist[0].id || null, requestId: this.playRequestId })
+      this.currentSongSource = 'unknown'
       this.currentSong = normalizeTrack(val)
       this.updateMiniBackground()
     },
     currentSong(val) {
       if (val.id) {
         console.log('%c▶ 歌曲切换 %c%s %c登录:%s', 'background:#2563eb;color:#fff;padding:2px 6px', '', val.id, '', this.isLogin)
-        this.currentSong = normalizeTrack(this.currentSong)
+        console.log('[SongSource]', { action: 'switch', source: this.currentSongSource, songId: val.id })
+        normalizeTrack(val)  // 就地规范化，不重新赋值避免重复触发 watcher
         this.updateMiniBackground()
         this.pauseSong()
         this.playRequestId++
         this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
-        this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id) === -1
-          ? 0 : this.currentPlaylist.findIndex(item => item.id === this.currentSong.id)
-        if (this.currentPlaylist.findIndex(item => item.id === val.id) === -1) {
-          this.$store.commit("TracksAbout/PUSH_PLAYLIST", val)
+        if (this.currentSongSource === 'playlist') {
+          this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id)
+          if (this.curIndex === -1) this.curIndex = 0
+          if (this.currentPlaylist.findIndex(item => item.id === val.id) === -1) {
+            this.$store.commit("TracksAbout/PUSH_PLAYLIST", val)
+          }
+          this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
         }
-        this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
         this.$emit('songChange', val)
         this.$emit('getLyric', val.id)
         this.$emit('getSimi', val.id)
@@ -186,10 +192,27 @@ export default {
     },
     promiseList() {
       if (this.promiseList.length) {
-        this.promiseList[0].then(() => { this.isPending = false; this.playSong() })
+        const reqId = this.playRequestId
+        this.promiseList[0].then(() => {
+          if (reqId !== this.playRequestId) {
+            console.log('[PlayRace]', { requestId: reqId, currentRequestId: this.playRequestId, action: 'ignore_stale_play' })
+            return
+          }
+          console.log('%c[PlayReady] %creq=%s src=%s readyState=%s', 'background:#16a34a;color:#fff;padding:2px 6px', '', reqId, this.sel.src ? 'SET' : 'EMPTY', this.sel.readyState)
+          this.isPending = false
+          this.playSong()
+        })
       }
     },
-    curIndex(ind) { this.currentSong = this.currentPlaylist[ind] },
+    curIndex(ind) {
+      if (this.currentSongSource !== 'playlist') {
+        console.warn('[PlaylistSync]', { action: 'skip_non_playlist_song', source: this.currentSongSource, songId: this.currentSong.id, curIndex: ind })
+        return
+      }
+      console.log('[SongState]', { action: 'curIndex_watch', currentSongId: this.currentSong.id, nextId: this.currentPlaylist[ind] && this.currentPlaylist[ind].id, requestId: this.playRequestId })
+      this.currentSongSource = 'playlist'
+      this.currentSong = this.currentPlaylist[ind]
+    },
     timeNow(n) {
       this.isExpand && this.$emit('tUpdate', n)
       if (this.sel.currentTime === this.timeDuration) this.nextSong()
@@ -419,11 +442,17 @@ export default {
       this.sel.load()
     },
     playSong() {
-      if (JSON.stringify(this.currentSong) === "{}" && this.currentPlaylist.length) this.currentSong = this.currentPlaylist[0]
+      const isCurrentEmpty = JSON.stringify(this.currentSong) === '{}'
+      const playlistFirst = this.currentPlaylist[0]
+      console.log('[SongState]', { action: 'playSong', isCurrentEmpty, currentSongId: this.currentSong.id || null, playlistFirstId: playlistFirst && playlistFirst.id || null, requestId: this.playRequestId })
+      if (isCurrentEmpty && this.currentPlaylist.length) { this.currentSongSource = 'playlist'; this.currentSong = this.currentPlaylist[0] }
       this.isPlay = true
+      console.log('%c[PlayCall] %csrc=%s ready=%s currentTime=%s', 'background:#2563eb;color:#fff;padding:2px 6px', '', this.sel.src ? 'SET' : 'EMPTY', this.sel.readyState, this.sel.currentTime)
       const playPromise = this.sel.play()
       if (playPromise !== undefined) {
-        playPromise.catch(() => {})
+        playPromise.catch(err => {
+          console.log('%c[AudioPlayError] %c%s', 'background:#dc2626;color:#fff;padding:2px 6px', '', err.name + ': ' + err.message)
+        })
       }
     },
     pauseSong() { this.isPlay = false; this.sel.pause() },
@@ -499,10 +528,12 @@ export default {
       document.addEventListener('mouseup', () => { document.removeEventListener('mousemove', onMove); this.scheduleHide() }, { once: true })
       evt.preventDefault()
     },
-    handleCommand(s) { this.onInteract(); this.currentSong = s },
+    handleCommand(s) { this.onInteract(); console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.currentSongSource = 'playlist'; this.currentSong = s },
     playAllSong(msgName, mode = "order") {
       if (mode === "random") this.currentSong = this.currentPlaylist[Math.ceil(Math.random() * (this.currentPlaylist.length - 1))]
       else this.currentSong = this.currentPlaylist[0]
+      this.currentSongSource = 'playlist'
+      console.log('[SongState]', { action: 'playAllSong', currentSongId: this.currentSong.id, mode, requestId: this.playRequestId })
     },
     clearPlaylist() { this.pauseSong(); this.$bus.$emit("clearPlaylist") },
     addEventListeners() {
@@ -514,7 +545,12 @@ export default {
       this.sel.removeEventListener('canplay', this._durationTime)
     },
     _currentTime() { if (this.sel) this.timeNow = (this.sel.currentTime).toFixed(4) },
-    _durationTime() { if (this.sel) this.timeDuration = this.sel.duration },
+    _durationTime() {
+      if (this.sel) {
+        console.log('%c[AudioReady] %cduration=%s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', this.sel.duration)
+        this.timeDuration = this.sel.duration
+      }
+    },
   },
   beforeMount() { this.sel = new Audio() },
   mounted() {
@@ -714,6 +750,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   border-radius: 14px !important;
   padding: 0 !important;
   min-width: 280px !important;
+  max-width: 380px;
   max-height: 420px;
   overflow: hidden;
 
@@ -743,10 +780,10 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       display: flex; flex-direction: column; gap: 2px;
       padding: 10px 18px; color: rgba(255,255,255,0.55); font-size: 13px;
       transition: all 180ms ease; line-height: 1.3;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      overflow: hidden; min-width: 0;
 
-      .plSongName { font-size: 13px; color: inherit; }
-      .plSongArtist { font-size: 11px; color: rgba(255,255,255,0.25); }
+      .plSongName { font-size: 13px; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .plSongArtist { font-size: 11px; color: rgba(255,255,255,0.25); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
       &:hover {
         background: rgba(255,255,255,.08); color: rgba(255,255,255,.96);
