@@ -1,13 +1,13 @@
 <template>
   <div class="grid-skeleton">
-    <div class="skel-section-title" v-if="title"></div>
+    <div class="skel-section-title skeleton-item" v-if="title"></div>
     <div class="grid-skeleton__grid" :class="'grid-skeleton__grid--' + type">
       <div v-for="n in count" :key="n" class="skel-card" :class="'skel-card--' + type">
-        <div class="skel-img"></div>
+        <div class="skel-img skeleton-item"></div>
         <div class="skel-body">
-          <div class="skel-line skel-line--title"></div>
-          <div class="skel-line skel-line--sub" v-if="type==='rank'"></div>
-          <div class="skel-line skel-line--sub" v-if="type!=='artist'&&type!=='rank'"></div>
+          <div class="skel-line skel-line--title skeleton-item"></div>
+          <div class="skel-line skel-line--sub skeleton-item" v-if="type==='rank'"></div>
+          <div class="skel-line skel-line--sub skeleton-item" v-if="type!=='artist'&&type!=='rank'"></div>
         </div>
       </div>
     </div>
@@ -35,9 +35,6 @@ export default {
   width: 100px;
   border-radius: 6px;
   margin-bottom: 18px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
 }
 
 .grid-skeleton__grid {
@@ -74,9 +71,6 @@ export default {
 .skel-img {
   width: 100%;
   aspect-ratio: 1;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
   display: block;
 
   .skel-card--artist & {
@@ -108,9 +102,6 @@ export default {
 .skel-line {
   height: 14px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
 
   &--title {
     width: 80%;
@@ -130,10 +121,5 @@ export default {
   .skel-card--rank &--sub {
     width: 65%;
   }
-}
-
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 </style>

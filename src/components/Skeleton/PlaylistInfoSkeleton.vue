@@ -1,12 +1,12 @@
 <template>
   <div class="info-skeleton">
-    <div class="skel-cover"></div>
+    <div class="skel-cover skeleton-item"></div>
     <div class="skel-detail">
-      <div class="skel-line skel-line--title"></div>
-      <div class="skel-line skel-line--creator"></div>
-      <div class="skel-line skel-line--meta"></div>
-      <div class="skel-line skel-line--desc"></div>
-      <div class="skel-line skel-line--desc2"></div>
+      <div class="skel-line skel-line--title skeleton-item"></div>
+      <div class="skel-line skel-line--creator skeleton-item"></div>
+      <div class="skel-line skel-line--meta skeleton-item"></div>
+      <div class="skel-line skel-line--desc skeleton-item"></div>
+      <div class="skel-line skel-line--desc2 skeleton-item"></div>
     </div>
   </div>
 </template>
@@ -27,9 +27,6 @@ export default { name: "PlaylistInfoSkeleton" }
   width: 200px;
   height: 200px;
   border-radius: 16px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
 }
 
 .skel-detail {
@@ -43,19 +40,11 @@ export default { name: "PlaylistInfoSkeleton" }
 .skel-line {
   height: 14px;
   border-radius: 8px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
 
   &--title { width: 60%; height: 22px; }
   &--creator { width: 30%; }
   &--meta { width: 40%; }
   &--desc { width: 90%; }
   &--desc2 { width: 70%; }
-}
-
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 </style>

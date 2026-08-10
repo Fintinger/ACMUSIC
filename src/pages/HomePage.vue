@@ -2,28 +2,39 @@
   <div class="homePage">
     <!--每日推荐-->
     <template v-if="isLogin">
-      <!--每日推荐-推荐歌曲X每日推荐-私人FM-->
-      <el-row :gutter="50" class="recTracks-personalFM">
-        <el-col :span="12" class="recTracks">
-          <div class="wrapper-for-click-event" @click="goDailySongs">
-            <el-row v-if="dailySongs[0]" :style="{backgroundImage:`url('${dailySongs[0].al.picUrl}')`}">
-              <el-col :span="12" class="text row-col-center"><span>每日推荐</span></el-col>
-              <el-col :span="12" class="play-tracks-btn">
-                <div class="btn-container">
-                  <playTracksBtn :val="dailySongs"/>
-                </div>
-              </el-col>
-            </el-row>
+      <!-- Hero 双栏: 每日推荐 + 私人FM -->
+      <transition name="fade-slide" mode="out-in">
+        <div v-if="!personalLoading" key="content" class="hero-section">
+          <!-- 每日推荐大卡片 -->
+          <div class="daily-area">
+            <div class="wrapper-for-click-event" @click="goDailySongs">
+              <el-row v-if="dailySongs[0]" :style="{backgroundImage:`url('${dailySongs[0].al.picUrl}')`}" class="daily-card">
+                <el-col :span="24" class="text">
+                  <div class="daily-title">
+                    <span class="line">每日</span>
+                    <span class="line">推荐</span>
+                  </div>
+                </el-col>
+                <el-col :span="24" class="play-tracks-btn">
+                  <div class="btn-container">
+                    <playTracksBtn :val="dailySongs" expand/>
+                  </div>
+                </el-col>
+              </el-row>
+            </div>
           </div>
-        </el-col>
-        <el-col :span="12" class="personalFM">
-          <div class="wrapper-for-click-event"  @click="playPersonalFM">
-            <el-row>
+          <!-- 私人FM沉浸式区域 -->
+          <div class="personal-fm-area">
+            <div class="wrapper-for-click-event" @click="playPersonalFM">
               <PersonalFM ref="personalFM" :list="personalFM"/>
-            </el-row>
+            </div>
           </div>
-        </el-col>
-      </el-row>
+        </div>
+        <div v-else key="skeleton" class="hero-section">
+          <div class="daily-area"><div class="rec-skeleton-block skeleton-item"></div></div>
+          <div class="personal-fm-area"><div class="rec-skeleton-block skeleton-item"></div></div>
+        </div>
+      </transition>
       <!--每日推荐-推荐歌单-->
       <el-row>
         <h2>每日推荐-推荐歌单</h2>
@@ -54,8 +65,8 @@
         </transition>
       </el-row>
     </div>
-    <!--推荐歌单-->
-    <div class="recommendedPlaylist home-module">
+    <!--推荐歌单（已登录时与"每日推荐-推荐歌单"重复, 不额外显示）-->
+    <div v-if="!isLogin" class="recommendedPlaylist home-module">
       <h2>推荐歌单</h2>
       <transition name="fade-slide" mode="out-in">
         <GridSkeleton v-if="playlistLoading || !playlistReady" key="skeleton" type="playlist" :count="5" :title="false"/>

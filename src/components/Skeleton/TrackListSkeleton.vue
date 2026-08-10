@@ -1,13 +1,13 @@
 <template>
   <div class="tracklist-skeleton">
     <div v-for="n in count" :key="n" class="skel-row">
-      <div class="skel-cover"></div>
+      <div class="skel-cover skeleton-item"></div>
       <div class="skel-info">
-        <div class="skel-line skel-line--title"></div>
-        <div class="skel-line skel-line--sub"></div>
+        <div class="skel-line skel-line--title skeleton-item"></div>
+        <div class="skel-line skel-line--sub skeleton-item"></div>
       </div>
-      <div class="skel-line skel-line--album"></div>
-      <div class="skel-line skel-line--time"></div>
+      <div class="skel-line skel-line--album skeleton-item"></div>
+      <div class="skel-line skel-line--time skeleton-item"></div>
     </div>
   </div>
 </template>
@@ -39,9 +39,6 @@ export default {
   width: 44px;
   height: 44px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
 }
 
 .skel-info {
@@ -54,18 +51,10 @@ export default {
 .skel-line {
   height: 12px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
 
   &--title { width: 55%; }
   &--sub { width: 35%; height: 10px; }
   &--album { width: 80px; }
   &--time { width: 50px; }
-}
-
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 </style>

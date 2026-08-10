@@ -16,7 +16,8 @@
       background: $color-theme-sec;
 
 
-      &>i{
+      &>i,
+      &>.btn-item{
         display:inline-block;
         padding: .5rem;
         cursor: pointer;
@@ -25,6 +26,11 @@
         &:hover{
           color: $color-main;
         }
+      }
+      &>.btn-item{
+        .ac-icon{ vertical-align: middle; }
+        span{ margin-left: 4px; }
+        &:last-child{ margin-left: 0; border-left: 1px solid $font-white-1; }
       }
       .ac-play1{
         font: {
@@ -36,10 +42,8 @@
         }
       }
       .ac-jia{
-        margin-left: 1.5rem;
         font-size: .8rem;
         font-weight: normal;
-        border-left: 1px solid $font-white-1;
       }
     }
   }

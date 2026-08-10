@@ -3,7 +3,14 @@
     <div class="mainWin">
       <PlayCore ref="pgPanel" :isExpand="isExpand" :song="song"/>
     </div>
-    <div v-if="isExpand" class="expandedOverlay" ref="scrollEl" @wheel="onWheel">
+    <transition
+        name="player-expand"
+        @enter="onExpandEnter"
+        @after-enter="onExpandAfterEnter"
+        @leave="onExpandLeave"
+        @after-leave="onExpandAfterLeave"
+    >
+      <div v-if="isExpand" class="expandedOverlay" ref="scrollEl" @wheel="onWheel">
       <button class="closeBtn" @click="closePlayer" title="关闭 (Esc)">
         <BaseIcon name="close"/>
       </button>
@@ -71,6 +78,7 @@
         </div>
       </section>
     </div>
+    </transition>
 
     <!-- Overlay buttons -->
     <button v-if="isExpand && fsm === 'TOP'" class="overlayBtn bottomBtn" @click="scrollToComments">
@@ -142,6 +150,34 @@ export default {
       this.lastActiveIdx = -1
       this.fsm = 'TOP'
       this.wheelAccum = 0
+    },
+    // Vue transition JS hooks (不依赖 transitionend/RAF, 更可靠)
+    onExpandEnter(el, done) {
+      el.style.opacity = 0
+      el.style.transform = 'scale(.96) translateY(20px)'
+      setTimeout(() => {
+        el.style.transition = 'opacity 300ms cubic-bezier(.22,.61,.36,1), transform 300ms cubic-bezier(.22,.61,.36,1)'
+        el.style.opacity = 1
+        el.style.transform = 'scale(1) translateY(0)'
+        setTimeout(done, 320)
+      }, 20)
+    },
+    onExpandAfterEnter(el) {
+      // 清除 transform, 避免 expandedOverlay 残留 transform 破坏内部 fixed 定位
+      el.style.transition = ''
+      el.style.opacity = ''
+      el.style.transform = ''
+    },
+    onExpandLeave(el, done) {
+      el.style.transition = 'opacity 300ms cubic-bezier(.22,.61,.36,1), transform 300ms cubic-bezier(.22,.61,.36,1)'
+      el.style.opacity = 0
+      el.style.transform = 'scale(.98) translateY(20px)'
+      setTimeout(done, 320)
+    },
+    onExpandAfterLeave(el) {
+      el.style.transition = ''
+      el.style.opacity = ''
+      el.style.transform = ''
     },
     expanded() {
       document.body.style.overflow = 'hidden'
@@ -352,10 +388,14 @@ export default {
 
 <style lang="scss">
 @import "../../assets/scss/base/variables";
+@import "../../assets/scss/base/motion";
 
 .playerWrapper {
   .expandedOverlay { display: none; }
 }
+
+// Expanded Player 进入/离开动画由 JS hooks (onExpandEnter/onExpandLeave) 控制
+// (不使用 CSS transition/animation 类, 避免 Vue 2 走 CSS 模式依赖 transitionend)
 
 .playerWrapper.expandWindow {
   position: fixed; inset: 0; z-index: 200;
@@ -394,8 +434,9 @@ export default {
 
   .coverWrapper {
     position: relative; width: 260px; height: 260px; flex-shrink: 0;
-    .coverGlow { position: absolute; inset: -30px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%); filter: blur(50px); pointer-events: none; }
-    .coverArt { position: relative; width: 100%; height: 100%; border-radius: 16px; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.35); img { width: 100%; height: 100%; object-fit: cover; display: block; } }
+  .coverGlow { position: absolute; inset: -30px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%); filter: blur(50px); pointer-events: none; }
+  .coverArt { position: relative; width: 100%; height: 100%; border-radius: 16px; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.35); img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s ease, opacity .3s ease; } }
+  .coverArt img { transform: scale(1); opacity: 1; }
   }
 
   .songMeta {
@@ -419,7 +460,7 @@ export default {
   .controlsRow {
     display: flex; align-items: center; justify-content: center; gap: 28px; color: rgba(255,255,255,0.85);
     > i { font-size: 24px; cursor: pointer; opacity: 0.55; transition: all 180ms ease; &:hover { opacity: 0.9; transform: scale(1.12); } }
-    .playBtn { width: 48px; height: 48px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 32px; margin-left: 1px; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
+    .playBtn { width: 32px; height: 32px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 20px; margin-left: 1px; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
   }
 
   .actionsRow {

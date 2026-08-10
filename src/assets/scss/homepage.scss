@@ -4,6 +4,7 @@
 @import "personalFmCard";
 
 @import "base/variables";
+@import "base/motion";
 
 .homePage {
   & > div {
@@ -30,13 +31,95 @@
     opacity: 0;
   }
 
-  .recTracks-personalFM {
-    & > .el-col > .wrapper-for-click-event > .el-row {
-      width: 100%;
-      height: 300px;
-      border-radius: 10px;
-      overflow: hidden;
+  // Hero 双栏: 每日推荐 + 私人FM
+  .hero-section {
+    display: flex;
+    gap: 40px;
+    height: 600px;
+    margin-bottom: 50px;
+  }
+
+  .daily-area {
+    width: 42%;
+    flex-shrink: 0;
+
+    .wrapper-for-click-event {
+      height: 100%;
+
+      .daily-card {
+        width: 100%;
+        height: 600px;
+        border-radius: 28px;
+        overflow: hidden;
+        background-size: 120% auto;
+        background-position: center top;
+        cursor: pointer;
+        animation: daily-bg-float 20s linear infinite alternate;
+
+        // 每日推荐大标题: 第二象限(左上), 每行2字, 深主色
+        .el-col.text {
+          position: absolute;
+          top: 40px;
+          left: 40px;
+          width: auto;
+          display: flex;
+          align-items: flex-start;
+
+          .daily-title {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+
+            .line {
+              font-size: 3rem;
+              line-height: 1.25;
+              font-weight: 700;
+              letter-spacing: .1em;
+              color: #202124;
+            }
+          }
+        }
+
+        // 播放按钮
+        .play-tracks-btn {
+          position: absolute;
+          right: 0;
+          bottom: 0;
+
+          .btn-container {
+            width: 80px;
+            height: 80px;
+            margin: 1rem;
+          }
+        }
+      }
     }
+  }
+
+  // 每日推荐背景上下无限循环移动
+  @keyframes daily-bg-float {
+    from { background-position: center top; }
+    to { background-position: center bottom; }
+  }
+
+  .personal-fm-area {
+    width: 58%;
+    flex: 1;
+    min-width: 0;
+
+    .wrapper-for-click-event {
+      height: 100%;
+      border-radius: 32px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #ffffff, #fff6f8);
+    }
+  }
+
+  // 加载占位
+  .rec-skeleton-block {
+    width: 100%;
+    height: 520px;
+    border-radius: 28px;
   }
 
 
@@ -47,16 +130,20 @@
         .topList {
           padding: 30px;
           padding-bottom: 10px;
+          cursor: pointer;
 
           .el-card {
             border: none;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform $motion-fast $ease-standard, box-shadow $motion-fast $ease-standard;
 
             .img-wrapper {
               border-radius: 8px;
               overflow: hidden;
             }
             .info{
-              padding-top: 10px;
+              padding: 10px 8px 0;
               p{
                 line-height: 1.2rem;
                 margin-bottom: 10px;
@@ -73,6 +160,14 @@
             }
           }
 
+          &:hover .el-card {
+            transform: translateY($card-hover-y);
+            box-shadow: $card-shadow-hover;
+          }
+
+          &:active .el-card {
+            transform: scale(.98);
+          }
         }
       }
     }

@@ -1,14 +1,19 @@
 @import "base/variables";
+@import "base/motion";
 
 ul {
   li.album {
     .el-card {
       border: none;
       position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      transition: transform $motion-fast $ease-standard, box-shadow $motion-fast $ease-standard;
 
       .img-wrapper {
-        padding-right: 100px;
         overflow: hidden;
+        border-radius: 10px;
+        margin: 10px;
         background: {
           position: center;
           size: 60%;
@@ -16,12 +21,16 @@ ul {
         };
 
         img {
-          border-radius: 8px;
+          border-radius: 10px;
+          display: block;
+          width: 100%;
+          transition: transform 1.5s ease;
         }
       }
 
       .info {
-        margin-top: 1rem;
+        margin-top: .5rem;
+        padding: 0 14px 14px;
 
         & > div {
           margin-bottom: .5rem;
@@ -39,7 +48,7 @@ ul {
 
         .artist {
           cursor: pointer;
-          transition: color .5s;
+          transition: color $motion-fast;
           &:hover {
             color: $font-black-1;
           }
@@ -49,17 +58,28 @@ ul {
         }
       }
 
+      &:hover {
+        transform: translateY($card-hover-y);
+        box-shadow: $card-shadow-hover;
+      }
+
+      &:active {
+        transform: scale(.98);
+      }
+
       &:hover .play-btn{
-        display: inline-block;
+        display: flex;
       }
 
       .play-btn{
         position: absolute;
-        right: 45px;
-        bottom: 45px;
-        width: 100%;
-        height: 100%;
+        left: 0;
+        right: 0;
+        top: 10px;
+        bottom: 100px;
         display: none;
+        align-items: center;
+        justify-content: center;
       }
     }
   }

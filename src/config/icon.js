@@ -8,7 +8,11 @@
 export default {
     // ---- 播放器核心 ----
     play: { type: 'font', class: 'ac-play1' },
-    pause: { type: 'font', class: 'ac-pause' },
+    pause: {
+        type: 'svg',
+        fill: 'currentColor', stroke: 'none',
+        path: 'M7 5h4v14H7zM13 5h4v14h-4z',
+    },
     prev: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 2,

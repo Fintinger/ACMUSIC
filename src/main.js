@@ -22,6 +22,7 @@ import * as filters from './utils/filters'
 //Icon 系统
 import BaseIcon from "./components/common/BaseIcon"
 import "./assets/scss/icon.scss"
+import "./assets/scss/base/motion.scss"
 
 //axios处理
 Vue.prototype.$axios = request

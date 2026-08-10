@@ -32,7 +32,7 @@
           <div class="moreInfo">
             <!--更新时间-->
             <template about-time>
-              <p v-if="playlist.updateTime" class="updateTime">最近更新 {{ playlist.updateTime | formatMs }}</p>
+              <p v-if="playlist.updateTime" class="updateTime">最近更新 {{ playlist.updateTime | formatMs("YYYY年MM月DD日") }}</p>
               <!--              <p v-if="playlist.createTime" class="createTime">创建于 {{ playlist.updateTime | formatMs}}</p>-->
             </template>
             <p v-if="playlist.copywriter" class="copywriter">{{ playlist.copywriter }}</p>

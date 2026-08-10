@@ -47,9 +47,11 @@
         </el-row>
       </el-header>
       <el-main>
-        <keep-alive>
-          <router-view :key="$route.fullPath"/>
-        </keep-alive>
+        <transition name="page-fade">
+          <keep-alive>
+            <router-view :key="$route.fullPath"/>
+          </keep-alive>
+        </transition>
       </el-main>
     </el-container>
     <!--播放器组件 -->

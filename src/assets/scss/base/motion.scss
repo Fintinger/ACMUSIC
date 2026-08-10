@@ -1,0 +1,66 @@
+/**
+ * ACMUSIC Motion Design Token
+ * 统一动画时长与缓动函数，供各 Phase 复用
+ */
+
+// 时长
+$motion-fast: 180ms;
+$motion-normal: 300ms;
+$motion-slow: 500ms;
+
+// 缓动
+$ease-standard: cubic-bezier(.22, .61, .36, 1);
+$ease-smooth: cubic-bezier(.4, 0, .2, 1);
+
+// Card Interaction Token
+$card-hover-y: -4px;
+$card-cover-scale: 1.04;
+$card-shadow-hover: 0 12px 30px rgba(0,0,0,.12);
+
+// Skeleton Shimmer Token
+$shimmer-duration: 1.6s;
+$shimmer-color-start: #f0f0f0;
+$shimmer-color-mid: #e6e6e6;
+$shimmer-color-end: #f0f0f0;
+
+// Player Expand Token
+$player-expand-scale: .96;
+$player-expand-shift: 20px;
+
+// 全局页面切换动画
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition:
+    opacity $motion-normal $ease-standard,
+    transform $motion-normal $ease-standard;
+}
+
+.page-fade-enter {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.page-fade-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+// 统一 Skeleton Shimmer 动画
+.skeleton-item {
+  background: linear-gradient(90deg,
+      $shimmer-color-start 25%,
+      $shimmer-color-mid 50%,
+      $shimmer-color-end 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer $shimmer-duration infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

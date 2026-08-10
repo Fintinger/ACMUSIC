@@ -1,18 +1,25 @@
 @import "base/variables";
+@import "base/motion";
 
 ul {
   li.artist {
     .el-card {
       border: none;
+      border-radius: 14px;
+      overflow: hidden;
+      transition: transform $motion-fast $ease-standard, box-shadow $motion-fast $ease-standard;
 
       .imgContainer{
         cursor: pointer;
         overflow: hidden;
-        padding: 2rem;
-        padding-bottom: .5rem;
+        padding: 1rem 0 .5rem;
+        text-align: center;
 
         img{
           border-radius: 50%;
+          display: inline-block;
+          width: 85%;
+          transition: transform 1.5s ease;
         }
       }
       .name{
@@ -22,12 +29,22 @@ ul {
           size: 1.2rem;
           weight: bold;
         };
+        padding: 0 0 1.2rem;
         .accountId{
           cursor: pointer;
           font-size: 1rem;
           font-weight: normal;
           color: $font-black-2;
         }
+      }
+
+      &:hover {
+        transform: translateY($card-hover-y);
+        box-shadow: $card-shadow-hover;
+      }
+
+      &:active {
+        transform: scale(.98);
       }
     }
   }

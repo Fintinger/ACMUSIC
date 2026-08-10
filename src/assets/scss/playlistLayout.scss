@@ -18,7 +18,13 @@ ul {
         border-radius: 15px;
         position: relative;
         cursor: pointer;
+        overflow: hidden;
 
+        img {
+          display: block;
+          width: 100%;
+          transition: transform 1.5s ease;
+        }
 
         .playCount {
           position: absolute;
@@ -49,15 +55,14 @@ ul {
       }
 
       .info {
-        //padding-left: 8px;
-
+        padding: 8px 14px 14px;
+        box-sizing: border-box;
 
         .listName {
           padding: 6px 0px;
           font-size: 1.1rem;
           font-weight: bold;
         }
-
 
         .moreInfo {
           color: $font-black-2;
@@ -82,14 +87,9 @@ ul {
         display: inline-block;
       }
 
-      img {
-        transition: all 3s;
-      }
-
       &:hover img {
-        transform: scale(1.3);
+        transform: scale(1.15);
       }
-
     }
   }
 }

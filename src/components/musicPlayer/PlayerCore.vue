@@ -403,11 +403,11 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     display: flex; align-items: center; gap: 22px; color: $text;
     > i { font-size: 20px; cursor: pointer; opacity: 0.5; transition: all 160ms ease; &:hover { opacity: 0.85; transform: scale(1.1); } }
     .barPlay {
-      width: 36px; height: 36px; border-radius: 50%; background: $accent; color: #fff;
+      width: 28px; height: 28px; border-radius: 50%; background: $accent; color: #fff;
       display: flex; align-items: center; justify-content: center; cursor: pointer;
       box-shadow: 0 2px 12px rgba($accent, 0.3);
       transition: all 200ms cubic-bezier(0.22,0.61,0.36,1);
-      i { font-size: 24px; margin-left: 1px; }
+      i { font-size: 17px; margin-left: 1px; }
       &:hover { transform: scale(1.1); box-shadow: 0 4px 18px rgba($accent, 0.45); }
       &:active { transform: scale(0.94); }
     }

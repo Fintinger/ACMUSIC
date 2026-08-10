@@ -15,7 +15,7 @@
       :style="svgStyle"
       v-bind="$attrs"
   >
-    <svg :width="svgSize" :height="svgSize" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" :stroke-width="strokeWidth">
+    <svg :width="svgSize" :height="svgSize" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path :d="icon.path" :fill="icon.fill || 'currentColor'" :stroke="icon.stroke || 'currentColor'" :stroke-width="icon.strokeWidth || 0" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </i>
@@ -97,6 +97,8 @@ export default {
 }
 .ac-icon-svg svg {
   display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .icon-fallback {

@@ -98,19 +98,31 @@ export default {
         })
         if (res.data.playlist[0]) this.favorTracks.push(res.data.playlist[0])
       })
-      const p2 = Promise.all([
-        this.getRecentTracks(uid), this.getRecentTracks(uid, 0)
-      ]).then(([week, all]) => {
-        this.handleThisTracksData(week.data.weekData, this.weekTracksData)
-        this.handleThisTracksData(all.data.allData, this.allTracksData)
-      })
-      const p3 = User.getCloud().then(res => {
-        res.data.data.forEach(val => { val.simpleSong.fileSize = val.fileSize; this.cloudTracks.push(val.simpleSong) })
-      })
-      const p4 = Promise.all([User.subArtistList(), User.subAlbumList(), User.subMvList()])
-        .then(([artists, albums, mvs]) => {
-          this.favors.artists = artists.data.data; this.favors.albums = albums.data.data; this.favors.vids = mvs.data.data
-        })
+      const isSelf = uid === this.loginInfo.userId
+      // 听歌排行仅本人可看(他人 record 接口返回 400), 非本人跳过请求, 显示"未公开"
+      const p2 = isSelf
+        ? Promise.all([
+            this.getRecentTracks(uid), this.getRecentTracks(uid, 0)
+          ]).then(([week, all]) => {
+            this.handleThisTracksData(week.data.weekData, this.weekTracksData)
+            this.handleThisTracksData(all.data.allData, this.allTracksData)
+          }).catch(() => {
+            this.weekTracksData = []
+            this.allTracksData = []
+          })
+        : Promise.resolve()
+      const p3 = isSelf
+        ? User.getCloud().then(res => {
+            res.data.data.forEach(val => { val.simpleSong.fileSize = val.fileSize; this.cloudTracks.push(val.simpleSong) })
+          }).catch(() => { this.cloudTracks = [] })
+        : Promise.resolve()
+      const p4 = isSelf
+        ? Promise.all([User.subArtistList(), User.subAlbumList(), User.subMvList()])
+            .then(([artists, albums, mvs]) => {
+              this.favors.artists = artists.data.data; this.favors.albums = albums.data.data; this.favors.vids = mvs.data.data
+            })
+            .catch(() => { this.favors = { vids: [], artists: [], albums: [] } })
+        : Promise.resolve()
       await Promise.all([this.getUserInfo(uid), p1, p2, p3, p4])
       this.pageLoading = false
     },
@@ -137,7 +149,7 @@ export default {
 .user-hero {
   display: flex; align-items: center; gap: 28px; padding: 40px 0; margin-bottom: 20px;
   .hero-avatar { flex-shrink: 0; width: 120px; height: 120px; border-radius: 50%; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,.1); img { width: 100%; height: 100%; object-fit: cover; } }
-  .hero-name { font-size: 28px; font-weight: 700; color: $font-black; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; i { display: inline-block; width: 16px; height: 16px; border-radius: 50%; } i.el-icon-male { background: #47a1ce; } i.el-icon-female { background: #ff86b6; } }
+  .hero-name { font-size: 28px; font-weight: 700; color: $font-black; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; i { display: inline-block; font-size: 18px; line-height: 1; flex-shrink: 0; } i.el-icon-male { color: #47a1ce; } i.el-icon-female { color: #ff86b6; } }
   .hero-sig { font-size: 14px; color: $font-black-2; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 400px; }
   .hero-meta { display: flex; gap: 20px; font-size: 13px; color: $font-black-2; margin: 0; }
 }
