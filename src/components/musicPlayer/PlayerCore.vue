@@ -39,7 +39,8 @@
         <div class="barControls">
           <BaseIcon name="prev" @click="preSong"/>
           <div class="barPlay" @click="togglePlay">
-            <transition name="btn-swap" mode="out-in">
+            <i v-if="isLoading" class="player-loading-spinner"></i>
+            <transition v-else name="btn-swap" mode="out-in">
               <BaseIcon v-if="!isPlay" key="play" name="play"/>
               <BaseIcon v-else key="pause" name="pause"/>
             </transition>
@@ -136,6 +137,13 @@ export default {
       showQualityMenu: false,
       currentLevel: config.player.level,
       currentSongSource: 'unknown',
+      isLoading: false,
+      showPlayerPending: false,
+      hasRestoreProgress: false,
+      resumeTime: 0,
+      restoreSongId: null,
+      lastSaveTime: 0,
+      isRestoring: false,
     }
   },
   computed: {
@@ -171,11 +179,16 @@ export default {
       if (val.id) {
         console.log('%c▶ 歌曲切换 %c%s %c登录:%s', 'background:#2563eb;color:#fff;padding:2px 6px', '', val.id, '', this.isLogin)
         console.log('[SongSource]', { action: 'switch', source: this.currentSongSource, songId: val.id })
-        normalizeTrack(val)  // 就地规范化，不重新赋值避免重复触发 watcher
+        normalizeTrack(val)
         this.updateMiniBackground()
-        this.pauseSong()
-        this.playRequestId++
-        this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
+        if (this.isRestoring) {
+          this.isRestoring = false
+          this.isPlay = false
+        } else {
+          this.pauseSong()
+          this.playRequestId++
+          this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
+        }
         if (this.currentSongSource === 'playlist') {
           this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id)
           if (this.curIndex === -1) this.curIndex = 0
@@ -188,6 +201,7 @@ export default {
         this.$emit('getLyric', val.id)
         this.$emit('getSimi', val.id)
         this.$nextTick(() => this.scheduleHide())
+        this._saveState()
       }
     },
     promiseList() {
@@ -270,11 +284,13 @@ export default {
     },
     checkSongDntLogin(id, requestId) {
       const self = this
+      this.isLoading = true
+      console.log('[PlayerLoading]', { action: 'start', songId: id, requestId })
       return new Promise(resolve => {
         // 未登录用户也走完整 fallback 链 (v1 → /song/url → /song/url/match)
         self.getSongUrl(id, requestId).then(res => {
-          if (res && res.cancelled) { resolve({ cancelled: true }); return }
-          if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
+          if (res && res.cancelled) { self.isLoading = false; self.showPlayerPending = false; resolve({ cancelled: true }); return }
+          if (requestId !== self.playRequestId) { self.isLoading = false; self.showPlayerPending = false; resolve({ cancelled: true }); return }
           const data = res && res.data && res.data.data
           const url = data && data[0] && data[0].url
           if (url) {
@@ -292,12 +308,15 @@ export default {
             else self.$message.warning("暂无可用音源")
             resolve("no_url")
           }).catch(() => {
+            self.isLoading = false
+            console.warn('[PlayerLoading]', { action: 'error', songId: id, requestId })
             if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
             resolve("no_url")
           })
         }).catch(err => {
-          if (err && err.message === 'REQUEST_CANCELLED') { resolve({ cancelled: true }); return }
+          if (err && err.message === 'REQUEST_CANCELLED') { self.isLoading = false; resolve({ cancelled: true }); return }
           console.error('[PlayError]', { songId: id, stage: 'DNT_LOGIN_FAIL', error: err && err.message || String(err) })
+          self.isLoading = false
           if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
           resolve("dnt_fail")
         })
@@ -305,18 +324,21 @@ export default {
     },
     checkSongLoggedIn(id, requestId) {
       const self = this
+      this.isLoading = true
+      console.log('[PlayerLoading]', { action: 'start', songId: id, requestId })
       return new Promise(resolve => {
         this.$axios('/check/music', { params: { id } }).then(res => {
           console.log('%c▶ 版权判断 %c/check/music?id=%s %s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', id, res.data.success ? '✅有版权' : '❌无版权')
           if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
           if (res.data.success) {
             self.getSongUrl(id, requestId).then(res => {
-              if (res && res.cancelled) { resolve({ cancelled: true }); return }
-              if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
+              if (res && res.cancelled) { self.isLoading = false; resolve({ cancelled: true }); return }
+              if (requestId !== self.playRequestId) { self.isLoading = false; resolve({ cancelled: true }); return }
               const data = res && res.data && res.data.data
               const item = data && data[0]
               const newUrl = item && item.url
               if (!newUrl) {
+                self.isLoading = false
                 console.error('[PlayError]', { songId: id, stage: 'NO_AUDIO', requestId })
                 if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
                 resolve("no_url")
@@ -327,18 +349,21 @@ export default {
               self.sel.load()
               resolve()
             }).catch(err => {
-              if (err && err.message === 'REQUEST_CANCELLED') { resolve({ cancelled: true }); return }
+              if (err && err.message === 'REQUEST_CANCELLED') { self.isLoading = false; resolve({ cancelled: true }); return }
               const isNoResource = err && err.message === 'NO_RESOURCE'
+              self.isLoading = false
               console.error('[PlayError]', { songId: id, stage: isNoResource ? 'NO_RESOURCE' : 'NETWORK_ERROR', requestId, error: err && err.message || String(err) })
               if (requestId === self.playRequestId) self.$message.warning(isNoResource ? "暂无可用音源" : "播放失败，请稍后重试")
               resolve("url_fail")
             })
           } else {
+            self.isLoading = false
             console.error('[PlayError]', { songId: id, stage: 'NO_COPYRIGHT', requestId })
             if (requestId === self.playRequestId) self.$message.warning("暂无版权")
             resolve("no_rights")
           }
         }).catch(err => {
+          self.isLoading = false
           console.error('[PlayError]', { songId: id, stage: 'API_ERROR', requestId, error: err && err.message || String(err) })
           if (requestId === self.playRequestId) self.$message.warning("暂无版权！")
           resolve("check_fail")
@@ -446,6 +471,12 @@ export default {
       const playlistFirst = this.currentPlaylist[0]
       console.log('[SongState]', { action: 'playSong', isCurrentEmpty, currentSongId: this.currentSong.id || null, playlistFirstId: playlistFirst && playlistFirst.id || null, requestId: this.playRequestId })
       if (isCurrentEmpty && this.currentPlaylist.length) { this.currentSongSource = 'playlist'; this.currentSong = this.currentPlaylist[0] }
+      if (!this.sel.src && this.currentSong.id) {
+        this.isLoading = true
+        this.playRequestId++
+        this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
+        return
+      }
       this.isPlay = true
       console.log('%c[PlayCall] %csrc=%s ready=%s currentTime=%s', 'background:#2563eb;color:#fff;padding:2px 6px', '', this.sel.src ? 'SET' : 'EMPTY', this.sel.readyState, this.sel.currentTime)
       const playPromise = this.sel.play()
@@ -502,7 +533,7 @@ export default {
     scheduleHide() {
       if (this.isDropdownOpen) return
       this.clearHideTimer()
-      this.hideTimer = setTimeout(() => { this.showBar = false; this.showVolume = false }, this.isPlay ? 2000 : 5000)
+      this.hideTimer = setTimeout(() => { this.showBar = false; this.showVolume = false }, this.isPlay ? 10000 : 10000)
     },
     clearHideTimer() { if (this.hideTimer) { clearTimeout(this.hideTimer); this.hideTimer = null } },
     formatTime(s) {
@@ -528,8 +559,10 @@ export default {
       document.addEventListener('mouseup', () => { document.removeEventListener('mousemove', onMove); this.scheduleHide() }, { once: true })
       evt.preventDefault()
     },
-    handleCommand(s) { this.onInteract(); console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.currentSongSource = 'playlist'; this.currentSong = s },
+    handleCommand(s) { this.onInteract(); this.showPlayerPending = true; this.isLoading = true; console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.currentSongSource = 'playlist'; this.currentSong = s },
     playAllSong(msgName, mode = "order") {
+      this.showPlayerPending = true
+      this.isLoading = true
       if (mode === "random") this.currentSong = this.currentPlaylist[Math.ceil(Math.random() * (this.currentPlaylist.length - 1))]
       else this.currentSong = this.currentPlaylist[0]
       this.currentSongSource = 'playlist'
@@ -539,25 +572,107 @@ export default {
     addEventListeners() {
       this.sel.addEventListener('timeupdate', this._currentTime)
       this.sel.addEventListener('canplay', this._durationTime)
+      this.sel.addEventListener('pause', this._onPause)
     },
     removeEventListeners() {
       this.sel.removeEventListener('timeupdate', this._currentTime)
       this.sel.removeEventListener('canplay', this._durationTime)
+      this.sel.removeEventListener('pause', this._onPause)
     },
-    _currentTime() { if (this.sel) this.timeNow = (this.sel.currentTime).toFixed(4) },
+    _currentTime() {
+      if (this.sel) {
+        this.timeNow = (this.sel.currentTime).toFixed(4)
+        if (this.currentSong && this.currentSong.id) {
+          const now = Date.now()
+          if (now - this.lastSaveTime > 5000) {
+            this.lastSaveTime = now
+            this._saveState()
+          }
+        }
+      }
+    },
     _durationTime() {
       if (this.sel) {
+        this.isLoading = false
+        this.showPlayerPending = false
+        console.log('[PlayerLoading]', { action: 'ready', songId: this.currentSong.id, requestId: this.playRequestId })
         console.log('%c[AudioReady] %cduration=%s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', this.sel.duration)
         this.timeDuration = this.sel.duration
+        if (this.hasRestoreProgress && this.currentSong.id && this.currentSong.id === this.restoreSongId && this.resumeTime > 0) {
+          console.log('[PlayerState] seek_restore', { songId: this.currentSong.id, currentTime: this.resumeTime })
+          this.sel.currentTime = this.resumeTime
+          this.timeNow = this.resumeTime
+          this.hasRestoreProgress = false
+          this.resumeTime = 0
+          this.restoreSongId = null
+        }
       }
+    },
+    _onPause() {
+      if (this.currentSong.id) this._saveState()
+    },
+    _saveState() {
+      const s = this.currentSong
+      if (!s || !s.id) return
+      try {
+        localStorage.setItem('acmusic_player_state', JSON.stringify({
+          song: {
+            id: s.id,
+            name: s.name || '',
+            cover: (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || '',
+            artists: (s.ar || s.artists || []).map(a => a.name).join(' / ')
+          },
+          currentTime: (this.timeNow * 1) || this.sel.currentTime || 0,
+          duration: this.sel.duration || 0,
+          quality: this.currentQuality,
+          timestamp: Date.now()
+        }))
+      } catch (e) { /* ignore */ }
+    },
+    _restoreState() {
+      try {
+        const raw = localStorage.getItem('acmusic_player_state')
+        if (!raw) return
+        const data = JSON.parse(raw)
+        if (Date.now() - data.timestamp > 7 * 24 * 60 * 60 * 1000) {
+          localStorage.removeItem('acmusic_player_state')
+          return
+        }
+        if (data.song && data.song.id) {
+          this.isRestoring = true
+          this.currentSong = {
+            id: data.song.id,
+            name: data.song.name,
+            al: { picUrl: data.song.cover },
+            ar: [{ name: data.song.artists }]
+          }
+          this.currentSongSource = 'playlist'
+          this.$store.commit('TracksAbout/PUSH_PLAYLIST', this.currentSong)
+          this.showBar = true
+        }
+        if (data.currentTime > 0) {
+          this.resumeTime = data.currentTime
+          this.hasRestoreProgress = true
+          this.restoreSongId = data.song ? data.song.id : null
+          this.timeNow = data.currentTime
+          console.log('[PlayerState] restore', { songId: this.restoreSongId, resumeTime: this.resumeTime })
+        }
+        if (data.duration) this.timeDuration = data.duration
+        if (data.quality) this.currentQuality = data.quality
+      } catch (e) { /* ignore */ }
     },
   },
   beforeMount() { this.sel = new Audio() },
   mounted() {
+    this._restoreState()
     this.addEventListeners()
     this.pubId = pubsub.subscribe('playAll', this.playAllSong)
+    this._onBeforeUnload = () => { this._saveState() }
+    window.addEventListener('beforeunload', this._onBeforeUnload)
   },
   beforeDestroy() {
+    window.removeEventListener('beforeunload', this._onBeforeUnload)
+    this._saveState()
     this.removeEventListeners(); this.init(); this.clearHideTimer(); pubsub.unsubscribe(this.pubId)
   }
 }
@@ -669,6 +784,18 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       i { font-size: 17px; margin-left: 1px; }
       &:hover { transform: scale(1.1); box-shadow: 0 4px 18px rgba($accent, 0.45); }
       &:active { transform: scale(0.94); }
+    }
+    .player-loading-spinner {
+      display: block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255, 255, 255, .3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: player-loading-spin .8s linear infinite;
+    }
+    @keyframes player-loading-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
   }
   .barProgress {
