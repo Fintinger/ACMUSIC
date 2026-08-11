@@ -149,7 +149,6 @@ export default {
       playContextId: 0,
       playlistContextId: 0,
       playIntentId: 0,
-      playlistSyncLock: null,
       currentPlaySourceLocked: false,
     }
   },
@@ -201,20 +200,26 @@ export default {
           this.playRequestId++
           this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
         }
-        const inPlaylist = this.currentPlaylist.findIndex(item => item.id === val.id) !== -1
+        const inPlaylist = this.currentPlaylist.findIndex(item => item.id === val.id)
         if (this.currentSongSource !== 'playlist' && this.currentSongSource !== 'restore' && inPlaylist) {
           console.log('[SourceGuard]', { songId: val.id, source: this.currentSongSource, playlistContains: true, action: 'keep_source' })
-          this.playlistSyncLock = Date.now() + 3000
         }
         if (this.currentSongSource === 'playlist') {
-          this.playlistSyncLock = null
-          this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id)
+          this.curIndex = inPlaylist
           if (this.curIndex === -1) this.curIndex = 0
-          if (this.currentPlaylist.findIndex(item => item.id === val.id) === -1) {
+          if (inPlaylist === -1) {
             this.$store.commit("TracksAbout/PUSH_PLAYLIST", val)
           }
           this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
-        } else {
+        } else if (this.currentSongSource !== 'restore') {
+          if (inPlaylist !== -1) {
+            this.curIndex = inPlaylist
+            console.log('[PlaylistSync]', { action: 'exist', songId: val.id, index: inPlaylist, source: this.currentSongSource })
+          } else {
+            this.$store.commit("TracksAbout/PUSH_PLAYLIST", val)
+            this.curIndex = this.currentPlaylist.length - 1
+            console.log('[PlaylistSync]', { action: 'append', songId: val.id, index: this.curIndex, source: this.currentSongSource })
+          }
           this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
         }
         this.$emit('songChange', val)
