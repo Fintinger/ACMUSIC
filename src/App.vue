@@ -1,5 +1,6 @@
 <template>
   <div id="app">
+    <PageBack />
     <el-container>
       <el-header class="nav-bar" height="80px">
         <el-row>
@@ -66,13 +67,14 @@
 <script>
 import MusicPlayer from "@/components/musicPlayer/MusicPlayer";
 import DoSearch from "@/components/DoSearch";
+import PageBack from "@/components/common/PageBack";
 import Cookies from 'js-cookie'
 import {doLogout} from "@/utils/auth";
 import config from "./config"
 
 export default {
   name: 'App',
-  components: {MusicPlayer, DoSearch},
+  components: {MusicPlayer, DoSearch, PageBack},
   data() {
     return {
       song: {},

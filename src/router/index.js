@@ -35,12 +35,13 @@ VueRouter.prototype.push = function push(location) {
     return originalPush.call(this, location).catch(err => err)
 }
 
-export default new VueRouter({
+const router = new VueRouter({
     routes: [
-        {path: '/', component: HomePage},
+        {path: '/', component: HomePage, meta: {level: 1}},
         {
             path: '/explore',
             component: ExplorePage,
+            meta: {level: 1},
             children: [
                 {
                     name: "playlist", path: 'playlist', component: Playlist, children: [
@@ -56,11 +57,12 @@ export default new VueRouter({
                 {name: "videoList", path: 'videoList', component: VideoList},
             ]
         },
-        {path: '/user', component: UserPage},
+        {path: '/user', component: UserPage, meta: {level: 1}},
         {
             path: '/listDetail',
             name: 'listDetail',
             component: ListDetail,
+            meta: {level: 2},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -69,6 +71,7 @@ export default new VueRouter({
             path: '/albumDetail',
             name: 'albumDetail',
             component: AlbumDetail,
+            meta: {level: 2},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -77,6 +80,7 @@ export default new VueRouter({
             path: '/artistDetail',
             name: 'artistDetail',
             component: ArtistDetail,
+            meta: {level: 2},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -85,6 +89,7 @@ export default new VueRouter({
             path: '/artistAllSongs',
             name: 'artistAllSongs',
             component: ArtistAllSongs,
+            meta: {level: 2},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -93,6 +98,7 @@ export default new VueRouter({
             path: '/mv',
             name: 'mvPlay',
             component: mvPlay,
+            meta: {level: 2},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -101,6 +107,7 @@ export default new VueRouter({
             path: '/video',
             name: 'videoPlay',
             component: VideoPlay,
+            meta: {level: 2},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -109,6 +116,7 @@ export default new VueRouter({
             path: '/search/',
             name: 'search',
             component: SearchResult,
+            meta: {level: 1},
             children: [
                 {
                     name: "albumRes", path: "albumRes", component: AlbumRes, props($route) {
@@ -161,10 +169,17 @@ export default new VueRouter({
             },
         },
         {
-            path: '/user-detail', name: "userDetail", component: UserDetail, props($route) {
+            path: '/user-detail', name: "userDetail", component: UserDetail, meta: {level: 2}, props($route) {
                 return {uid: $route.query.uid}
             },
         },
-        {path: '/daily-songs', name: "dailySongs", component: DailySongs, props: true},
+        {path: '/daily-songs', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2}},
     ]
 })
+
+router.beforeEach((to, from, next) => {
+    to.meta.hasHistory = !!from.name
+    next()
+})
+
+export default router
