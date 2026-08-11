@@ -106,6 +106,7 @@ import { normalizeTrack } from "@/utils/normalize"
 import config from "@/config"
 import { buildBackground } from "@/utils/colorExtractor"
 import QualityMenu from "@/components/musicPlayer/QualityMenu"
+import { setAudioCache, getAudioCache, getAudioUrl } from "@/utils/audioCache"
 
 const FALLBACK_BG = '#1a1a2e'
 
@@ -144,6 +145,12 @@ export default {
       restoreSongId: null,
       lastSaveTime: 0,
       isRestoring: false,
+      bufferedTime: 0,
+      playContextId: 0,
+      playlistContextId: 0,
+      playIntentId: 0,
+      playlistSyncLock: null,
+      currentPlaySourceLocked: false,
     }
   },
   computed: {
@@ -170,15 +177,20 @@ export default {
   },
   watch: {
     song(val) {
+      console.trace('[CurrentSongSet] song_watch', val && val.id)
       console.log('[SongState]', { action: 'song_watch', currentSongId: this.currentSong.id || null, playlistFirstId: this.currentPlaylist[0] && this.currentPlaylist[0].id || null, requestId: this.playRequestId })
+      this.playIntentId++
+      this.playContextId++
       this.currentSongSource = 'unknown'
+      this.currentPlaySourceLocked = true
+      console.log('[SourceChange]', { to: 'unknown', songId: val && val.id, trigger: 'song_watch' })
       this.currentSong = normalizeTrack(val)
       this.updateMiniBackground()
     },
     currentSong(val) {
       if (val.id) {
-        console.log('%c▶ 歌曲切换 %c%s %c登录:%s', 'background:#2563eb;color:#fff;padding:2px 6px', '', val.id, '', this.isLogin)
-        console.log('[SongSource]', { action: 'switch', source: this.currentSongSource, songId: val.id })
+        console.log('[PlayIntent]', { songId: val.id, source: this.currentSongSource, playIntentId: this.playIntentId, playContextId: this.playContextId, requestId: this.playRequestId, action: 'start' })
+        console.log('[PlayContext]', { songId: val.id, source: this.currentSongSource, contextId: this.playContextId, playlistContextId: this.playlistContextId, requestId: this.playRequestId })
         normalizeTrack(val)
         this.updateMiniBackground()
         if (this.isRestoring) {
@@ -189,12 +201,20 @@ export default {
           this.playRequestId++
           this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
         }
+        const inPlaylist = this.currentPlaylist.findIndex(item => item.id === val.id) !== -1
+        if (this.currentSongSource !== 'playlist' && this.currentSongSource !== 'restore' && inPlaylist) {
+          console.log('[SourceGuard]', { songId: val.id, source: this.currentSongSource, playlistContains: true, action: 'keep_source' })
+          this.playlistSyncLock = Date.now() + 3000
+        }
         if (this.currentSongSource === 'playlist') {
+          this.playlistSyncLock = null
           this.curIndex = this.currentPlaylist.findIndex(item => item.id === this.currentSong.id)
           if (this.curIndex === -1) this.curIndex = 0
           if (this.currentPlaylist.findIndex(item => item.id === val.id) === -1) {
             this.$store.commit("TracksAbout/PUSH_PLAYLIST", val)
           }
+          this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
+        } else {
           this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
         }
         this.$emit('songChange', val)
@@ -214,17 +234,28 @@ export default {
           }
           console.log('%c[PlayReady] %creq=%s src=%s readyState=%s', 'background:#16a34a;color:#fff;padding:2px 6px', '', reqId, this.sel.src ? 'SET' : 'EMPTY', this.sel.readyState)
           this.isPending = false
+          console.trace('[PlaySongCall] promiseList')
           this.playSong()
         })
       }
     },
     curIndex(ind) {
       if (this.currentSongSource !== 'playlist') {
-        console.warn('[PlaylistSync]', { action: 'skip_non_playlist_song', source: this.currentSongSource, songId: this.currentSong.id, curIndex: ind })
+        console.log('[PlaylistGuard]', { action: 'skip_curIndex', source: this.currentSongSource, playlistSyncLock: this.playlistSyncLock, songId: this.currentSong.id, contextId: this.playContextId })
         return
       }
+      if (this.playContextId !== this.playlistContextId) {
+        console.warn('[PlaylistSync]', { action: 'skip_non_playlist_song', source: this.currentSongSource, songId: this.currentSong.id, curIndex: ind, playContextId: this.playContextId, playlistContextId: this.playlistContextId })
+        return
+      }
+      console.trace('[CurrentSongSet] curIndex_watch', this.currentPlaylist[ind] && this.currentPlaylist[ind].id)
       console.log('[SongState]', { action: 'curIndex_watch', currentSongId: this.currentSong.id, nextId: this.currentPlaylist[ind] && this.currentPlaylist[ind].id, requestId: this.playRequestId })
+      this.playIntentId++
+      this.playContextId++
       this.currentSongSource = 'playlist'
+      this.currentPlaySourceLocked = true
+      this.playlistContextId = this.playContextId
+      console.log('[SourceChange]', { to: 'playlist', songId: this.currentPlaylist[ind] && this.currentPlaylist[ind].id, trigger: 'curIndex' })
       this.currentSong = this.currentPlaylist[ind]
     },
     timeNow(n) {
@@ -242,7 +273,10 @@ export default {
   methods: {
     getArtistStr(s) {
       const ar = s.ar || s.artists
-      return ar && ar.length ? ar.map(a => a.name).join(' / ') : ''
+      if (!ar) return ''
+      if (typeof ar === 'string') return ar
+      if (Array.isArray(ar)) return ar.map(a => a.name || a).join(' / ')
+      return ''
     },
     updateMiniBackground() {
       const s = this.currentSong
@@ -265,7 +299,8 @@ export default {
     init() { this.promiseList = []; this.isPlay = false; this.timeDuration = 0; this.timeNow = 0 },
     pushPromise(promise) { this.promiseList.unshift(promise) },
     async checkSong(id, requestId) {
-      const pending = this.pendingUrlRequests.get(id)
+      const key = id + '_' + this.playIntentId
+      const pending = this.pendingUrlRequests.get(key)
       if (pending) {
         await pending
         return
@@ -275,11 +310,11 @@ export default {
         if (self.isLogin) self.checkSongLoggedIn(id, requestId).then(res => resolve(res))
         else self.checkSongDntLogin(id, requestId).then(res => resolve(res))
       })
-      this.pendingUrlRequests.set(id, promise)
+      this.pendingUrlRequests.set(key, promise)
       try {
         await promise
       } finally {
-        this.pendingUrlRequests.delete(id)
+        this.pendingUrlRequests.delete(key)
       }
     },
     checkSongDntLogin(id, requestId) {
@@ -373,6 +408,12 @@ export default {
     getSongUrl(id, requestId, br = 0) {
       if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
 
+      const cachedUrl = getAudioCache(id)
+      if (cachedUrl) {
+        if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
+        return Promise.resolve({ data: { data: [{ url: cachedUrl }] } })
+      }
+
       const preferred = config.player.level
       const levels = config.player.fallbackLevels
         ? config.player.qualityLevels.slice(config.player.qualityLevels.indexOf(preferred))
@@ -415,6 +456,7 @@ export default {
             return tryLevel(index + 1)
           }
           self.urlCache.set(ck, { url, level: lv, br: d && d.br, size: d && d.size, expire: Date.now() + CACHE_TTL })
+          setAudioCache(id, url)
           self.currentQuality = { requested: preferred, actual: lv }
           return res
         }).catch(err => {
@@ -470,7 +512,7 @@ export default {
       const isCurrentEmpty = JSON.stringify(this.currentSong) === '{}'
       const playlistFirst = this.currentPlaylist[0]
       console.log('[SongState]', { action: 'playSong', isCurrentEmpty, currentSongId: this.currentSong.id || null, playlistFirstId: playlistFirst && playlistFirst.id || null, requestId: this.playRequestId })
-      if (isCurrentEmpty && this.currentPlaylist.length) { this.currentSongSource = 'playlist'; this.currentSong = this.currentPlaylist[0] }
+      if (isCurrentEmpty && this.currentPlaylist.length) { console.trace('[CurrentSongSet] playSong_fallback'); this.currentSongSource = 'playlist'; this.currentSong = this.currentPlaylist[0] }
       if (!this.sel.src && this.currentSong.id) {
         this.isLoading = true
         this.playRequestId++
@@ -487,7 +529,7 @@ export default {
       }
     },
     pauseSong() { this.isPlay = false; this.sel.pause() },
-    togglePlay() { this.onInteract(); this.isPlay ? this.pauseSong() : this.playSong() },
+    togglePlay() { this.onInteract(); console.trace('[PlaySongCall] togglePlay'); this.isPlay ? this.pauseSong() : this.playSong() },
     preSong() { this.onInteract(); this.curIndex = this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1 },
     nextSong() {
       this.onInteract()
@@ -513,7 +555,7 @@ export default {
       if (this.currentSong.id) {
         this.pauseSong()
         this.sel.src = ''
-        this.pendingUrlRequests.delete(this.currentSong.id)
+        this.pendingUrlRequests.clear()
         for (const lv of config.player.qualityLevels) {
           this.urlCache.delete(this.currentSong.id + '_' + lv)
         }
@@ -559,12 +601,16 @@ export default {
       document.addEventListener('mouseup', () => { document.removeEventListener('mousemove', onMove); this.scheduleHide() }, { once: true })
       evt.preventDefault()
     },
-    handleCommand(s) { this.onInteract(); this.showPlayerPending = true; this.isLoading = true; console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.currentSongSource = 'playlist'; this.currentSong = s },
+    handleCommand(s) { this.onInteract(); this.showPlayerPending = true; this.isLoading = true; console.trace('[HandleCommandCall]'); console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.playIntentId++; this.playContextId++; this.currentSongSource = 'playlist'; this.currentPlaySourceLocked = true; this.playlistContextId = this.playContextId; console.log('[SourceChange]', { to: 'playlist', songId: s && s.id, trigger: 'handleCommand' }); console.trace('[CurrentSongSet] handleCommand', s && s.id); this.currentSong = s },
     playAllSong(msgName, mode = "order") {
       this.showPlayerPending = true
       this.isLoading = true
-      if (mode === "random") this.currentSong = this.currentPlaylist[Math.ceil(Math.random() * (this.currentPlaylist.length - 1))]
-      else this.currentSong = this.currentPlaylist[0]
+      this.playIntentId++
+      this.playContextId++
+      if (mode === "random") { console.trace('[CurrentSongSet] playAllSong_random'); this.currentSong = this.currentPlaylist[Math.ceil(Math.random() * (this.currentPlaylist.length - 1))] }
+      else { console.trace('[CurrentSongSet] playAllSong'); this.currentSong = this.currentPlaylist[0] }
+      this.currentPlaySourceLocked = true
+      this.playlistContextId = this.playContextId
       this.currentSongSource = 'playlist'
       console.log('[SongState]', { action: 'playAllSong', currentSongId: this.currentSong.id, mode, requestId: this.playRequestId })
     },
@@ -573,11 +619,13 @@ export default {
       this.sel.addEventListener('timeupdate', this._currentTime)
       this.sel.addEventListener('canplay', this._durationTime)
       this.sel.addEventListener('pause', this._onPause)
+      this.sel.addEventListener('progress', this._onProgress)
     },
     removeEventListeners() {
       this.sel.removeEventListener('timeupdate', this._currentTime)
       this.sel.removeEventListener('canplay', this._durationTime)
       this.sel.removeEventListener('pause', this._onPause)
+      this.sel.removeEventListener('progress', this._onProgress)
     },
     _currentTime() {
       if (this.sel) {
@@ -598,7 +646,7 @@ export default {
         console.log('[PlayerLoading]', { action: 'ready', songId: this.currentSong.id, requestId: this.playRequestId })
         console.log('%c[AudioReady] %cduration=%s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', this.sel.duration)
         this.timeDuration = this.sel.duration
-        if (this.hasRestoreProgress && this.currentSong.id && this.currentSong.id === this.restoreSongId && this.resumeTime > 0) {
+        if (this.hasRestoreProgress && this.currentSongSource === 'restore' && this.currentSong.id && this.currentSong.id === this.restoreSongId && this.resumeTime > 0) {
           console.log('[PlayerState] seek_restore', { songId: this.currentSong.id, currentTime: this.resumeTime })
           this.sel.currentTime = this.resumeTime
           this.timeNow = this.resumeTime
@@ -606,15 +654,33 @@ export default {
           this.resumeTime = 0
           this.restoreSongId = null
         }
+        this._preloadNext()
       }
     },
     _onPause() {
       if (this.currentSong.id) this._saveState()
     },
+    _onProgress() {
+      try {
+        const b = this.sel.buffered
+        if (b && b.length) {
+          this.bufferedTime = b.end(b.length - 1)
+        }
+      } catch (e) { /* ignore */ }
+    },
     _saveState() {
       const s = this.currentSong
       if (!s || !s.id) return
       try {
+        const playlist = this.currentPlaylist.slice(0, 200).map(t => ({
+          id: t.id,
+          name: t.name || '',
+          artists: (t.ar || t.artists || []).map(a => a.name).join(' / '),
+          album: (t.al && t.al.name) || (t.album && t.album.name) || '',
+          picUrl: (t.al && t.al.picUrl) || (t.album && t.album.picUrl) || '',
+          duration: t.dt || t.duration || 0,
+          source: t.source || ''
+        }))
         localStorage.setItem('acmusic_player_state', JSON.stringify({
           song: {
             id: s.id,
@@ -622,12 +688,30 @@ export default {
             cover: (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || '',
             artists: (s.ar || s.artists || []).map(a => a.name).join(' / ')
           },
+          playlist,
+          currentIndex: this.curIndex,
           currentTime: (this.timeNow * 1) || this.sel.currentTime || 0,
           duration: this.sel.duration || 0,
           quality: this.currentQuality,
+          source: this.currentSongSource,
           timestamp: Date.now()
         }))
+        console.log('[PlaylistPersist]', { action: 'save', count: playlist.length })
       } catch (e) { /* ignore */ }
+    },
+    _preloadNext() {
+      if (this.currentSongSource !== 'playlist') return
+      const nextIdx = this.curIndex + 1
+      if (nextIdx >= this.currentPlaylist.length) return
+      const nextSong = this.currentPlaylist[nextIdx]
+      if (!nextSong || !nextSong.id) return
+      console.log('[AudioPreload]', { action: 'start', songId: nextSong.id })
+      getAudioUrl(nextSong.id, () => {
+        return this.getSongUrl(nextSong.id, this.playRequestId + 1).then(res => {
+          const url = res && res.data && res.data.data && res.data.data[0] && res.data.data[0].url
+          return url || null
+        })
+      }).catch(() => { /* silent */ })
     },
     _restoreState() {
       try {
@@ -638,16 +722,29 @@ export default {
           localStorage.removeItem('acmusic_player_state')
           return
         }
+        if (data.playlist && data.playlist.length) {
+          const deduped = []
+          const seen = new Set()
+          for (const t of data.playlist) {
+            if (!seen.has(t.id)) { seen.add(t.id); deduped.push(t) }
+          }
+          this.$store.commit('TracksAbout/REPLACE_PLAYLIST', deduped)
+          console.log('[PlaylistPersist]', { action: 'restore', count: deduped.length })
+        }
         if (data.song && data.song.id) {
           this.isRestoring = true
+          this.playContextId++
+          this.currentSongSource = 'restore'
+          this.currentPlaySourceLocked = true
+          if (data.currentIndex !== undefined) this.curIndex = data.currentIndex
+          console.log('[PlaylistRestore]', { currentSongId: data.song.id, currentIndex: data.currentIndex })
+          console.trace('[CurrentSongSet] restore', data.song.id)
           this.currentSong = {
             id: data.song.id,
             name: data.song.name,
             al: { picUrl: data.song.cover },
             ar: [{ name: data.song.artists }]
           }
-          this.currentSongSource = 'playlist'
-          this.$store.commit('TracksAbout/PUSH_PLAYLIST', this.currentSong)
           this.showBar = true
         }
         if (data.currentTime > 0) {

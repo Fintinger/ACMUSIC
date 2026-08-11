@@ -36,7 +36,9 @@ export default {
                     }
                 })
             } else {//添加一首
-                state.currentPlaylist.push(val)
+                if (state.currentPlaylist.findIndex(v => v.id === val.id) === -1) {
+                    state.currentPlaylist.push(val)
+                }
             }
         },
         //替换播放列表
