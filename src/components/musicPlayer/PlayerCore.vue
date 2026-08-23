@@ -90,7 +90,11 @@
                   <span class="plSongArtist">{{ getArtistStr(s) }}</span>
                 </el-dropdown-item>
               </div>
-              <div v-if="!currentPlaylist.length" class="plEmpty">列表为空</div>
+              <div v-if="!currentPlaylist.length" class="plEmpty">
+                <div class="plEmptyIcon">♪</div>
+                <p>播放列表为空</p>
+                <p class="plEmptyHint">播放歌曲后会自动添加</p>
+              </div>
             </el-dropdown-menu>
           </el-dropdown>
         </div>
@@ -262,6 +266,7 @@ export default {
       this.playlistContextId = this.playContextId
       console.log('[SourceChange]', { to: 'playlist', songId: this.currentPlaylist[ind] && this.currentPlaylist[ind].id, trigger: 'curIndex' })
       this.currentSong = this.currentPlaylist[ind]
+      if (this.isDropdownOpen) this._scrollActiveSong('change')
     },
     timeNow(n) {
       this.isExpand && this.$emit('tUpdate', n)
@@ -573,9 +578,23 @@ export default {
       this.isDropdownOpen = visible
       if (visible) {
         this.clearHideTimer()
+        this.$nextTick(() => this._scrollActiveSong('open'))
       } else {
         this.scheduleHide()
       }
+    },
+    _scrollActiveSong(reason) {
+      setTimeout(() => {
+        const container = document.querySelector('.plItems')
+        const active = container && container.querySelector('.el-dropdown-menu__item.active')
+        if (!active) {
+          console.log('[PlaylistScroll]', { action: 'missing', songId: this.currentSong.id })
+          return
+        }
+        const idx = this.currentPlaylist.findIndex(s => s.id === this.currentSong.id)
+        console.log('[PlaylistScroll]', { action: reason || 'change', songId: this.currentSong.id, index: idx })
+        container.scrollTop = active.offsetTop - container.clientHeight / 2 + active.clientHeight / 2
+      }, 100)
     },
     scheduleHide() {
       if (this.isDropdownOpen) return
@@ -619,7 +638,19 @@ export default {
       this.currentSongSource = 'playlist'
       console.log('[SongState]', { action: 'playAllSong', currentSongId: this.currentSong.id, mode, requestId: this.playRequestId })
     },
-    clearPlaylist() { this.pauseSong(); this.$bus.$emit("clearPlaylist") },
+    clearPlaylist() {
+      this.$confirm('确定清空全部播放歌曲？', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        const prevLen = this.currentPlaylist.length
+        console.log('[PlaylistEmpty]', { action: 'clear', previousLength: prevLen })
+        this.pauseSong()
+        this.$bus.$emit("clearPlaylist")
+        this.$message.success('播放列表已清空')
+      }).catch(() => {})
+    },
     addEventListeners() {
       this.sel.addEventListener('timeupdate', this._currentTime)
       this.sel.addEventListener('canplay', this._durationTime)
@@ -1030,7 +1061,11 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   }
 
   .plEmpty {
-    padding: 24px 18px; text-align: center; color: rgba(255,255,255,0.2); font-size: 13px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 40px 18px; text-align: center; color: rgba(255,255,255,0.2); font-size: 13px;
+    .plEmptyIcon { font-size: 32px; margin-bottom: 12px; opacity: .5; }
+    p { margin: 0; line-height: 1.6; }
+    .plEmptyHint { font-size: 11px; color: rgba(255,255,255,0.1); margin-top: 4px; }
   }
 }
 

@@ -122,6 +122,9 @@ export default {
     replyComment(cm) {
       this.replyTarget = cm;
     },
+    uClk(uid) {
+      this.$bus.$emit('uClk', uid)
+    },
     deleteComment(cm) {
       this.$confirm('此操作将永久删除该评论, 是否继续?', '提示', {
         confirmButtonText: '确定',

@@ -48,12 +48,12 @@ export default {
   overflow: hidden;
   white-space: nowrap;
   width: 100%;
+  max-width: 100%;
 }
 
 .marquee-content {
   display: inline-block;
   white-space: nowrap;
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }

@@ -24,13 +24,14 @@
           </div>
           <div class="progressSection" ref="progressPanel">
             <div class="progressTrack" @click="progressClk">
+              <div class="progressBuffer" :style="{ width: bufferPercent + '%' }"></div>
               <div class="progressFill" :style="{ width: progressPercent + '%' }"><div class="progressThumb" @mousedown.stop="dragProgress"></div></div>
             </div>
             <div class="progressTimes"><span>{{ formatTime(timeNow) }}</span><span>{{ formatTime(duration) }}</span></div>
           </div>
           <div class="controlsRow">
             <BaseIcon name="prev" :size="20" @click="prevTrack"/>
-            <div class="playBtn" @click="togglePlay"><BaseIcon v-if="!isPlaying" name="play"/><BaseIcon v-else name="pause"/></div>
+            <div class="playBtn" @click="togglePlay"><i v-if="isLoading" class="player-loading-spinner"></i><BaseIcon v-else-if="!isPlaying" name="play"/><BaseIcon v-else name="pause"/></div>
             <BaseIcon name="next" :size="20" @click="nextTrack"/>
           </div>
           <div class="actionsRow">
@@ -130,12 +131,16 @@ export default {
     },
     duration() { return this.$refs.pgPanel ? this.$refs.pgPanel.timeDuration * 1 : 0 },
     isPlaying() { return this.$refs.pgPanel ? this.$refs.pgPanel.isPlay : false },
+    isLoading() { return this.$refs.pgPanel ? this.$refs.pgPanel.isLoading : false },
+    bufferedTime() { return this.$refs.pgPanel ? this.$refs.pgPanel.bufferedTime : 0 },
     progressPercent() { return this.duration ? (this.timeNow / this.duration) * 100 : 0 },
+    bufferPercent() { return this.duration ? (this.bufferedTime / this.duration) * 100 : 0 },
   },
   watch: {
     isExpand(val) { val ? this.expanded() : this.minified() },
     timeNow(val) { this.needUpdate(val) },
     coverUrl(url) { if (url) this.$nextTick(() => this.updateBackground()) },
+    '$route'() { if (this.isExpand) this.isExpand = false },
   },
   methods: {
     showSongDetail(data) {
@@ -451,7 +456,8 @@ export default {
 
   .progressSection {
     width: 100%; max-width: 300px;
-    .progressTrack { width: 100%; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; cursor: pointer; &:hover { height: 6px; }
+    .progressTrack { width: 100%; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; cursor: pointer; position: relative; &:hover { height: 6px; }
+      .progressBuffer { position: absolute; inset: 0; height: 100%; background: rgba(255,255,255,0.1); border-radius: inherit; pointer-events: none; }
       .progressFill { height: 100%; background: #8685EF; border-radius: inherit; position: relative; transition: width 0.1s linear; box-shadow: 0 0 8px rgba(134,133,239,0.2);
         .progressThumb { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; background: #fff; border-radius: 50%; box-shadow: 0 1px 6px rgba(0,0,0,0.4); opacity: 0; transition: opacity 180ms ease; }
       }
@@ -463,7 +469,7 @@ export default {
   .controlsRow {
     display: flex; align-items: center; justify-content: center; gap: 28px; color: rgba(255,255,255,0.85);
     > i { font-size: 24px; cursor: pointer; opacity: 0.55; transition: all 180ms ease; &:hover { opacity: 0.9; transform: scale(1.12); } }
-    .playBtn { width: 32px; height: 32px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 20px; margin-left: 1px; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
+    .playBtn { width: 32px; height: 32px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 20px; margin-left: 1px; } .player-loading-spinner { display: block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
   }
 
   .actionsRow {
@@ -538,6 +544,11 @@ export default {
 
 .playerWrapper.expandWindow.hideFloatingBtn .floating-comment-btn {
   display: none !important;
+}
+
+@keyframes player-loading-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @media (max-width: 1280px) {
