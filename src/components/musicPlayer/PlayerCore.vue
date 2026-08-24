@@ -156,6 +156,7 @@ export default {
       currentPlaySourceLocked: false,
       audioRetryCount: 0,
       audioLastSrc: '',
+      audioUseProxy: false,
     }
   },
   computed: {
@@ -344,6 +345,7 @@ export default {
             self.sel.src = url
             self.audioLastSrc = url
             self.audioRetryCount = 0
+            self.audioUseProxy = false
             self.sel.load()
             resolve()
             return
@@ -397,6 +399,7 @@ export default {
               self.sel.src = newUrl
               self.audioLastSrc = newUrl
               self.audioRetryCount = 0
+              self.audioUseProxy = false
               self.sel.load()
               resolve()
             }).catch(err => {
@@ -716,25 +719,37 @@ export default {
       } catch (e) { /* ignore */ }
     },
     _onAudioError() {
-      if (this.audioRetryCount >= 3) {
+      const curSrc = this.sel.src || this.audioLastSrc
+      if (!curSrc) return
+      // 直连模式: 重试3次后降级到代理
+      if (!this.audioUseProxy && this.audioRetryCount >= 3) {
+        this.audioUseProxy = true
         this.audioRetryCount = 0
+        const proxySrc = this._toProxyUrl(curSrc)
+        console.log('[AudioRetry]', { action: 'downgrade_to_proxy', songId: this.currentSong.id, src: proxySrc.slice(0, 60) })
+        this.sel.src = proxySrc
+        this.audioLastSrc = proxySrc
+        setTimeout(() => {
+          try { this.sel.load(); if (this.isPlay) { const p = this.sel.play(); if (p && p.catch) p.catch(() => {}) } } catch (e) { /* ignore */ }
+        }, 400)
+        return
+      }
+      // 代理模式: 重试3次后放弃
+      if (this.audioUseProxy && this.audioRetryCount >= 3) {
+        this.audioRetryCount = 0
+        this.audioUseProxy = false
         console.log('[AudioRetry]', { action: 'giveup', songId: this.currentSong.id })
         return
       }
       this.audioRetryCount++
-      const curSrc = this.sel.src || this.audioLastSrc
-      if (!curSrc) return
-      // 同一 URL 原地重试（签名 vuutv 绑定具体 CDN 域名，切域名会 400）
-      console.log('[AudioRetry]', { action: 'retry', attempt: this.audioRetryCount, songId: this.currentSong.id })
+      console.log('[AudioRetry]', { action: 'retry', attempt: this.audioRetryCount, mode: this.audioUseProxy ? 'proxy' : 'direct', songId: this.currentSong.id })
       setTimeout(() => {
-        try {
-          this.sel.load()
-          if (this.isPlay) {
-            const p = this.sel.play()
-            if (p && p.catch) p.catch(() => {})
-          }
-        } catch (e) { /* ignore */ }
+        try { this.sel.load(); if (this.isPlay) { const p = this.sel.play(); if (p && p.catch) p.catch(() => {}) } } catch (e) { /* ignore */ }
       }, 400)
+    },
+    _toProxyUrl(src) {
+      if (src && src.indexOf('/api/audio-proxy') !== -1) return src
+      return location.origin + '/api/audio-proxy?url=' + encodeURIComponent(src)
     },
     _saveState() {
       const s = this.currentSong
