@@ -15,8 +15,7 @@
       </el-row>
     </el-form-item>
     <el-form-item>
-      <el-button type="primary" @click="submitForm('ruleForm')">提交</el-button>
-      <el-button @click="resetForm('ruleForm')">重置</el-button>
+      <el-button type="primary" class="submit-btn" @click="submitForm('ruleForm')">登录</el-button>
     </el-form-item>
   </el-form>
 </template>
@@ -147,8 +146,35 @@ export default {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "src/assets/scss/base/variables";
+
 .sendCode {
   width: 100%;
+}
+
+.el-form-item {
+  margin-bottom: 24px;
+}
+
+::v-deep .el-input__inner {
+  border-radius: 12px;
+  height: 44px;
+  line-height: 44px;
+}
+
+::v-deep .el-input__inner:focus {
+  border-color: $color-main;
+}
+
+.submit-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 22px;
+  font-size: 15px;
+  background: $color-main;
+  border-color: $color-main;
+  transition: all .2s;
+  &:hover { background: $color-main-1; border-color: $color-main-1; }
 }
 </style>
