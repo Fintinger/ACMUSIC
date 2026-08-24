@@ -21,3 +21,9 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Browser debug profiles
+edge-profile/
+chrome-diag/
+edge-diag*/
+

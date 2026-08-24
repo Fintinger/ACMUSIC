@@ -145,9 +145,34 @@ export default {
 .recommendPlaylist {
   .MvCategories {
     .el-row {
-      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      margin-bottom: 14px;
+      overflow: hidden;
+
+      h2 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #555;
+        margin: 0;
+        min-width: 56px;
+        padding-top: 6px;
+        flex-shrink: 0;
+      }
 
       .el-col {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        gap: 8px;
+        padding-bottom: 6px;
+        flex-shrink: 0;
+        &::-webkit-scrollbar { height: 4px; }
+        &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
+        &::-webkit-scrollbar-track { background: transparent; }
+
         .itemBtn.selected {
           background: #454545;
         }

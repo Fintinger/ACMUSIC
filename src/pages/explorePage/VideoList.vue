@@ -106,5 +106,18 @@ export default {
 </script>
 
 <style scoped>
-
+.video-list .video-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-left: 0;
+  margin-right: 0;
+  &::-webkit-scrollbar { height: 4px; }
+  &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+}
 </style>

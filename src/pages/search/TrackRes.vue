@@ -32,7 +32,7 @@ export default {
   computed: {},
   methods: {
     mvClk(id) { this.$bus.$emit('mvClk', id) },
-    songClk(song) { this.$bus.$emit('songClk', song) },
+    songClk(song) { console.log('[SearchResultClick]', song && song.id, song && song.name); this.$bus.$emit('songClk', song) },
   },
   activated() { this.searchLoading = true; this.initLoad() }
 }

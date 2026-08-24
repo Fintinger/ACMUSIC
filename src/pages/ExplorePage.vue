@@ -32,7 +32,8 @@ export default {
   data() {
     return {
       sort: [
-        {title: "歌单", linkName: 'allList'},
+        {title: "全部歌单", linkName: 'allList'},
+        {title: "精品歌单", linkName: 'boutique'},
         {title: "MV", linkName: 'mvList'},
         {title: "视频", linkName: 'videoList'},
         {title: "榜单", linkName: 'leaderBoard'},

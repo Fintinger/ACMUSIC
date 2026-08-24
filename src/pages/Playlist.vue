@@ -1,12 +1,6 @@
 <template>
   <div class="playlist">
-    <el-row>
-      <el-col :span="4"><router-link :to="{name:'allList'}">全部歌单</router-link></el-col>
-      <el-col :span="4"><router-link :to="{name:'boutique'}">精品歌单</router-link></el-col>
-    </el-row>
-    <el-row>
-      <router-view :key="$route.fullPath"/>
-    </el-row>
+    <router-view :key="$route.fullPath"/>
   </div>
 </template>
 

@@ -19,30 +19,49 @@
   .explore-tabs {
     display: flex; gap: 0; margin-bottom: 32px;
     border-bottom: 1px solid rgba(0,0,0,.06);
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
     button {
       padding: 12px 24px; border: none; background: transparent;
       color: $font-black-2; font-size: 15px; font-weight: 500; cursor: pointer;
       border-bottom: 2px solid transparent; margin-bottom: -1px;
+      white-space: nowrap;
       transition: color .2s, border-color .2s;
       &:hover { color: $font-black-1; }
       &.active { color: $color-main; font-weight: 600; border-bottom-color: $color-main; }
     }
   }
 
-  /* ---------- 二级导航 ---------- */
-  .playlist > .el-row:first-child {
-    display: flex; gap: 4px; margin-bottom: 24px;
-    border-bottom: none;
+  /* ---------- 二级分类横向滚动行（BoutiqueList/VideoList） ---------- */
+  .boutiquePlaylist .listTags,
+  .video-list .video-tags {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,.12) transparent;
+    padding-bottom: 6px;
+    gap: 8px;
+    &::-webkit-scrollbar { height: 4px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
+  }
+  .boutiquePlaylist .listTags li { display: inline-block; margin: 0; }
+
+  /* MV 分类: 每行标题+横向滚动标签 */
+  .recommendPlaylist .MvCategories .el-row {
+    display: flex; align-items: center; margin-bottom: 14px;
+    h2 { font-size: 14px; font-weight: 600; color: $font-black-1; margin: 0; min-width: 56px; flex-shrink: 0; }
+    > .el-col:first-child { flex: 0 0 auto; }
     .el-col {
-      flex: none; max-width: none;
-      a {
-        display: inline-block; padding: 6px 16px;
-        font-size: 13px; font-weight: 400; color: lighten($font-black-2, 15%);
-        border-radius: 14px;
-        text-decoration: none; transition: background .2s, color .2s;
-        &:hover { color: $font-black-2; }
-        &.router-link-active { color: $color-main; font-weight: 500; background: rgba($color-main,.06); }
-      }
+      display: flex; flex-wrap: nowrap; overflow-x: auto;
+      -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+      gap: 8px; padding-bottom: 6px;
+      &::-webkit-scrollbar { height: 4px; }
+      &::-webkit-scrollbar-track { background: transparent; }
+      &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
     }
   }
 
@@ -56,7 +75,6 @@
   }
 
   /* ---------- pill tag buttons (shared) ---------- */
-  .all-list .cat-item .el-button,
   .boutiquePlaylist .playlist-tag-btn,
   .recommendPlaylist .MvCategories .itemBtn,
   .video-list .video-tag-btn {
@@ -68,11 +86,6 @@
 
   /* ---------- AllList 全部歌单 ---------- */
   .all-list {
-    .cat-list .cat {
-      display: flex; align-items: flex-start; margin-bottom: 14px;
-      .cat-name { font-size: 14px; font-weight: 600; color: $font-black-1; min-width: 56px; padding-top: 6px; }
-      .cat-item { display: flex; flex-wrap: wrap; gap: 8px; }
-    }
     .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
     .load-more { text-align: center; padding: 28px 0; }
   }
@@ -190,9 +203,7 @@
     .video-list .video-result .mvList.gridLayout,
     .topList .gridLayout { grid-template-columns: repeat(2, 1fr); gap: 14px; }
 
-    .all-list .cat-list .cat { flex-direction: column; gap: 6px; }
     .recommendPlaylist .MvCategories .el-row { flex-direction: column; align-items: flex-start; gap: 6px; }
-    .playlist > .el-row:first-child .el-col a { padding: 8px 14px; font-size: 14px; }
   }
 
   @media (max-width: 480px) {

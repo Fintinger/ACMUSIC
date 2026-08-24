@@ -88,10 +88,21 @@ export default {
   ul.listTags {
     text-align: left;
     padding-top: 20px;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    gap: 8px;
+    padding-bottom: 6px;
+    &::-webkit-scrollbar { height: 4px; }
+    &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
+    &::-webkit-scrollbar-track { background: transparent; }
 
     li {
       display: inline-block;
-      margin: 10px 10px;
+      margin: 0;
+      flex-shrink: 0;
     }
   }
 
