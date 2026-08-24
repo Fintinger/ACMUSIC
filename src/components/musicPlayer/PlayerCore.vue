@@ -154,6 +154,8 @@ export default {
       playlistContextId: 0,
       playIntentId: 0,
       currentPlaySourceLocked: false,
+      audioRetryCount: 0,
+      audioLastSrc: '',
     }
   },
   computed: {
@@ -340,6 +342,8 @@ export default {
           const url = data && data[0] && data[0].url
           if (url) {
             self.sel.src = url
+            self.audioLastSrc = url
+            self.audioRetryCount = 0
             self.sel.load()
             resolve()
             return
@@ -391,6 +395,8 @@ export default {
               }
               console.log('%c✅ 播放就绪 %cid=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id)
               self.sel.src = newUrl
+              self.audioLastSrc = newUrl
+              self.audioRetryCount = 0
               self.sel.load()
               resolve()
             }).catch(err => {
@@ -516,6 +522,8 @@ export default {
     initAudioByOuterUrl(id, requestId) {
       if (requestId !== this.playRequestId) return
       this.sel.src = location.origin + "/api/song/media/outer/url?id=" + id
+      this.audioLastSrc = this.sel.src
+      this.audioRetryCount = 0
       this.sel.load()
     },
     playSong() {
@@ -656,12 +664,14 @@ export default {
       this.sel.addEventListener('canplay', this._durationTime)
       this.sel.addEventListener('pause', this._onPause)
       this.sel.addEventListener('progress', this._onProgress)
+      this.sel.addEventListener('error', this._onAudioError)
     },
     removeEventListeners() {
       this.sel.removeEventListener('timeupdate', this._currentTime)
       this.sel.removeEventListener('canplay', this._durationTime)
       this.sel.removeEventListener('pause', this._onPause)
       this.sel.removeEventListener('progress', this._onProgress)
+      this.sel.removeEventListener('error', this._onAudioError)
     },
     _currentTime() {
       if (this.sel) {
@@ -677,6 +687,7 @@ export default {
     },
     _durationTime() {
       if (this.sel) {
+        this.audioRetryCount = 0
         this.isLoading = false
         this.showPlayerPending = false
         console.log('[PlayerLoading]', { action: 'ready', songId: this.currentSong.id, requestId: this.playRequestId })
@@ -703,6 +714,32 @@ export default {
           this.bufferedTime = b.end(b.length - 1)
         }
       } catch (e) { /* ignore */ }
+    },
+    _onAudioError() {
+      if (this.audioRetryCount >= 3) {
+        this.audioRetryCount = 0
+        console.log('[AudioRetry]', { action: 'giveup', songId: this.currentSong.id })
+        return
+      }
+      this.audioRetryCount++
+      const curSrc = this.sel.src || this.audioLastSrc
+      if (!curSrc) return
+      // 切换网易云 CDN 域名重试: m7/m8/m701/m801/m704
+      const domainPool = ['m7', 'm8', 'm701', 'm801', 'm704']
+      const matched = curSrc.match(/(https?:\/\/)m\d+\.music\.126\.net/)
+      if (matched) {
+        const idx = domainPool.indexOf(matched[2])
+        const nextDomain = domainPool[(idx + 1) % domainPool.length]
+        const newSrc = curSrc.replace(matched[0], matched[1] + nextDomain + '.music.126.net')
+        console.log('[AudioRetry]', { action: 'retry', attempt: this.audioRetryCount, from: matched[0], to: newSrc.slice(0, 60) })
+        this.sel.src = newSrc
+        this.audioLastSrc = newSrc
+        setTimeout(() => { this.sel.load(); if (this.isPlay) this.sel.play() }, 300)
+      } else {
+        // 非网易云 CDN，简单重载
+        console.log('[AudioRetry]', { action: 'reload', attempt: this.audioRetryCount })
+        setTimeout(() => { this.sel.load(); if (this.isPlay) this.sel.play() }, 300)
+      }
     },
     _saveState() {
       const s = this.currentSong
