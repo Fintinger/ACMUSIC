@@ -724,22 +724,17 @@ export default {
       this.audioRetryCount++
       const curSrc = this.sel.src || this.audioLastSrc
       if (!curSrc) return
-      // 切换网易云 CDN 域名重试: m7/m8/m701/m801/m704
-      const domainPool = ['m7', 'm8', 'm701', 'm801', 'm704']
-      const matched = curSrc.match(/(https?:\/\/)m\d+\.music\.126\.net/)
-      if (matched) {
-        const idx = domainPool.indexOf(matched[2])
-        const nextDomain = domainPool[(idx + 1) % domainPool.length]
-        const newSrc = curSrc.replace(matched[0], matched[1] + nextDomain + '.music.126.net')
-        console.log('[AudioRetry]', { action: 'retry', attempt: this.audioRetryCount, from: matched[0], to: newSrc.slice(0, 60) })
-        this.sel.src = newSrc
-        this.audioLastSrc = newSrc
-        setTimeout(() => { this.sel.load(); if (this.isPlay) this.sel.play() }, 300)
-      } else {
-        // 非网易云 CDN，简单重载
-        console.log('[AudioRetry]', { action: 'reload', attempt: this.audioRetryCount })
-        setTimeout(() => { this.sel.load(); if (this.isPlay) this.sel.play() }, 300)
-      }
+      // 同一 URL 原地重试（签名 vuutv 绑定具体 CDN 域名，切域名会 400）
+      console.log('[AudioRetry]', { action: 'retry', attempt: this.audioRetryCount, songId: this.currentSong.id })
+      setTimeout(() => {
+        try {
+          this.sel.load()
+          if (this.isPlay) {
+            const p = this.sel.play()
+            if (p && p.catch) p.catch(() => {})
+          }
+        } catch (e) { /* ignore */ }
+      }, 400)
     },
     _saveState() {
       const s = this.currentSong
