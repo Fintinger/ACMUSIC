@@ -85,7 +85,18 @@ new Vue({
                     })
             } else {
                 // 未登录 -> 游客登录获取匿名 cookie
-                anonymousLogin().catch(() => {})
+                anonymousLogin()
+                    .then(res => {
+                        // 游客 cookie 在响应体里, 写入浏览器供受限接口(如 /video/group)使用
+                        const cookie = res.data && (res.data.cookie || res.data.data)
+                        const ck = typeof cookie === 'string'
+                            ? cookie
+                            : (cookie ? cookie.cookie : null)
+                        if (typeof ck === 'string') {
+                            setLogin(ck, {})
+                        }
+                    })
+                    .catch(() => {})
             }
         }
     }

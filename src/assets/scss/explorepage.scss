@@ -33,38 +33,6 @@
     }
   }
 
-  /* ---------- 二级分类横向滚动行（BoutiqueList/VideoList） ---------- */
-  .boutiquePlaylist .listTags,
-  .video-list .video-tags {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0,0,0,.12) transparent;
-    padding-bottom: 6px;
-    gap: 8px;
-    &::-webkit-scrollbar { height: 4px; }
-    &::-webkit-scrollbar-track { background: transparent; }
-    &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
-  }
-  .boutiquePlaylist .listTags li { display: inline-block; margin: 0; }
-
-  /* MV 分类: 每行标题+横向滚动标签 */
-  .recommendPlaylist .MvCategories .el-row {
-    display: flex; align-items: center; margin-bottom: 14px;
-    h2 { font-size: 14px; font-weight: 600; color: $font-black-1; margin: 0; min-width: 56px; flex-shrink: 0; }
-    > .el-col:first-child { flex: 0 0 auto; }
-    .el-col {
-      display: flex; flex-wrap: nowrap; overflow-x: auto;
-      -webkit-overflow-scrolling: touch; scrollbar-width: thin;
-      gap: 8px; padding-bottom: 6px;
-      &::-webkit-scrollbar { height: 4px; }
-      &::-webkit-scrollbar-track { background: transparent; }
-      &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
-    }
-  }
-
   /* ---------- fix grid li padding from reset.scss ---------- */
   .gridLayout > li,
   .mvList.gridLayout > li {
@@ -76,7 +44,6 @@
 
   /* ---------- pill tag buttons (shared) ---------- */
   .boutiquePlaylist .playlist-tag-btn,
-  .recommendPlaylist .MvCategories .itemBtn,
   .video-list .video-tag-btn {
     padding: 6px 16px; border-radius: 20px; font-size: 13px;
     background: #f5f5f7; border: 1px solid transparent; color: $font-black-2;
@@ -92,21 +59,12 @@
 
   /* ---------- BoutiqueList 精品歌单 ---------- */
   .boutiquePlaylist {
-    .listTags {
-      display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 20px; margin: 0; list-style: none;
-      li { display: inline-block; }
-    }
     .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
     .playlist-load-more { text-align: center; padding: 28px 0; }
   }
 
   /* ---------- MvList MV ---------- */
   .recommendPlaylist {
-    .MvCategories .el-row {
-      display: flex; align-items: center; margin-bottom: 14px;
-      h2 { font-size: 14px; font-weight: 600; color: $font-black-1; margin: 0; min-width: 56px; }
-      .el-col { display: flex; flex-wrap: wrap; gap: 8px; }
-    }
     .mvList.gridLayout {
       grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       gap: 24px;
@@ -116,7 +74,6 @@
 
   /* ---------- VideoList 视频 ---------- */
   .video-list {
-    .video-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
     .video-result .mvList.gridLayout { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 24px; }
   }
 
@@ -202,8 +159,6 @@
     .recommendPlaylist .mvList.gridLayout,
     .video-list .video-result .mvList.gridLayout,
     .topList .gridLayout { grid-template-columns: repeat(2, 1fr); gap: 14px; }
-
-    .recommendPlaylist .MvCategories .el-row { flex-direction: column; align-items: flex-start; gap: 6px; }
   }
 
   @media (max-width: 480px) {

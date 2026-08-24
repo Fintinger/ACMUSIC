@@ -1,19 +1,62 @@
 <template>
   <div class="recommendPlaylist">
-    <!--分类-->
-    <div class="MvCategories">
-      <el-row v-for="m in mvMenu" :key="m.id">
-        <el-col :span="2">
-          <h2>{{ m.title }}</h2>
-        </el-col>
-        <el-col v-for="(i,ind) in m.children" :key="ind" :span="2">
-          <el-button class="itemBtn" size="small" type="success" @click="handleClick(m.title,i)"> {{ i }}</el-button>
-        </el-col>
-      </el-row>
+    <!-- 筛选面板 -->
+    <div class="filter-panel glass-panel">
+      <!-- 当前筛选状态（始终显示，默认"全部"无关闭） -->
+      <div class="filter-status">
+        <span class="status-label">正在浏览:</span>
+        <span v-if="!activeFilters.length" class="filter-text">全部</span>
+        <template v-else>
+          <span
+              v-for="f in activeFilters"
+              :key="f.key"
+              class="filter-chip"
+          >
+            {{ f.label }}:{{ f.value }}
+            <i class="chip-close" @click="clearFilter(f.key)">×</i>
+          </span>
+          <span class="reset-btn" @click="clearAllFilters">清除</span>
+        </template>
+      </div>
+
+      <!-- 分类导航：横向排列 + 悬浮下拉 -->
+      <div class="category-nav">
+        <div v-for="m in mvMenu" :key="m.id" class="category-nav-wrap">
+          <button
+              class="category-nav-item"
+              :class="{ active: curCat === m.title, open: curCat === m.title }"
+              @click="toggleCategory(m.title)"
+          >
+            {{ m.title }}
+            <span class="nav-arrow" :class="{ up: curCat === m.title }"></span>
+          </button>
+
+          <!-- 悬浮下拉菜单（absolute 定位，不占文档流，限制高度滚动） -->
+          <transition name="dropdown">
+            <div v-if="curCat === m.title" class="category-dropdown">
+              <button
+                  v-for="(i, ind) in m.children"
+                  :key="ind"
+                  class="filter-tag"
+                  :class="{ active: title === m.title && item === i }"
+                  @click="selectItem(m.title, i)"
+              >{{ i }}</button>
+            </div>
+          </transition>
+        </div>
+      </div>
     </div>
+
+    <!-- MV 列表 -->
     <el-row class="mvList">
       <GridSkeleton v-if="loading && !renderedList.length" type="mv"/>
-      <MvLayout v-if="renderedList.length" :list="renderedList"/>
+      <transition
+          v-if="!loading && renderedList.length"
+          name="mv-fade"
+          mode="out-in"
+      >
+        <MvLayout :key="fadeKey" :list="renderedList"/>
+      </transition>
     </el-row>
 
     <div class="mv-load-more">
@@ -37,8 +80,10 @@ export default {
       loading: false,
       title: "",
       item: '',
+      curCat: null,
       page: 1,
       hasMore: true,
+      fadeKey: 0,
       params: {
         area: '',
         type: '',
@@ -55,21 +100,47 @@ export default {
   computed: {
     noMore() {
       return false
+    },
+    activeFilters() {
+      return [
+        { key: 'area', label: '地区', value: this.params.area },
+        { key: 'type', label: '类型', value: this.params.type },
+        { key: 'order', label: '排序', value: this.params.order },
+      ].filter(f => f.value !== '' && f.value !== '全部')
     }
   },
   methods: {
-    handleClick(title, i, evt) {
+    handleClick(title, i) {
       //更新监听的值
       this.title = title
       this.item = i
       this.params.page = 1
-      //按钮样式变更
-      // evt.target.classList.add('selected')
-      console.log(evt);
+    },
+    selectItem(title, i) {
+      this.handleClick(title, i)
+      this.curCat = null
+    },
+    toggleCategory(c) {
+      //再次点击当前分类则收起
+      this.curCat = this.curCat === c ? null : c
+    },
+    clearFilter(key) {
+      this.params[key] = ''
+      this.page = 1
+      this.refreshTheRenderList()
+    },
+    clearAllFilters() {
+      this.params.area = ''
+      this.params.type = ''
+      this.params.order = ''
+      this.page = 1
+      this.refreshTheRenderList()
     },
     //GET请求数据触发页面更新
     refreshTheRenderList() {
       this.loading = true
+      this.renderedList = []
+      this.fadeKey++
       this.$axios.get('/mv/all', {
         params: { area: this.params.area, order: this.params.order, type: this.params.type, limit: this.params.limit }
       }).then(res => {
@@ -133,52 +204,178 @@ export default {
     this.$axios.get('/mv/first', {params: {limit: 100}}).then(res => {
       this.renderedList = res.data.data
     }).finally(() => { this.loading = false })
-  },
-  updated() {
-    console.log("update")
   }
-
 }
 </script>
 
 <style lang="scss" scoped>
 .recommendPlaylist {
-  .MvCategories {
-    .el-row {
-      display: flex;
-      align-items: center;
-      margin-bottom: 14px;
-      overflow: hidden;
+  /* 让 MV 列表创建独立 stacking context，防止卡片内部 z-index 穿透盖住下拉 */
+  ::v-deep .mvList {
+    position: relative;
+    z-index: 0;
+  }
 
-      h2 {
-        font-size: 14px;
-        font-weight: 600;
-        color: #555;
-        margin: 0;
-        min-width: 56px;
-        padding-top: 6px;
-        flex-shrink: 0;
+  /* 玻璃拟态筛选容器 */
+  .glass-panel {
+    position: relative;
+    z-index: 1;
+    background: rgba(255,255,255,.55);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,.45);
+    box-shadow: 0 12px 40px rgba(0,0,0,.06);
+    padding: 16px 24px;
+    margin-bottom: 28px;
+  }
+
+  /* 当前筛选状态 */
+  .filter-status {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    min-height: 30px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(0,0,0,.04);
+
+    .status-label { font-size: 13px; color: #999; }
+
+    .filter-text {
+      font-size: 13px;
+      color: #555;
+      font-weight: 500;
+      line-height: 30px;
+    }
+
+    .filter-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 30px; padding: 0 14px;
+      border-radius: 15px;
+      background: rgba(129,120,255,.12);
+      color: #8178ff; font-size: 13px; font-weight: 500;
+
+      .chip-close {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 18px; height: 18px; border-radius: 50%;
+        font-style: normal; font-size: 14px; cursor: pointer; line-height: 1;
+        transition: background .2s;
+        &:hover { background: rgba(129,120,255,.2); }
+      }
+    }
+
+    .reset-btn {
+      font-size: 13px; color: #999; cursor: pointer;
+      &:hover { color: #8178ff; }
+    }
+  }
+
+  /* 分类导航 - 横向排列 */
+  .category-nav {
+    display: flex;
+    gap: 10px;
+    padding: 4px 0;
+    position: relative;
+    z-index: 999;
+
+    .category-nav-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .category-nav-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 16px;
+      border: 1px solid rgba(0,0,0,.05);
+      border-radius: 17px;
+      background: rgba(255,255,255,.45);
+      color: #666;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all .25s ease;
+      &:hover { background: rgba(129,120,255,.08); color: #8178ff; }
+      &.active, &.open {
+        background: #8178ff;
+        color: #fff;
+        border-color: transparent;
+        box-shadow: 0 5px 12px rgba(129,120,255,.25);
       }
 
-      .el-col {
-        display: flex;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
-        gap: 8px;
-        padding-bottom: 6px;
-        flex-shrink: 0;
-        &::-webkit-scrollbar { height: 4px; }
-        &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
-        &::-webkit-scrollbar-track { background: transparent; }
-
-        .itemBtn.selected {
-          background: #454545;
-        }
+      .nav-arrow {
+        display: inline-block;
+        width: 6px; height: 6px;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(45deg);
+        transition: transform .25s ease;
+        &.up { transform: rotate(-135deg); }
       }
     }
   }
-}
 
+  /* 悬浮下拉菜单 - absolute 定位不占文档流 */
+  .category-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 9999;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 320px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 12px 14px;
+    background: rgba(255,255,255,.9);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,.6);
+    border-radius: 16px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.12);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,.12) transparent;
+    &::-webkit-scrollbar { width: 4px; }
+    &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+  }
+
+  /* 下拉动画 */
+  .dropdown-enter-active { transition: opacity .25s ease, transform .25s ease; }
+  .dropdown-leave-active { transition: opacity .15s ease, transform .15s ease; }
+  .dropdown-enter, .dropdown-leave-to { opacity: 0; transform: translateY(-6px); }
+
+  /* MV 列表内容出现 - 轻微上浮 */
+  .mv-fade-enter-active { transition: opacity .3s ease, transform .3s ease; }
+  .mv-fade-leave-active { transition: opacity .15s ease, transform .15s ease; }
+  .mv-fade-enter { opacity: 0; transform: translateY(14px); }
+  .mv-fade-leave-to { opacity: 0; transform: translateY(-8px); }
+
+  /* Apple Music pill 标签 */
+  .filter-tag {
+    height: 32px;
+    padding: 0 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(0,0,0,.05);
+    background: rgba(255,255,255,.45);
+    color: #666;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .25s ease;
+    &:hover {
+      transform: translateY(-1px);
+      background: rgba(129,120,255,.08);
+      color: #8178ff;
+    }
+    &.active {
+      background: #8178ff;
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 5px 12px rgba(129,120,255,.25);
+    }
+  }
+}
 </style>
