@@ -33,6 +33,16 @@ export default {
         stroke: 'currentColor', strokeWidth: 2,
         path: 'M17 2l4 4-4 4 M3 11V9a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v2a4 4 0 0 1-4 4H3',
     },
+    loopList: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M17 3l3 3-3 3 M4 9V7a3 3 0 0 1 3-3h13 M7 21l-3-3 3-3 M20 15v2a3 3 0 0 1-3 3H4',
+    },
+    loopOne: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M17 2l4 4-4 4 M3 11V9a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v2a4 4 0 0 1-4 4H3 M12 8v8 M9 10l3-2 3 2',
+    },
     shuffle: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 2,

@@ -37,6 +37,16 @@
       </div>
       <div class="barCenter">
         <div class="barControls">
+          <span
+              class="modeBtn"
+              :class="'mode-' + playMode"
+              :title="playMode === 'order' ? '列表循环' : playMode === 'random' ? '随机播放' : '单曲循环'"
+              @click="togglePlayMode"
+          >
+            <BaseIcon v-if="playMode === 'order'" name="loopList" :size="18"/>
+            <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="18"/>
+            <BaseIcon v-else name="loopOne" :size="18"/>
+          </span>
           <BaseIcon name="prev" @click="preSong"/>
           <div class="barPlay" @click="togglePlay">
             <i v-if="isLoading" class="player-loading-spinner"></i>
@@ -157,6 +167,7 @@ export default {
       audioRetryCount: 0,
       audioLastSrc: '',
       audioUseProxy: false,
+      playMode: 'order',
     }
   },
   computed: {
@@ -273,9 +284,9 @@ export default {
     },
     timeNow(n) {
       this.isExpand && this.$emit('tUpdate', n)
-      if (this.sel.currentTime === this.timeDuration) this.nextSong()
+      if (this.sel.currentTime === this.timeDuration) this._autoNext()
       if ((this.timeDuration - n) < 0.5 && this.sel.currentTime !== this.timeDuration) {
-        this.sel.currentTime = this.timeDuration; this.pauseSong()
+        this._autoNext()
       }
     },
     volume(val) { this.sel.volume = val / 100 },
@@ -551,13 +562,47 @@ export default {
     },
     pauseSong() { this.isPlay = false; this.sel.pause() },
     togglePlay() { this.onInteract(); console.trace('[PlaySongCall] togglePlay'); this.isPlay ? this.pauseSong() : this.playSong() },
-    preSong() { this.onInteract(); this.curIndex = this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1 },
+    preSong() {
+      this.onInteract()
+      if (this.currentSongSource !== 'playlist') return
+      this.curIndex = this.getPrevIndex()
+    },
     nextSong() {
       this.onInteract()
-      if (this.curIndex + 1 > this.currentPlaylist.length - 1) {
-        if (this.isPersonalFM) pubsub.publish('getPersonalFM', new Date().getTime())
-        else this.curIndex = 0
-      } else this.curIndex += 1
+      if (this.currentSongSource !== 'playlist') return
+      if (this.isPersonalFM) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
+      this.curIndex = this.getNextIndex()
+    },
+    // 自动播放到结尾触发：loop 模式重播当前曲
+    _autoNext() {
+      if (this.playMode === 'loop') { this._restartCurrent(); return }
+      if (this.currentSongSource !== 'playlist') return
+      if (this.isPersonalFM) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
+      this.curIndex = this.getNextIndex()
+    },
+    getNextIndex() {
+      if (this.playMode === 'random') return Math.floor(Math.random() * this.currentPlaylist.length)
+      return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
+    },
+    getPrevIndex() {
+      if (this.playMode === 'random') return Math.floor(Math.random() * this.currentPlaylist.length)
+      return this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1
+    },
+    _restartCurrent() {
+      this.onInteract()
+      if (this.sel) {
+        try {
+          this.sel.currentTime = 0
+          if (!this.isPlay) this.playSong()
+        } catch (e) { /* ignore */ }
+      }
+    },
+    togglePlayMode() {
+      const order = ['order', 'random', 'loop']
+      const idx = order.indexOf(this.playMode)
+      this.playMode = order[(idx + 1) % order.length]
+      try { localStorage.setItem('acmusic_play_mode', this.playMode) } catch (e) { /* ignore */ }
+      console.log('[PlayMode]', { mode: this.playMode })
     },
     toggleLike() { this.onInteract(); this.isLiked = !this.isLiked },
     showSongDetail() { if (!this.currentSong.isVoice) this.$emit('SDClk', this.currentSong) },
@@ -777,6 +822,7 @@ export default {
           duration: this.sel.duration || 0,
           quality: this.currentQuality,
           source: this.currentSongSource,
+          playMode: this.playMode,
           timestamp: Date.now()
         }))
         console.log('[PlaylistPersist]', { action: 'save', count: playlist.length })
@@ -814,6 +860,9 @@ export default {
           this.$store.commit('TracksAbout/REPLACE_PLAYLIST', deduped)
           console.log('[PlaylistPersist]', { action: 'restore', count: deduped.length })
         }
+        if (data.playMode && ['order', 'random', 'loop'].indexOf(data.playMode) !== -1) {
+          this.playMode = data.playMode
+        }
         if (data.song && data.song.id) {
           this.isRestoring = true
           this.playContextId++
@@ -845,6 +894,10 @@ export default {
   beforeMount() { this.sel = new Audio() },
   mounted() {
     this._restoreState()
+    try {
+      const savedMode = localStorage.getItem('acmusic_play_mode')
+      if (savedMode && ['order', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
+    } catch (e) { /* ignore */ }
     this.addEventListeners()
     this.pubId = pubsub.subscribe('playAll', this.playAllSong)
     this._onBeforeUnload = () => { this._saveState() }
@@ -956,6 +1009,15 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   .barControls {
     display: flex; align-items: center; gap: 22px; color: $text;
     > i { font-size: 20px; cursor: pointer; opacity: 0.5; transition: all 160ms ease; &:hover { opacity: 0.85; transform: scale(1.1); } }
+    .modeBtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; cursor: pointer; color: rgba(255,255,255,0.4);
+      transition: all 160ms ease; font-size: 13px;
+      i { font-style: normal; }
+      &.mode-random { color: $accent; }
+      &.mode-loop { color: $accent; }
+      &:hover { opacity: 0.9; transform: scale(1.1); }
+    }
     .barPlay {
       width: 28px; height: 28px; border-radius: 50%; background: $accent; color: #fff;
       display: flex; align-items: center; justify-content: center; cursor: pointer;
