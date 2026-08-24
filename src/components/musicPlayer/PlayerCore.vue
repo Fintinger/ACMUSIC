@@ -47,7 +47,7 @@
             <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="18"/>
             <BaseIcon v-else name="loopOne" :size="18"/>
           </span>
-          <BaseIcon name="prev" @click="preSong"/>
+          <span class="miniTrackBtn" @click="preSong"><BaseIcon name="prev" :size="18"/></span>
           <div class="barPlay" @click="togglePlay">
             <i v-if="isLoading" class="player-loading-spinner"></i>
             <transition v-else name="btn-swap" mode="out-in">
@@ -55,7 +55,7 @@
               <BaseIcon v-else key="pause" name="pause"/>
             </transition>
           </div>
-          <BaseIcon name="next" @click="nextSong"/>
+          <span class="miniTrackBtn" @click="nextSong"><BaseIcon name="next" :size="18"/></span>
         </div>
         <div class="barProgress">
           <span class="barTime">{{ formatTime(timeNow) }}</span>
@@ -182,7 +182,9 @@ export default {
     artistNames() {
       const s = this.currentSong
       const ar = s.ar || s.artists
-      if (ar && ar.length) return ar.map(a => a.name).join(' / ')
+      if (!ar) return ''
+      if (typeof ar === 'string') return ar
+      if (Array.isArray(ar)) return ar.map(a => a.name || a).join(' / ')
       return ''
     },
     config() { return config },
@@ -229,11 +231,11 @@ export default {
             this.$store.commit("TracksAbout/PUSH_PLAYLIST", val)
           }
           this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
-        } else if (this.currentSongSource !== 'restore') {
+        } else {
           if (inPlaylist !== -1) {
             this.curIndex = inPlaylist
             console.log('[PlaylistSync]', { action: 'exist', songId: val.id, index: inPlaylist, source: this.currentSongSource })
-          } else {
+          } else if (this.currentSongSource !== 'restore') {
             this.$store.commit("TracksAbout/PUSH_PLAYLIST", val)
             this.curIndex = this.currentPlaylist.length - 1
             console.log('[PlaylistSync]', { action: 'append', songId: val.id, index: this.curIndex, source: this.currentSongSource })
@@ -263,7 +265,8 @@ export default {
       }
     },
     curIndex(ind) {
-      if (this.currentSongSource !== 'playlist') {
+      // 仅 playlist / restore（恢复后的播放列表）允许同步切歌；search/fm 等跳过
+      if (this.currentSongSource !== 'playlist' && this.currentSongSource !== 'restore') {
         console.log('[PlaylistGuard]', { action: 'skip_curIndex', source: this.currentSongSource, playlistSyncLock: this.playlistSyncLock, songId: this.currentSong.id, contextId: this.playContextId })
         return
       }
@@ -564,20 +567,25 @@ export default {
     togglePlay() { this.onInteract(); console.trace('[PlaySongCall] togglePlay'); this.isPlay ? this.pauseSong() : this.playSong() },
     preSong() {
       this.onInteract()
-      if (this.currentSongSource !== 'playlist') return
+      if (!this._inPlaylist()) return
       this.curIndex = this.getPrevIndex()
     },
     nextSong() {
       this.onInteract()
-      if (this.currentSongSource !== 'playlist') return
       if (this.isPersonalFM) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
+      if (!this._inPlaylist()) return
       this.curIndex = this.getNextIndex()
+    },
+    // 当前歌曲是否在播放列表中（用于切歌判断，不依赖 source）
+    _inPlaylist() {
+      const id = this.currentSong && this.currentSong.id
+      return id && this.currentPlaylist.findIndex(s => s.id === id) !== -1
     },
     // 自动播放到结尾触发：loop 模式重播当前曲
     _autoNext() {
       if (this.playMode === 'loop') { this._restartCurrent(); return }
-      if (this.currentSongSource !== 'playlist') return
       if (this.isPersonalFM) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
+      if (!this._inPlaylist()) return
       this.curIndex = this.getNextIndex()
     },
     getNextIndex() {
@@ -855,7 +863,21 @@ export default {
           const deduped = []
           const seen = new Set()
           for (const t of data.playlist) {
-            if (!seen.has(t.id)) { seen.add(t.id); deduped.push(t) }
+            if (seen.has(t.id)) continue
+            seen.add(t.id)
+            // 补全为 PlayerCore 期望的完整结构
+            deduped.push({
+              id: t.id,
+              name: t.name || '',
+              artists: t.artists || '',
+              ar: t.artists ? [{ name: t.artists }] : [],
+              album: t.album || '',
+              al: { name: t.album || '', picUrl: t.picUrl || '' },
+              picUrl: t.picUrl || '',
+              dt: t.duration || 0,
+              duration: t.duration || 0,
+              source: t.source || ''
+            })
           }
           this.$store.commit('TracksAbout/REPLACE_PLAYLIST', deduped)
           console.log('[PlaylistPersist]', { action: 'restore', count: deduped.length })
@@ -866,6 +888,7 @@ export default {
         if (data.song && data.song.id) {
           this.isRestoring = true
           this.playContextId++
+          this.playlistContextId = this.playContextId
           this.currentSongSource = 'restore'
           this.currentPlaySourceLocked = true
           if (data.currentIndex !== undefined) this.curIndex = data.currentIndex
@@ -1007,8 +1030,18 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 .barCenter {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 200px;
   .barControls {
-    display: flex; align-items: center; gap: 22px; color: $text;
-    > i { font-size: 20px; cursor: pointer; opacity: 0.5; transition: all 160ms ease; &:hover { opacity: 0.85; transform: scale(1.1); } }
+    display: flex; align-items: center; gap: 16px; color: $text;
+    .miniTrackBtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+      transition: all 180ms ease;
+      color: rgba(255,255,255,0.6);
+      &:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.9); transform: scale(1.08); }
+      &:active { transform: scale(0.92); }
+    }
     .modeBtn {
       display: inline-flex; align-items: center; justify-content: center;
       width: 22px; height: 22px; cursor: pointer; color: rgba(255,255,255,0.4);

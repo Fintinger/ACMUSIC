@@ -30,9 +30,20 @@
             <div class="progressTimes"><span>{{ formatTime(timeNow) }}</span><span>{{ formatTime(duration) }}</span></div>
           </div>
           <div class="controlsRow">
-            <BaseIcon name="prev" :size="20" @click="prevTrack"/>
+            <span
+                class="modeBtn"
+                :class="'mode-' + playMode"
+                :title="playMode === 'order' ? '列表循环' : playMode === 'random' ? '随机播放' : '单曲循环'"
+                @click="togglePlayMode"
+            >
+              <BaseIcon v-if="playMode === 'order'" name="loopList" :size="20"/>
+              <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="20"/>
+              <BaseIcon v-else name="loopOne" :size="20"/>
+            </span>
+            <span class="trackBtn prevBtn" @click="prevTrack"><BaseIcon name="prev" :size="20"/></span>
             <div class="playBtn" @click="togglePlay"><i v-if="isLoading" class="player-loading-spinner"></i><BaseIcon v-else-if="!isPlaying" name="play"/><BaseIcon v-else name="pause"/></div>
-            <BaseIcon name="next" :size="20" @click="nextTrack"/>
+            <span class="trackBtn nextBtn" @click="nextTrack"><BaseIcon name="next" :size="20"/></span>
+            <span class="modeBtn mode-spacer"></span>
           </div>
           <div class="actionsRow">
             <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>{{ likedCount | Div1w }}</span></button>
@@ -123,7 +134,10 @@ export default {
     songName() { return this.currentSong.name || '未知歌曲' },
     artistNames() {
       const s = this.currentSong; const ar = s.ar || s.artists
-      return (ar && ar.length) ? ar.map(a => a.name).join(' / ') : '未知歌手'
+      if (!ar) return '未知歌手'
+      if (typeof ar === 'string') return ar || '未知歌手'
+      if (Array.isArray(ar)) return ar.map(a => a.name || a).join(' / ')
+      return '未知歌手'
     },
     albumName() {
       const s = this.currentSong
@@ -133,6 +147,7 @@ export default {
     isPlaying() { return this.$refs.pgPanel ? this.$refs.pgPanel.isPlay : false },
     isLoading() { return this.$refs.pgPanel ? this.$refs.pgPanel.isLoading : false },
     bufferedTime() { return this.$refs.pgPanel ? this.$refs.pgPanel.bufferedTime : 0 },
+    playMode() { return this.$refs.pgPanel ? this.$refs.pgPanel.playMode : 'order' },
     progressPercent() { return this.duration ? (this.timeNow / this.duration) * 100 : 0 },
     bufferPercent() { return this.duration ? (this.bufferedTime / this.duration) * 100 : 0 },
   },
@@ -328,6 +343,7 @@ export default {
     togglePlay() { const p = this.$refs.pgPanel; if (p) p.isPlay ? p.pauseSong() : p.playSong() },
     prevTrack() { if (this.$refs.pgPanel) this.$refs.pgPanel.preSong() },
     nextTrack() { if (this.$refs.pgPanel) this.$refs.pgPanel.nextSong() },
+    togglePlayMode() { if (this.$refs.pgPanel) this.$refs.pgPanel.togglePlayMode() },
     toggleLike() { this.isLiked = !this.isLiked; this.isLiked ? this.likedCount++ : this.likedCount-- },
     shareSong() {},
     formatTime(s) { s = s * 1; if (!s || isNaN(s)) return '00:00'; const m = Math.floor(s / 60); return String(m).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0') },
@@ -467,9 +483,27 @@ export default {
   }
 
   .controlsRow {
-    display: flex; align-items: center; justify-content: center; gap: 28px; color: rgba(255,255,255,0.85);
-    > i { font-size: 24px; cursor: pointer; opacity: 0.55; transition: all 180ms ease; &:hover { opacity: 0.9; transform: scale(1.12); } }
-    .playBtn { width: 32px; height: 32px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 20px; margin-left: 1px; } .player-loading-spinner { display: block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
+    display: flex; align-items: center; justify-content: center; gap: 18px; color: rgba(255,255,255,0.85);
+    .trackBtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+      transition: all 180ms ease;
+      &:hover { background: rgba(255,255,255,0.12); transform: scale(1.1); }
+      &:active { transform: scale(0.94); }
+    }
+    .modeBtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; cursor: pointer;
+      color: rgba(255,255,255,0.4);
+      transition: all 180ms ease;
+      &.mode-random, &.mode-loop { color: #8685EF; }
+      &:hover { opacity: 0.9; transform: scale(1.1); }
+      &.mode-spacer { pointer-events: none; }
+    }
+    .playBtn { width: 42px; height: 42px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 22px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
   }
 
   .actionsRow {
