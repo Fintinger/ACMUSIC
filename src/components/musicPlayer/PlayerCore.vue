@@ -121,6 +121,7 @@ import config from "@/config"
 import { buildBackground } from "@/utils/colorExtractor"
 import QualityMenu from "@/components/musicPlayer/QualityMenu"
 import { setAudioCache, getAudioCache, getAudioUrl } from "@/utils/audioCache"
+import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 
 const FALLBACK_BG = '#1a1a2e'
 
@@ -295,9 +296,26 @@ export default {
     volume(val) { this.sel.volume = val / 100 },
     isPersonalFM(val) {
       if (!val) this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [this.currentSong])
+    },
+    'currentSong.id'() {
+      this._syncTitle()
+    },
+    isPlay() {
+      this._syncTitle()
     }
   },
   methods: {
+    _syncTitle() {
+      const s = this.currentSong
+      if (s && s.id) {
+        const name = s.name || '未知歌曲'
+        const ar = this.artistNames
+        const prefix = this.isPlay ? '♪' : '❚❚'
+        setSongTitle(`${prefix} ${name}${ar ? ' - ' + ar : ''} · ${BASE}`)
+      } else {
+        clearSongTitle()
+      }
+    },
     getArtistStr(s) {
       const ar = s.ar || s.artists
       if (!ar) return ''

@@ -29,6 +29,7 @@ import UserRes from "@/pages/search/UserRes";
 import VoiceRes from "@/pages/search/VoiceRes";
 import VideoRes from "@/pages/search/VideoRes";
 import UserDetail from "@/pages/UserDetail";
+import { setRouteTitle, BASE } from "@/utils/title";
 
 const originalPush = VueRouter.prototype.push
 VueRouter.prototype.push = function push(location) {
@@ -41,7 +42,7 @@ const router = new VueRouter({
         {
             path: '/explore',
             component: ExplorePage,
-            meta: {level: 1},
+            meta: {level: 1, title: '发现'},
             children: [
                 {
                     name: "playlist", path: 'playlist', component: Playlist, children: [
@@ -57,12 +58,12 @@ const router = new VueRouter({
                 {name: "videoList", path: 'videoList', component: VideoList},
             ]
         },
-        {path: '/user', component: UserPage, meta: {level: 1}},
+        {path: '/user', component: UserPage, meta: {level: 1, title: '我的'}},
         {
             path: '/listDetail',
             name: 'listDetail',
             component: ListDetail,
-            meta: {level: 2},
+            meta: {level: 2, title: '歌单详情'},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -71,7 +72,7 @@ const router = new VueRouter({
             path: '/albumDetail',
             name: 'albumDetail',
             component: AlbumDetail,
-            meta: {level: 2},
+            meta: {level: 2, title: '专辑详情'},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -80,7 +81,7 @@ const router = new VueRouter({
             path: '/artistDetail',
             name: 'artistDetail',
             component: ArtistDetail,
-            meta: {level: 2},
+            meta: {level: 2, title: '歌手详情'},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -89,7 +90,7 @@ const router = new VueRouter({
             path: '/artistAllSongs',
             name: 'artistAllSongs',
             component: ArtistAllSongs,
-            meta: {level: 2},
+            meta: {level: 2, title: '全部歌曲'},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -98,7 +99,7 @@ const router = new VueRouter({
             path: '/mv',
             name: 'mvPlay',
             component: mvPlay,
-            meta: {level: 2},
+            meta: {level: 2, title: 'MV'},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -107,7 +108,7 @@ const router = new VueRouter({
             path: '/video',
             name: 'videoPlay',
             component: VideoPlay,
-            meta: {level: 2},
+            meta: {level: 2, title: '视频'},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -116,7 +117,7 @@ const router = new VueRouter({
             path: '/search/',
             name: 'search',
             component: SearchResult,
-            meta: {level: 1},
+            meta: {level: 1, title: '搜索'},
             children: [
                 {
                     name: "albumRes", path: "albumRes", component: AlbumRes, props($route) {
@@ -169,17 +170,22 @@ const router = new VueRouter({
             },
         },
         {
-            path: '/user-detail', name: "userDetail", component: UserDetail, meta: {level: 2}, props($route) {
+            path: '/user-detail', name: "userDetail", component: UserDetail, meta: {level: 2, title: '用户详情'}, props($route) {
                 return {uid: $route.query.uid}
             },
         },
-        {path: '/daily-songs', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2}},
+        {path: '/daily-songs', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2, title: '每日推荐'}},
     ]
 })
 
 router.beforeEach((to, from, next) => {
     to.meta.hasHistory = !!from.name
     next()
+})
+
+router.afterEach((to) => {
+    const t = to.meta && to.meta.title
+    setRouteTitle(t ? `${t} · ${BASE}` : BASE)
 })
 
 export default router
