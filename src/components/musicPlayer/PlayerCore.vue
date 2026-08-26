@@ -70,9 +70,11 @@
       <div class="barRight">
         <div class="barItem volumeWrap">
           <BaseIcon name="volume" @click="showVolume = !showVolume"/>
-          <div v-show="showVolume" class="volumeSlider" @click.stop>
-            <input v-model="volume" type="range" min="0" max="100" @input="onInteract" />
-          </div>
+          <transition name="volume-pop">
+            <div v-if="showVolume" class="volumeSlider" @click.stop>
+              <input v-model="volume" type="range" min="0" max="100" @input="onInteract" />
+            </div>
+          </transition>
         </div>
         <div class="barItem qualityWrap">
           <button class="qualityBtn" @click.stop="showQualityMenu = !showQualityMenu">
@@ -169,6 +171,8 @@ export default {
       audioLastSrc: '',
       audioUseProxy: false,
       playMode: 'order',
+      shuffleOrder: [],
+      shufflePos: -1,
     }
   },
   computed: {
@@ -279,6 +283,14 @@ export default {
       }
       if (this.playContextId !== this.playlistContextId) {
         console.warn('[PlaylistSync]', { action: 'skip_non_playlist_song', source: this.currentSongSource, songId: this.currentSong.id, curIndex: ind, playContextId: this.playContextId, playlistContextId: this.playlistContextId })
+        return
+      }
+      // 【修复】目标歌曲与当前歌曲相同（如恢复后 curIndex 对齐）时跳过，
+      // 避免重新赋值 currentSong（对象引用变化）再次触发播放链路，
+      // 导致刷新后自动播放（被浏览器拦截成 isPlay=true 但无声）、点击从头播放
+      const target = this.currentPlaylist[ind]
+      if (target && target.id === this.currentSong.id) {
+        console.log('[CurIndexGuard]', { action: 'skip_same_song', songId: target.id })
         return
       }
       console.trace('[CurrentSongSet] curIndex_watch', this.currentPlaylist[ind] && this.currentPlaylist[ind].id)
@@ -615,12 +627,40 @@ export default {
       this.curIndex = this.getNextIndex()
     },
     getNextIndex() {
-      if (this.playMode === 'random') return Math.floor(Math.random() * this.currentPlaylist.length)
+      if (this.playMode === 'random') return this._nextShuffleIndex()
       return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
     },
     getPrevIndex() {
-      if (this.playMode === 'random') return Math.floor(Math.random() * this.currentPlaylist.length)
+      if (this.playMode === 'random') return this._prevShuffleIndex()
       return this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1
+    },
+    // 随机播放洗牌序列：Fisher-Yates 打乱，当前曲放首位，保证一轮内每首只播一次
+    _initShuffle() {
+      const len = this.currentPlaylist.length
+      if (!len) { this.shuffleOrder = []; this.shufflePos = -1; return }
+      const order = Array.from({ length: len }, (_, i) => i)
+      for (let i = len - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        const t = order[i]; order[i] = order[j]; order[j] = t
+      }
+      const curIdx = order.indexOf(this.curIndex)
+      if (curIdx > 0) {
+        order.splice(curIdx, 1)
+        order.unshift(this.curIndex)
+      }
+      this.shuffleOrder = order
+      this.shufflePos = 0
+      console.log('[Shuffle]', { action: 'init', cur: this.curIndex, len, order: this.shuffleOrder.join(',') })
+    },
+    _nextShuffleIndex() {
+      if (this.shuffleOrder.length !== this.currentPlaylist.length || this.shufflePos === -1) this._initShuffle()
+      this.shufflePos = (this.shufflePos + 1) % this.shuffleOrder.length
+      return this.shuffleOrder[this.shufflePos]
+    },
+    _prevShuffleIndex() {
+      if (this.shuffleOrder.length !== this.currentPlaylist.length || this.shufflePos === -1) this._initShuffle()
+      this.shufflePos = (this.shufflePos - 1 + this.shuffleOrder.length) % this.shuffleOrder.length
+      return this.shuffleOrder[this.shufflePos]
     },
     _restartCurrent() {
       this.onInteract()
@@ -635,6 +675,12 @@ export default {
       const order = ['order', 'random', 'loop']
       const idx = order.indexOf(this.playMode)
       this.playMode = order[(idx + 1) % order.length]
+      if (this.playMode === 'random') {
+        this._initShuffle()
+      } else {
+        this.shuffleOrder = []
+        this.shufflePos = -1
+      }
       try { localStorage.setItem('acmusic_play_mode', this.playMode) } catch (e) { /* ignore */ }
       console.log('[PlayMode]', { mode: this.playMode })
     },
@@ -775,7 +821,7 @@ export default {
         console.log('[PlayerLoading]', { action: 'ready', songId: this.currentSong.id, requestId: this.playRequestId })
         console.log('%c[AudioReady] %cduration=%s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', this.sel.duration)
         this.timeDuration = this.sel.duration
-        if (this.hasRestoreProgress && this.currentSongSource === 'restore' && this.currentSong.id && this.currentSong.id === this.restoreSongId && this.resumeTime > 0) {
+        if (this.hasRestoreProgress && this.currentSong.id && this.currentSong.id === this.restoreSongId && this.resumeTime > 0) {
           console.log('[PlayerState] seek_restore', { songId: this.currentSong.id, currentTime: this.resumeTime })
           this.sel.currentTime = this.resumeTime
           this.timeNow = this.resumeTime
@@ -864,6 +910,7 @@ export default {
     },
     _preloadNext() {
       if (this.currentSongSource !== 'playlist') return
+      if (this.playMode === 'random') return
       const nextIdx = this.curIndex + 1
       if (nextIdx >= this.currentPlaylist.length) return
       const nextSong = this.currentPlaylist[nextIdx]
@@ -952,6 +999,7 @@ export default {
           }
           this.isRestoring = false
           this.currentSongSource = 'playlist'
+          if (this.playMode === 'random') this._initShuffle()
         })
       } catch (e) { /* ignore */ }
     },
@@ -1146,14 +1194,29 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     &:hover { color: $text; }
   }
   .volumeWrap .volumeSlider {
-    position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%);
+    position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; justify-content: center;
     background: #1f202b; border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); z-index: 10;
+    border-radius: 10px; padding: 14px 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); z-index: 10;
+    &::after {
+      content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px;
+      border-width: 6px 6px 0; border-style: solid;
+      border-color: #1f202b transparent transparent;
+    }
     input[type="range"] {
-      width: 80px; height: 4px; -webkit-appearance: none; appearance: none;
+      writing-mode: vertical-lr; direction: rtl;
+      width: 4px; height: 88px;
+      -webkit-appearance: none; appearance: none;
       background: rgba(255,255,255,0.1); border-radius: 2px; outline: none; cursor: pointer;
       &::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
     }
+  }
+  .volume-pop-enter-active, .volume-pop-leave-active {
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+  .volume-pop-enter, .volume-pop-leave-to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
   }
   .playlistWrap .playlistTrigger {
     display: flex; align-items: center; gap: 3px;
