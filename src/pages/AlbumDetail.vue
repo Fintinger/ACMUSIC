@@ -54,14 +54,20 @@ export default {
   methods:{
     songClk(song){ this.$bus.$emit('songClk',song) },
     arClk(id){ this.$bus.$emit('arClk', id) },
-  },
-  activated() {
-    this.albumInfo = {}; this.songs = []; this.loading = true
-    this.$nextTick(() => {
+    loadAlbum() {
+      if (!this.id) { console.warn('[AlbumDetail] no id, skip'); return }
+      this.albumInfo = {}; this.songs = []; this.loading = true
       this.$axios.get('album', {params: {id: this.id}}).then(res => {
         this.albumInfo = res.data.album; this.songs = res.data.songs
+        console.log('[AlbumDetail] loaded, name:', this.albumInfo.name, 'songs:', this.songs.length)
+      }).catch(err => {
+        console.error('[AlbumDetail] load error:', err)
       }).finally(() => { this.loading = false })
-    })
+    }
+  },
+  activated() {
+    console.log('[AlbumDetail] activated, id:', this.id, 'query:', this.$route.query.id)
+    this.loadAlbum()
   }
 }
 </script>

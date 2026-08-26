@@ -1,11 +1,10 @@
 <template>
   <ul class="gridLayout">
     <li v-for="album in list" :key="album.id" class="album">
-      <el-card :body-style="{ padding: 0} " shadow="never">
+      <el-card :body-style="{ padding: 0}" shadow="never" @click.native="alClk(album.id)">
         <div
             :style="{backgroundImage: `url('${LP}')`}"
             class="img-wrapper"
-            @click="alClk(album.id)"
         >
           <img :src="album.picUrl | imgParam('300y300')"
                alt="" class="image">
