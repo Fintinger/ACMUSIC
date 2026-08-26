@@ -9,6 +9,8 @@
     .el-header.nav-bar {
       background: $color-theme;
       padding: 0;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 
       .el-row {
         height: 100%;
@@ -33,11 +35,11 @@
 
         .nav-link {
           .el-row {
-            padding: 0 50px;
+            padding: 0 28px;
             justify-content: center;
             flex-wrap: nowrap;
             display: flex;
-            gap: 8px;
+            gap: 20px;
 
             .el-col {
               display: flex;
@@ -53,6 +55,7 @@
                 }
                 color: $font-black;
 
+                position: relative;
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
@@ -70,8 +73,26 @@
                   background: $color-theme-sec;
                 }
 
+                &::after {
+                  content: '';
+                  position: absolute;
+                  right: 10px;
+                  bottom: 2px;
+                  transform: scaleX(0);
+                  transform-origin: left;
+                  width: 2.4em;
+                  height: 3px;
+                  border-radius: 2px;
+                  background: $color-main;
+                  transition: transform .3s ease;
+                }
+
                 &.router-link-exact-active {
                   color: $color-main;
+
+                  &::after {
+                    transform: scaleX(1);
+                  }
                 }
               }
             }
@@ -101,7 +122,7 @@
               .input-container{
                 position: relative;
                 display: block;
-                width: 60%;
+                width: 100%;
                 min-width: 160px;
                 .ac-Search{
                   color: $font-black-2;
@@ -121,6 +142,7 @@
             .avatar {
               //overflow: hidden;
               padding-top: 10px;
+              margin-left: 8px;
               .el-dropdown{
                 height: 100%;
                 //padding: 10px 10px 0 10px;
@@ -133,6 +155,42 @@
             }
           }
         }
+      }
+    }
+  }
+}
+
+/* 头像下拉菜单（teleport 到 body，非 scoped 全局样式） */
+.user-dropdown {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  min-width: 140px;
+
+  .popper__arrow { display: none; }
+
+  .el-dropdown-menu__item {
+    border-radius: 8px;
+    color: $font-black-1;
+    font-size: 13px;
+    padding: 9px 14px;
+    line-height: 1.4;
+    transition: background-color 160ms ease, color 160ms ease;
+
+    &:not(.is-disabled):hover,
+    &:not(.is-disabled):focus {
+      background: $color-theme-sec;
+      color: $color-main;
+    }
+
+    &.logout-item {
+      color: #e5484d;
+      &:not(.is-disabled):hover,
+      &:not(.is-disabled):focus {
+        background: rgba(229, 72, 77, 0.08);
+        color: #e5484d;
       }
     }
   }
