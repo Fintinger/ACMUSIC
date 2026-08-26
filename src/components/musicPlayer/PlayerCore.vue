@@ -271,6 +271,12 @@ export default {
         console.log('[PlaylistGuard]', { action: 'skip_curIndex', source: this.currentSongSource, playlistSyncLock: this.playlistSyncLock, songId: this.currentSong.id, contextId: this.playContextId })
         return
       }
+      // 【关键修复】恢复期间不执行切歌逻辑：恢复状态由 _restoreState() 控制，
+      // curIndex watcher 的切歌行为会覆盖正确恢复的 currentSong，导致切到错误歌曲
+      if (this.isRestoring) {
+        console.log('[RestoreGuard] skip curIndex_watch during isRestoring', { ind })
+        return
+      }
       if (this.playContextId !== this.playlistContextId) {
         console.warn('[PlaylistSync]', { action: 'skip_non_playlist_song', source: this.currentSongSource, songId: this.currentSong.id, curIndex: ind, playContextId: this.playContextId, playlistContextId: this.playlistContextId })
         return
@@ -382,19 +388,22 @@ export default {
             resolve()
             return
           }
-          // 所有 fallback 均失败 → 查询 song detail 判断原因
+          // 所有 fallback 均失败 → 查询 song detail 判断原因，然后自动切下一首
           self.$axios.get('/song/detail?ids=' + id).then(detailRes => {
             if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
             const fee = detailRes.data && detailRes.data.songs && detailRes.data.songs[0] && detailRes.data.songs[0].fee
             if (fee === 1) self.$message.warning("VIP歌曲，尝试解锁失败")
             else if (fee === 4) self.$message.warning("专辑歌曲，暂无资源")
             else self.$message.warning("暂无可用音源")
+            self.isLoading = false
             resolve("no_url")
+            if (self._inPlaylist()) self.nextSong()
           }).catch(() => {
             self.isLoading = false
             console.warn('[PlayerLoading]', { action: 'error', songId: id, requestId })
             if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
             resolve("no_url")
+            if (self._inPlaylist()) self.nextSong()
           })
         }).catch(err => {
           if (err && err.message === 'REQUEST_CANCELLED') { self.isLoading = false; resolve({ cancelled: true }); return }
@@ -402,6 +411,7 @@ export default {
           self.isLoading = false
           if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
           resolve("dnt_fail")
+          if (self._inPlaylist()) self.nextSong()
         })
       })
     },
@@ -410,52 +420,50 @@ export default {
       this.isLoading = true
       console.log('[PlayerLoading]', { action: 'start', songId: id, requestId })
       return new Promise(resolve => {
-        this.$axios('/check/music', { params: { id } }).then(res => {
-          console.log('%c▶ 版权判断 %c/check/music?id=%s %s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', id, res.data.success ? '✅有版权' : '❌无版权')
-          if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
-          if (res.data.success) {
-            self.getSongUrl(id, requestId).then(res => {
-              if (res && res.cancelled) { self.isLoading = false; resolve({ cancelled: true }); return }
-              if (requestId !== self.playRequestId) { self.isLoading = false; resolve({ cancelled: true }); return }
-              const data = res && res.data && res.data.data
-              const item = data && data[0]
-              const newUrl = item && item.url
-              if (!newUrl) {
-                self.isLoading = false
-                console.error('[PlayError]', { songId: id, stage: 'NO_AUDIO', requestId })
-                if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
-                resolve("no_url")
-                return
-              }
-              console.log('%c✅ 播放就绪 %cid=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id)
-              self.sel.src = newUrl
-              self.audioLastSrc = newUrl
-              self.audioRetryCount = 0
-              self.audioUseProxy = false
-              self.sel.load()
-              resolve()
-            }).catch(err => {
-              if (err && err.message === 'REQUEST_CANCELLED') { self.isLoading = false; resolve({ cancelled: true }); return }
-              const isNoResource = err && err.message === 'NO_RESOURCE'
-              self.isLoading = false
-              console.error('[PlayError]', { songId: id, stage: isNoResource ? 'NO_RESOURCE' : 'NETWORK_ERROR', requestId, error: err && err.message || String(err) })
-              if (requestId === self.playRequestId) self.$message.warning(isNoResource ? "暂无可用音源" : "播放失败，请稍后重试")
-              resolve("url_fail")
-            })
-          } else {
-            self.isLoading = false
-            console.error('[PlayError]', { songId: id, stage: 'NO_COPYRIGHT', requestId })
-            if (requestId === self.playRequestId) self.$message.warning("暂无版权")
-            resolve("no_rights")
+        self.getSongUrl(id, requestId).then(res => {
+          if (res && res.cancelled) { self.isLoading = false; resolve({ cancelled: true }); return }
+          if (requestId !== self.playRequestId) { self.isLoading = false; resolve({ cancelled: true }); return }
+          const data = res && res.data && res.data.data
+          const item = data && data[0]
+          const newUrl = item && item.url
+          if (newUrl) {
+            console.log('%c✅ 播放就绪 %cid=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id)
+            self.sel.src = newUrl
+            self.audioLastSrc = newUrl
+            self.audioRetryCount = 0
+            self.audioUseProxy = false
+            self.sel.load()
+            resolve()
+            return
           }
+          // 所有 fallback 均失败 → 查询 song detail 判断原因，然后自动切下一首
+          self.$axios.get('/song/detail?ids=' + id).then(detailRes => {
+            if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
+            const fee = detailRes.data && detailRes.data.songs && detailRes.data.songs[0] && detailRes.data.songs[0].fee
+            if (fee === 1) self.$message.warning("VIP歌曲，尝试解锁失败")
+            else if (fee === 4) self.$message.warning("专辑歌曲，暂无资源")
+            else self.$message.warning("暂无可用音源")
+            self.isLoading = false
+            resolve("no_url")
+            if (self._inPlaylist()) self.nextSong()
+          }).catch(() => {
+            self.isLoading = false
+            console.warn('[PlayerLoading]', { action: 'error', songId: id, requestId })
+            if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
+            resolve("no_url")
+            if (self._inPlaylist()) self.nextSong()
+          })
         }).catch(err => {
+          if (err && err.message === 'REQUEST_CANCELLED') { self.isLoading = false; resolve({ cancelled: true }); return }
+          const isNoResource = err && err.message === 'NO_RESOURCE'
           self.isLoading = false
-          console.error('[PlayError]', { songId: id, stage: 'API_ERROR', requestId, error: err && err.message || String(err) })
-          if (requestId === self.playRequestId) self.$message.warning("暂无版权！")
-          resolve("check_fail")
+          console.error('[PlayError]', { songId: id, stage: isNoResource ? 'NO_RESOURCE' : 'NETWORK_ERROR', requestId, error: err && err.message || String(err) })
+          if (requestId !== self.playRequestId) self.$message.warning(isNoResource ? "暂无可用音源" : "播放失败，请稍后重试")
+          resolve("url_fail")
         })
       })
     },
+
     getSongUrl(id, requestId, br = 0) {
       if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
 
@@ -929,6 +937,22 @@ export default {
         }
         if (data.duration) this.timeDuration = data.duration
         if (data.quality) this.currentQuality = data.quality
+
+        // 【关键修复】恢复完成后，同步 curIndex 到正确歌曲位置，再解除守卫
+        // 原因：恢复时直接赋值 currentSong（不触发 watcher），但 curIndex 默认为 0，
+        // 如果恢复的歌曲不在 index=0，curIndex watcher 会把它错误覆盖成 playlist[0]。
+        // 此处用 $nextTick 在 curIndex watcher 之后执行，确保 curIndex 与 currentSong 一致。
+        this.$nextTick(() => {
+          if (data.song && data.song.id) {
+            const savedIdx = this.currentPlaylist.findIndex(s => s.id === data.song.id)
+            if (savedIdx !== -1) {
+              this.curIndex = savedIdx
+              console.log('[RestoreSync] curIndex aligned to', savedIdx)
+            }
+          }
+          this.isRestoring = false
+          this.currentSongSource = 'playlist'
+        })
       } catch (e) { /* ignore */ }
     },
   },
