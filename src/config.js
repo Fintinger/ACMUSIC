@@ -1,8 +1,6 @@
 export default {
     imgUrl: {
-        logo: require("@/assets/logo.png"),
-
-        LP: "https://picgo-jqf.oss-cn-beijing.aliyuncs.com/img/202206121121695.png"
+        logo: require("@/assets/logo.png")
     },
     api: {
         // ACMUSIC 自部署 API Gateway（环境变量覆盖，勿硬编码）

@@ -14,11 +14,7 @@ ul {
         overflow: hidden;
         border-radius: 10px;
         margin: 10px;
-        background: {
-          position: center;
-          size: 60%;
-          repeat: no-repeat;
-        };
+        background: linear-gradient(135deg, #f2f2f4 0%, #ecebfa 55%, #e0def8 100%);
 
         img {
           border-radius: 10px;
