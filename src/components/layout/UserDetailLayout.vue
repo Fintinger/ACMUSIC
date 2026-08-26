@@ -258,6 +258,43 @@ export default {
   &::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.2); }
 }
 
+/* ---------- 听歌排行/云盘：播放次数+文件大小 字体样式 & 垂直居中平齐 ---------- */
+// 根因：el-col 默认 align-items:stretch，内容靠 margin-top 偏下，封面 img/文字/数字高度各异 → 不平齐
+// 修复：把各 el-col 变成内部 flex 容器居中内容；去掉 margin-top；播放次数/文件大小加左边距保持距离
+::v-deep .tracksContainer .tracks .tracks-wrap {
+  display: flex;
+  align-items: stretch;          // el-col 等高撑满 tracks-wrap 高度
+}
+// 每个 el-col 自身变成 flex 容器，内容垂直居中（基准线对齐）
+::v-deep .tracksContainer .tracks .tracks-wrap .coverImg,
+::v-deep .tracksContainer .tracks .tracks-wrap .name-artist,
+::v-deep .tracksContainer .tracks .tracks-wrap .album,
+::v-deep .tracksContainer .tracks .tracks-wrap .duration,
+::v-deep .tracksContainer .tracks .tracks-wrap .playCount,
+::v-deep .tracksContainer .tracks .tracks-wrap .fileSize {
+  display: flex;
+  align-items: center;          // 内容在 el-col 内垂直居中 → 所有列基线平齐
+}
+// 去掉 margin-top（原本靠它偏下，现在由 align-items:center 取代）
+::v-deep .tracksContainer .tracks .tracks-wrap .name-artist { padding: 0; }
+::v-deep .tracksContainer .tracks .tracks-wrap .name-artist .name,
+::v-deep .tracksContainer .tracks .tracks-wrap .name-artist .artist { margin: 0; }
+::v-deep .tracksContainer .tracks .tracks-wrap .album { padding: 0; margin: 0; }
+::v-deep .tracksContainer .tracks .tracks-wrap .duration { padding: 0; margin: 0; }
+// 播放次数/文件大小：字体样式 + 左边距与时长保持距离
+::v-deep .tracksContainer .tracks .tracks-wrap .playCount,
+::v-deep .tracksContainer .tracks .tracks-wrap .fileSize {
+  font-size: .8rem;
+  color: $font-black-1;
+  white-space: nowrap;
+  padding-left: .6rem;          // 与时长列保持距离
+  box-sizing: border-box;
+}
+// 封面列不压缩
+::v-deep .tracksContainer .tracks .tracks-wrap .coverImg { flex-shrink: 0; }
+/* fileSize 计算公式（÷1024）需要在 TracksLayout.vue 模板改一行，
+   此处仅保留字体样式，CSS 无法覆盖内联文本内容 */
+
 ::v-deep .gridLayout {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
   gap: 20px;

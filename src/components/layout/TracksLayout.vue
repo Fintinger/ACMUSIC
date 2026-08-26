@@ -68,7 +68,7 @@
         <!--播放次数-->
         <el-col v-if="t.recordPlayCount" :span="3" class="playCount">{{ t.recordPlayCount }}</el-col>
         <!--文件大小-->
-        <el-col v-if="t.fileSize" :span="2" class="fileSize">{{ (t.fileSize / 1024 / 2024).toFixed(2) }}MB</el-col>
+        <el-col v-if="t.fileSize" :span="2" class="fileSize">{{ (t.fileSize / 1024 / 1024).toFixed(2) }}MB</el-col>
       </div>
     </el-row>
   </div>
