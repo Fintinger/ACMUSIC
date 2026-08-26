@@ -105,6 +105,11 @@ export default {
         stroke: 'currentColor', strokeWidth: 2,
         path: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
     },
+    logout: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
+    },
 
     // ---- 通用 ----
     delete: {

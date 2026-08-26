@@ -24,25 +24,35 @@
           </el-col>
           <!--右侧-->
           <el-col :span="8" class="right">
-            <el-row>
-              <el-col :span="isLogin ? 20 : 24" class="search">
+            <div class="right-inner">
+              <div class="search">
                 <div class="input-container">
                   <input placeholder="搜索单曲、歌手、专辑、MV等" type="text"
                          @focus="showSearch=true">
                   <BaseIcon name="search"/>
                 </div>
-              </el-col>
-              <el-col v-if="isLogin" :span="4" class="avatar row-col-center">
+              </div>
+              <div v-if="isLogin" class="avatar row-col-center">
                 <el-dropdown class="row-col-center" size="small" trigger="click"
                              @command="handleCommand" popper-class="user-dropdown">
                   <img v-if="profile.avatarUrl" :src="profile.avatarUrl" alt="" class="el-dropdown-link">
                   <el-dropdown-menu>
-                    <el-dropdown-item :command="goUserPage">{{ profile.nickname }}</el-dropdown-item>
-                    <el-dropdown-item :command="logout" divided class="logout-item">退出登录</el-dropdown-item>
+                    <el-dropdown-item class="user-header" disabled>
+                      <div class="user-header-inner">
+                        <img v-if="profile.avatarUrl" :src="profile.avatarUrl" alt="" class="user-header-avatar">
+                        <span class="user-header-name">{{ profile.nickname }}</span>
+                      </div>
+                    </el-dropdown-item>
+                    <el-dropdown-item :command="goUserPage" class="menu-item">
+                      <BaseIcon name="user"/>个人主页
+                    </el-dropdown-item>
+                    <el-dropdown-item :command="logout" class="menu-item logout-item">
+                      <BaseIcon name="logout"/>退出登录
+                    </el-dropdown-item>
                   </el-dropdown-menu>
                 </el-dropdown>
-              </el-col>
-            </el-row>
+              </div>
+            </div>
           </el-col>
         </el-row>
       </el-header>
