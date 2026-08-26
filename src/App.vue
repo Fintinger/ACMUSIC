@@ -34,9 +34,9 @@
               </div>
               <div v-if="isLogin" class="avatar row-col-center">
                 <el-dropdown class="row-col-center" size="small" trigger="click"
-                             @command="handleCommand" popper-class="user-dropdown">
+                             @command="handleCommand">
                   <img v-if="profile.avatarUrl" :src="profile.avatarUrl" alt="" class="el-dropdown-link">
-                  <el-dropdown-menu>
+                  <el-dropdown-menu slot="dropdown" class="user-dropdown">
                     <el-dropdown-item class="user-header" disabled>
                       <div class="user-header-inner">
                         <img v-if="profile.avatarUrl" :src="profile.avatarUrl" alt="" class="user-header-avatar">
@@ -68,8 +68,9 @@
     <div v-show="showPlayer" class="player">
       <MusicPlayer :song="song"/>
     </div>
-<!--    v-if="showSearch"-->
-    <DoSearch v-if="showSearch"  @toggleSearch="toggleSearch"/>
+    <transition name="search">
+      <DoSearch v-if="showSearch" @toggleSearch="toggleSearch"/>
+    </transition>
   </div>
 </template>
 
@@ -202,4 +203,22 @@ export default {
 @import "assets/scss/base/reset";
 //当前页面样式
 @import "assets/scss/app";
+
+/* 搜索面板过渡（分层：遮罩淡入淡出 + 内容淡入上移） */
+.search-enter-active,
+.search-leave-active {
+  transition: opacity .28s ease;
+}
+.search-enter-active .search-wrapper,
+.search-leave-active .search-wrapper {
+  transition: transform .28s ease;
+}
+.search-enter,
+.search-leave-to {
+  opacity: 0;
+}
+.search-enter .search-wrapper,
+.search-leave-to .search-wrapper {
+  transform: translateY(16px);
+}
 </style>

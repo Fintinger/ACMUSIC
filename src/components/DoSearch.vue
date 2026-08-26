@@ -1,5 +1,5 @@
 <template>
-  <div class="search">
+  <div class="search" @click.self="toggleSearch(false)">
     <div class="search-wrapper">
       <el-container class="search-container">
         <el-header class="title"><h2>搜 索</h2></el-header>
@@ -120,9 +120,12 @@ export default {
   },
   methods: {
     toggleSearch(key) {
-      setTimeout(() => {
-        this.$emit('toggleSearch', key)
-      }, 800)
+      this.$emit('toggleSearch', key)
+    },
+    onKeydown(e) {
+      if (e.key === 'Escape') {
+        this.toggleSearch(false)
+      }
     },
     search(keyword) {
       this.toggleSearch(false)
@@ -178,9 +181,11 @@ export default {
     this.concurrentRequests()
     this.$refs.input.focus()
     toggleScrollY(false)
+    window.addEventListener('keydown', this.onKeydown)
   },
   beforeDestroy() {
     toggleScrollY(true)
+    window.removeEventListener('keydown', this.onKeydown)
   }
 }
 </script>
