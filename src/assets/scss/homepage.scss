@@ -49,6 +49,7 @@
       height: 100%;
 
       .daily-card {
+        position: relative;
         width: 100%;
         height: 600px;
         border-radius: 28px;
@@ -57,6 +58,37 @@
         background-position: center top;
         cursor: pointer;
         animation: daily-bg-float 20s linear infinite alternate;
+
+        // 自适应遮罩: 默认透明(浅封面+深字可读); 深封面时叠加暗色渐变保证深字/白字对比
+        &::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          background: transparent;
+          transition: background .3s ease;
+        }
+
+        // 内容层浮于遮罩之上
+        > .el-col {
+          z-index: 1;
+        }
+
+        // 深封面: 加暗色渐变 + 标题转白
+        &.dark-bg::before {
+          background: linear-gradient(135deg,
+            rgba(0,0,0,.58) 0%,
+            rgba(0,0,0,.30) 45%,
+            rgba(0,0,0,.52) 100%);
+        }
+        &.dark-bg .daily-title .line {
+          color: #ffffff;
+          text-shadow: 0 2px 12px rgba(0,0,0,.35);
+        }
+        &.dark-bg .play-tracks-btn {
+          filter: drop-shadow(0 2px 10px rgba(0,0,0,.4));
+        }
 
         // 每日推荐大标题: 第二象限(左上), 每行2字, 深主色
         .el-col.text {

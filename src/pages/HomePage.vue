@@ -8,7 +8,7 @@
           <!-- 每日推荐大卡片 -->
           <div class="daily-area">
             <div class="wrapper-for-click-event" @click="goDailySongs">
-              <el-row v-if="dailySongs[0]" :style="{backgroundImage:`url('${dailySongs[0].al.picUrl}')`}" class="daily-card">
+              <el-row v-if="dailySongs[0]" :style="{backgroundImage:`url('${dailySongs[0].al.picUrl}')`}" :class="['daily-card', { 'dark-bg': !isLightCover(dailySongs[0].al.picUrl) }]">
                 <el-col :span="24" class="text">
                   <div class="daily-title">
                     <span class="line">每日</span>
@@ -122,6 +122,7 @@ import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 import playTracksBtn from "@/components/playTracksBtn";
 
 import {normalizeTrack, normalizePlaylist, normalizeArtist} from "@/utils/normalize";
+import coverLight from "@/mixins/coverLight";
 
 export default {
   name: "HomePage",
@@ -149,6 +150,7 @@ export default {
       playlistReady: false,
     }
   },
+  mixins: [coverLight],
   components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, GridSkeleton, playTracksBtn},
   computed: {
     isLogin() {

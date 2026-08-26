@@ -6,7 +6,7 @@
         <div v-for="n in 3" :key="n" class="skel-section"><div class="skel-sec-title"></div><div class="skel-grid"><div v-for="m in 4" :key="m" class="skel-card"><div class="skel-card-img"></div><div class="skel-card-line"></div></div></div></div>
       </div>
       <div v-else key="content" class="ud-content">
-        <div class="user-hero" v-if="profile">
+        <div class="user-hero" v-if="profile" :class="{ 'dark-bg': profile.avatarUrl && !isLightCover(profile.avatarUrl) }">
           <div class="hero-blur-bg" v-if="profile.avatarUrl" :style="{ backgroundImage: 'url(' + profile.avatarUrl + ')' }"></div>
           <div class="hero-avatar"><img :src="profile.avatarUrl" alt=""></div>
           <div class="hero-info">
@@ -62,9 +62,11 @@ import * as User from "@/api/User";
 import { getAreaName, getCityName } from "@/utils/areaCode";
 import { formatMs } from "@/utils/filters";
 import { getIpLocation } from "@/utils/ipLocation";
+import coverLight from "@/mixins/coverLight";
 
 export default {
   name: "UserDetailLayout",
+  mixins: [coverLight],
   components: {PlaylistLayout, TracksLayout, AlbumLayout, ArtistLayout, VideoLayout},
   props: { uid: { required: true } },
   data() {
@@ -186,6 +188,17 @@ export default {
   border: 1px solid rgba(255,255,255,.45);
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
   overflow: hidden;
+
+  // 深头像背景: 模糊层压暗会导致毛玻璃面板发灰、深字看不清 → 提亮面板+减弱模糊层
+  &.dark-bg {
+    background: rgba(255,255,255,.86);
+    border-color: rgba(255,255,255,.7);
+    box-shadow: 0 12px 40px rgba(0,0,0,.10);
+  }
+  &.dark-bg .hero-blur-bg {
+    opacity: .32;
+    filter: blur(50px) brightness(.35);
+  }
 
   .hero-blur-bg {
     position: absolute; inset: 0; z-index: 0;
