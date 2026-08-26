@@ -381,9 +381,9 @@ export default {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 340px;
-  height: 340px;
-  margin: -170px 0 0 -170px; /* 340x340 居中 */
+  width: 272px;
+  height: 272px;
+  margin: -136px 0 0 -136px; /* 272x272 居中，80% of 340px */
   cursor: pointer;
   transform-style: preserve-3d;
   transition: transform .9s cubic-bezier(.16, 1, .3, 1), opacity .6s ease;
@@ -434,25 +434,25 @@ export default {
 // current: 中心 Z 轴浮起, 强悬浮阴影
 .fm-current {
   z-index: 10;
-  transform: translateX(0) translateZ(120px) scale(1.03);
+  transform: translateX(0) translateZ(96px) scale(1.03);
 
   .fm-card {
     opacity: 1;
     filter: none;
     animation: fm-float 4s ease-in-out infinite;
     box-shadow:
-      0 25px 60px rgba(0,0,0,.25),
-      0 45px 100px rgba(0,0,0,.18);
+      0 20px 48px rgba(0,0,0,.25),
+      0 36px 80px rgba(0,0,0,.18);
   }
 }
 
 // previous: 左侧 rotateY 侧向
 .fm-previous {
   z-index: 5;
-  width: 290px;
-  height: 290px;
-  margin: -145px 0 0 -145px;
-  transform: translateX(-317px) translateZ(-90px) rotateY(48deg) scale(1);
+  width: 232px;
+  height: 232px;
+  margin: -116px 0 0 -116px;
+  transform: translateX(-254px) translateZ(-72px) rotateY(48deg) scale(1);
 
   .fm-card {
     opacity: .7;
@@ -461,7 +461,7 @@ export default {
   }
 
   &:hover {
-    transform: translateX(-317px) translateZ(-45px) rotateY(38deg) scale(1.03);
+    transform: translateX(-254px) translateZ(-36px) rotateY(38deg) scale(1.03);
 
     .fm-reflection {
       opacity: .21;
@@ -473,10 +473,10 @@ export default {
 // next: 右侧 rotateY 侧向
 .fm-next {
   z-index: 5;
-  width: 290px;
-  height: 290px;
-  margin: -145px 0 0 -145px;
-  transform: translateX(317px) translateZ(-90px) rotateY(-48deg) scale(1);
+  width: 232px;
+  height: 232px;
+  margin: -116px 0 0 -116px;
+  transform: translateX(254px) translateZ(-72px) rotateY(-48deg) scale(1);
 
   .fm-card {
     opacity: .7;
@@ -485,7 +485,7 @@ export default {
   }
 
   &:hover {
-    transform: translateX(317px) translateZ(-45px) rotateY(-38deg) scale(1.03);
+    transform: translateX(254px) translateZ(-36px) rotateY(-38deg) scale(1.03);
 
     .fm-reflection {
       opacity: .21;
@@ -505,13 +505,13 @@ export default {
   left: 0;
   top: 100%;
   width: 100%;
-  height: 410px;
+  height: 328px;
   overflow: hidden;
   pointer-events: none;
   z-index: 2;
   border-radius: 28px;
-  clip-path: inset(0 0 300px 0);
-  -webkit-clip-path: inset(0 0 300px 0);
+  clip-path: inset(0 0 240px 0);
+  -webkit-clip-path: inset(0 0 240px 0);
 }
 
 // 侧卡 3D 投影补偿
@@ -523,9 +523,9 @@ export default {
 .fm-reflection {
   position: absolute;
   left: 0;
-  top: 340px;
+  top: 272px;
   width: 100%;
-  height: 340px;
+  height: 272px;
   overflow: hidden;
   opacity: .25;
   filter: blur(3px);
@@ -551,7 +551,7 @@ export default {
 
 .fm-reflection img {
   width: 100%;
-  height: 340px;
+  height: 272px;
   object-fit: cover;
   display: block;
 }

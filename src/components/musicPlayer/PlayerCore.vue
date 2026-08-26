@@ -598,6 +598,11 @@ export default {
       if (playPromise !== undefined) {
         playPromise.catch(err => {
           console.log('%c[AudioPlayError] %c%s', 'background:#dc2626;color:#fff;padding:2px 6px', '', err.name + ': ' + err.message)
+          // 【修复】autoplay 拦截时回滚 isPlay，避免 UI 显示播放状态但实际未播
+          if (err.name === 'NotAllowedError') {
+            this.isPlay = false
+            console.log('[AutoPlayBlocked] isPlay rolled back to false')
+          }
         })
       }
     },
