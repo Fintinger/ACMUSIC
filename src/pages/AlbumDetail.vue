@@ -111,7 +111,7 @@ export default {
   max-width: 600px;
 }
 
-.album-content { animation: fadeUp .4s .1s ease both; }
+.album-content { animation: fadeUp .4s .1s ease backwards; }
 
 ::v-deep .comment-container {
   .comment-header-bar h2 { display: none; }
