@@ -11,5 +11,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-
+.playlist {
+  padding-bottom: 80px;
+}
 </style>

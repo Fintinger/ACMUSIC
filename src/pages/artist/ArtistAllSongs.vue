@@ -105,6 +105,10 @@ export default {
 </script>
 
 <style lang="scss">
+.listDetail {
+  padding-bottom: 80px;
+}
+
 .song {
   border-bottom: 1px solid #ededed;
 
