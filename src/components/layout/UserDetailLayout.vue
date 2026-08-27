@@ -16,11 +16,7 @@
               <span v-if="locationName">📍 {{ locationName }}</span>
               <span>{{ profile.follows }} 关注</span><span>{{ profile.followeds }} 粉丝</span>
             </p>
-            <p class="hero-login" v-if="isSelf && loginInfoText">
-              <span v-if="lastLoginInfo.location">最近登录于 {{ lastLoginInfo.location }}</span>
-              <span v-else-if="lastLoginInfo.IP">最近登录 IP {{ lastLoginInfo.IP }}</span>
-              <span v-if="loginTimeText">{{ loginTimeText }}</span>
-            </p>
+            <p class="hero-login" v-if="isSelf && lastLoginText">{{ lastLoginText }}</p>
           </div>
         </div>
         <section class="ud-section ud-card">
@@ -61,7 +57,7 @@ import VideoLayout from "@/components/layout/VideoLayout";
 import * as User from "@/api/User";
 import { getAreaName, getCityName } from "@/utils/areaCode";
 import { formatMs } from "@/utils/filters";
-import { getIpLocation } from "@/utils/ipLocation";
+import { getIpLocation, maskIP } from "@/utils/ipLocation";
 import coverLight from "@/mixins/coverLight";
 
 export default {
@@ -82,11 +78,17 @@ export default {
     profile() { return this.userInfo.profile },
     loginInfo() { return this.$store.state.UserAbout.profile },
     isSelf() { return this.uid === this.loginInfo.userId },
-    loginTimeText() {
-      return this.lastLoginInfo.time ? formatMs(this.lastLoginInfo.time, 'YYYY年MM月DD日 HH:mm') : ''
+    // 格式：「上次登录 · 浙江杭州 · 8月26日 17:37」
+    // 城市解析成功 → 城市+时间；失败 → IP打码+时间
+    lastLoginText() {
+      if (!this.lastLoginInfo.time) return ''
+      const time = formatMs(this.lastLoginInfo.time, 'M月D日 HH:mm')
+      if (this.lastLoginInfo.location) return `上次登录 · ${this.lastLoginInfo.location} · ${time}`
+      if (this.lastLoginInfo.IP) return `上次登录 · IP ${maskIP(this.lastLoginInfo.IP)} · ${time}`
+      return `上次登录 · ${time}`
     },
     loginInfoText() {
-      return !!(this.lastLoginInfo.location || this.lastLoginInfo.IP || this.loginTimeText)
+      return !!this.lastLoginInfo.time
     }
   },
   methods: {
