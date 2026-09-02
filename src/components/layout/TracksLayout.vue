@@ -11,12 +11,12 @@
     <el-row v-for="t in list" :key="t.id" class="tracks">
       <div class="tracks-wrap" @dblclick="songClk(t)">
         <template cover-img>
-          <el-col v-if="t.al" :span="2" class="coverImg"><img :src="t.al.picUrl" alt="" height="50"></el-col>
+          <el-col v-if="t.al" :span="2" class="coverImg"><cover-image :src="t.al.picUrl" :alt="t.name + '的封面'" height="50"/></el-col>
           <el-col v-else-if="t.album" :span="2" class="coverImg">
-            <img v-if="t.album.picUrl" :src="t.album.picUrl" alt="" height="50">
+            <cover-image v-if="t.album.picUrl" :src="t.album.picUrl" :alt="t.name + '的封面'" height="50"/>
           </el-col>
           <el-col v-else :span="2" class="coverImg">
-            <img :src="defaultImg" alt="" height="50">
+            <cover-image :src="defaultImg" :alt="t.name + '的封面'" height="50"/>
           </el-col>
 
         </template>
@@ -77,10 +77,11 @@
 <script>
 import {mapActions} from 'vuex'
 import scoText from "@/components/scoText";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "TracksLayout",
-  components: {scoText},
+  components: {scoText, CoverImage},
   props: {
     list: {
       type: Array,

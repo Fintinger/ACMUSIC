@@ -3,8 +3,8 @@
     <li v-for="album in list" :key="album.id" class="album">
       <el-card :body-style="{ padding: 0}" shadow="never" @click.native="alClk(album.id)">
         <div class="img-wrapper">
-          <img :src="album.picUrl | imgParam('300y300')"
-               alt="" class="image">
+          <cover-image :src="album.picUrl | imgParam('300y300')"
+                       :alt="album.name + '的封面'" custom-class="image"/>
         </div>
         <div class="info">
           <scoText class="albumName">{{ album.name }}</scoText>
@@ -32,10 +32,11 @@
 <script>
 import scoText from "@/components/scoText";
 import playTracksBtn from "@/components/playTracksBtn";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "AlbumLayout",
-  components: {scoText,playTracksBtn},
+  components: {scoText,playTracksBtn, CoverImage},
   props: {
     list: {
       type: Array,

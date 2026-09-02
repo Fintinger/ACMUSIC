@@ -24,7 +24,7 @@
         <h2>相关推荐</h2>
         <div class="simi-grid">
           <div v-for="v in simiVideo" :key="v[si_id]" class="simi-card" @click="simiClickEvt(v[si_id])">
-            <div class="simi-cover"><img :src="v[si_cover]" alt=""></div>
+            <div class="simi-cover"><cover-image :src="v[si_cover]" :alt="v[si_name] + '的封面'"/></div>
             <div class="simi-name">{{ v[si_name] }}</div>
             <div class="simi-artist" v-if="!v[si_arName].length">{{ v[si_arName] }}</div>
             <div class="simi-artist" v-if="v[si_arName].length">
@@ -51,10 +51,11 @@
 <script>
 import vidPlayer from "@/components/vidPlayer";
 import CommentLayout from "@/components/layout/CommentLayout";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "VideoPlayerLayout",
-  components: {vidPlayer, CommentLayout},
+  components: {vidPlayer, CommentLayout, CoverImage},
   props: {
     url: { type: String, required: true },
     detail: { type: Object, required: true },

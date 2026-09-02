@@ -3,7 +3,7 @@
     <li v-for="mv in list" :key="mv.id" class="list-item mv" @click="mvClk(mv.id)">
       <el-card :body-style="{ padding: 0 }">
         <div class="imgContainer">
-          <img :src="mv[picName] | imgParam('500y280')" class="image">
+          <cover-image :src="mv[picName] | imgParam('500y280')" :alt="mv.name + '的封面'" custom-class="image"/>
         </div>
         <div class="moreInfo">
           <div class="mvName">{{ mv.name }}</div>
@@ -20,8 +20,11 @@
 </template>
 
 <script>
+import CoverImage from "@/components/common/CoverImage";
+
 export default {
   name: "MvLayout",
+  components: { CoverImage },
   props: {
     list: { type: Array, required: true },
     picName: { type: String, default: 'cover' }

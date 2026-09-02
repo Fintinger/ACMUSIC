@@ -22,7 +22,7 @@
       <div class="hero-bg" :style="{backgroundImage: `url(${arBasicInfo.img1v1Url||arBasicInfo.picUrl})`}"></div>
       <div class="hero-content">
         <div class="hero-avatar">
-          <img :src="arBasicInfo.img1v1Url||arBasicInfo.picUrl" alt="">
+          <cover-image :src="arBasicInfo.img1v1Url||arBasicInfo.picUrl" :alt="arBasicInfo.name + '的头像'"/>
         </div>
         <div class="hero-info">
           <h1 class="hero-name">{{ arBasicInfo.name }}</h1>
@@ -94,11 +94,12 @@ import AlbumLayout from "@/components/layout/AlbumLayout";
 import ArtistLayout from "@/components/layout/ArtistLayout";
 import MvLayout from "@/components/layout/MvLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "ArtistDetail",
   props: ["id"],
-  components: {TracksLayout, AlbumLayout, ArtistLayout, MvLayout, VideoLayout},
+  components: {TracksLayout, AlbumLayout, ArtistLayout, MvLayout, VideoLayout, CoverImage},
   data() {
     return {
       arBasicInfo: {},

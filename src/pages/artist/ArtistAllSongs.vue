@@ -2,8 +2,8 @@
   <div v-cloak class="listDetail">
     <el-row class="ar-basic-info">
       <el-col :span="6">
-        <div class="imgContainer"><img :alt="arBasicInfo.picId" :src="arBasicInfo.img1v1Url||arBasicInfo.picUrl"
-                                       class="artist"></div>
+        <div class="imgContainer"><cover-image :alt="arBasicInfo.name + '的头像'" :src="arBasicInfo.img1v1Url||arBasicInfo.picUrl"
+                                       custom-class="artist"/></div>
       </el-col>
       <el-col :span="18">
         <el-row class="ar-name">
@@ -24,10 +24,11 @@
 <script>
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "ArtistAllSongs",
-  components: {LoadMore, TracksLayout},
+  components: {LoadMore, TracksLayout, CoverImage},
   data() {
     return {
       arBasicInfo: {},

@@ -5,7 +5,7 @@
       <GridSkeleton v-if="searchLoading" :count="6" type="artist"/>
       <div v-if="!searchLoading" class="user-list">
         <div v-for="u in list" :key="u.userId" class="user-card" @click="uClk(u.userId)">
-          <div class="user-avatar"><img :src="u.avatarUrl" alt=""></div>
+          <div class="user-avatar"><cover-image :src="u.avatarUrl" :alt="u.nickname + '的头像'"/></div>
           <div class="user-info">
             <div class="user-name">
               {{ u.nickname }}
@@ -27,11 +27,12 @@
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 import {searchMixin} from "@/assets/mixin";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "UserRes",
   props: ["keyword"],
-  components: {LoadMore, GridSkeleton},
+  components: {LoadMore, GridSkeleton, CoverImage},
   mixins: [searchMixin],
   data() {
     return { id: 'userId', type: 1002, limit: 12, resultIn: 'userprofiles', countIn: 'userprofileCount', searchLoading: true }

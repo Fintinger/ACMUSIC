@@ -5,14 +5,14 @@
       <!-- 歌手 -->
       <ul v-if="name === 'artist'" class="mm-list mm-artist">
         <li v-for="ar in list" :key="ar.id" class="mm-card mm-artist-card" @click="$bus.$emit('arClk', ar.id)">
-          <img class="mm-avatar" :src="ar.img1v1Url || ar.picUrl || ar.avatarUrl" alt="">
+          <cover-image class="mm-avatar" :src="ar.img1v1Url || ar.picUrl || ar.avatarUrl" :alt="ar.name + '的头像'"/>
           <div class="mm-name">{{ ar.name }}</div>
         </li>
       </ul>
       <!-- 歌单 -->
       <ul v-else-if="name === 'playlist'" class="mm-list mm-playlist">
         <li v-for="pl in list" :key="pl.id" class="mm-card mm-playlist-card" @click="$bus.$emit('plClk', pl.id)">
-          <img class="mm-cover" :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" alt="">
+          <cover-image class="mm-cover" :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" :alt="pl.name + '的封面'"/>
           <div class="mm-info">
             <div class="mm-name">{{ pl.name }}</div>
             <div class="mm-meta"><BaseIcon name="play"/>{{ pl.playCount | Div1w(pl.playCount) }}</div>
@@ -22,7 +22,7 @@
       <!-- 专辑 -->
       <ul v-else-if="name === 'album'" class="mm-list mm-album">
         <li v-for="al in list" :key="al.id" class="mm-card mm-album-card" @click="$bus.$emit('alClk', al.id)">
-          <img class="mm-cover" :src="al.picUrl | imgParam('200y200')" alt="">
+          <cover-image class="mm-cover" :src="al.picUrl | imgParam('200y200')" :alt="al.name + '的封面'"/>
           <div class="mm-info">
             <div class="mm-name">{{ al.name }}</div>
             <div class="mm-meta">{{ albumArtists(al) }}</div>
@@ -32,7 +32,7 @@
       <!-- MV -->
       <ul v-else-if="name === 'new_mlog'" class="mm-list mm-mv">
         <li v-for="mv in list" :key="mv.id" class="mm-card mm-mv-card" @click="$bus.$emit('vClk', mv.id)">
-          <img class="mm-img" :src="mv.resource.mlogBaseData.coverUrl | imgParam('500y280')" alt="">
+          <cover-image class="mm-img" :src="mv.resource.mlogBaseData.coverUrl | imgParam('500y280')" :alt="mv.resource.mlogBaseData.text + '的封面'"/>
           <div class="mm-info">
             <div class="mm-name">{{ mv.resource.mlogBaseData.text }}</div>
             <div class="mm-meta">
@@ -48,9 +48,11 @@
 
 <script>
 const titles = { artist: "歌手", playlist: "歌单", album: "专辑", new_mlog: "MV" }
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "MultimatchLayout",
+  components: { CoverImage },
   props: {
     targetList: { type: Array, required: true },
     name: { type: String, required: true }
@@ -63,7 +65,7 @@ export default {
     albumArtists(al) {
       if (Array.isArray(al.artists)) return al.artists.map(a => a.name).join(" / ")
       if (al.artist) return al.artist.name
-      return ""
+return ""
     }
   }
 }

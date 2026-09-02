@@ -5,7 +5,7 @@
       <el-row v-else>
         <el-col :span="6">
           <div class="imgContainer">
-            <img :alt="listInfo.coverImgId" :src="listInfo.coverImgUrl">
+            <cover-image :alt="listInfo.name + '的封面'" :src="listInfo.coverImgUrl">
           </div>
         </el-col>
         <el-col class="info" :span="12">
@@ -50,10 +50,11 @@ import PlaylistInfoSkeleton from "@/components/Skeleton/PlaylistInfoSkeleton";
 import TrackListSkeleton from "@/components/Skeleton/TrackListSkeleton";
 
 import scoText from "@/components/scoText";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "listDetail",
-  components: {LoadMore, TracksLayout, CommentLayout, PlaylistInfoSkeleton, TrackListSkeleton, scoText},
+  components: {LoadMore, TracksLayout, CommentLayout, PlaylistInfoSkeleton, TrackListSkeleton, scoText, CoverImage},
   data() {
     // const LIMIT = 50, OFFSET = 50;
     return {

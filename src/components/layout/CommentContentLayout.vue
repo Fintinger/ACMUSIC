@@ -1,11 +1,11 @@
 <template>
   <div class="comment-content">
     <div class="comment-item" v-for="cm in list" :key="cm.commentId">
-      <div v-if="cm.user" class="avatar"><img :src="cm.user.avatarUrl" alt=""></div>
+      <div v-if="cm.user" class="avatar"><cover-image :src="cm.user.avatarUrl" :alt="cm.user.nickname + '的头像'"/></div>
       <div v-if="cm.user" class="main">
         <div class="name">
           <span class="nickname" @click="uClk(cm.user.userId)">{{ cm.user.nickname }}</span>
-          <span v-if="cm.user.avatarDetail" class="identityIcon"><img :src="cm.user.avatarDetail.identityIconUrl" alt=""></span>
+          <span v-if="cm.user.avatarDetail" class="identityIcon"><cover-image :src="cm.user.avatarDetail.identityIconUrl" :alt="cm.user.nickname + '的身份标识'"/></span>
           <span class="time-tag">{{ cm.time | formatMs("MM月DD日 HH:mm") }}</span>
         </div>
         <div class="content">{{ cm.content }}</div>
@@ -53,10 +53,11 @@
 <script>
 import * as comment from "@/api/Comment";
 import SendComment from "@/components/SendComment";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "CommentContentLayout",
-  components: {SendComment},
+  components: {SendComment, CoverImage},
   props: {
     list: {
       required: true,

@@ -8,7 +8,7 @@
       <div v-else key="content" class="ud-content">
         <div class="user-hero" v-if="profile" :class="{ 'dark-bg': profile.avatarUrl && !isLightCover(profile.avatarUrl) }">
           <div class="hero-blur-bg" v-if="profile.avatarUrl" :style="{ backgroundImage: 'url(' + profile.avatarUrl + ')' }"></div>
-          <div class="hero-avatar"><img :src="profile.avatarUrl" alt=""></div>
+          <div class="hero-avatar"><cover-image :src="profile.avatarUrl" :alt="profile.nickname + '的头像'"/></div>
           <div class="hero-info">
             <h1 class="hero-name">{{ profile.nickname }}<i v-if="profile.gender===1" class="el-icon-male"></i><i v-if="profile.gender===2" class="el-icon-female"></i></h1>
             <p class="hero-sig" v-if="profile.signature" :title="profile.signature">{{ profile.signature }}</p>
@@ -54,6 +54,7 @@ import TracksLayout from "@/components/layout/TracksLayout";
 import AlbumLayout from "@/components/layout/AlbumLayout";
 import ArtistLayout from "@/components/layout/ArtistLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
+import CoverImage from "@/components/common/CoverImage";
 import * as User from "@/api/User";
 import { getAreaName, getCityName } from "@/utils/areaCode";
 import { formatMs } from "@/utils/filters";
@@ -63,7 +64,7 @@ import coverLight from "@/mixins/coverLight";
 export default {
   name: "UserDetailLayout",
   mixins: [coverLight],
-  components: {PlaylistLayout, TracksLayout, AlbumLayout, ArtistLayout, VideoLayout},
+  components: {PlaylistLayout, TracksLayout, AlbumLayout, ArtistLayout, VideoLayout, CoverImage},
   props: { uid: { required: true } },
   data() {
     return {

@@ -14,7 +14,7 @@
     </div>
     <template v-else>
     <div class="album-hero">
-      <div class="album-cover"> <img :src="albumInfo.picUrl" alt=""> </div>
+      <div class="album-cover"> <cover-image :src="albumInfo.picUrl" :alt="albumInfo.name + '的封面'"/> </div>
       <div class="album-info">
         <h1 class="album-name">{{ albumInfo.name }} <small v-if="albumInfo.subType">({{ albumInfo.subType }})</small></h1>
         <p class="album-artist" v-if="albumInfo.artist" @click="arClk(albumInfo.artist.id)">🎤 {{ albumInfo.artist.name }}</p>
@@ -40,10 +40,11 @@
 <script>
 import TracksLayout from "@/components/layout/TracksLayout";
 import CommentLayout from "@/components/layout/CommentLayout";
+import CoverImage from "@/components/common/CoverImage";
 
 export default {
   name: "AlbumDetail",
-  components:{TracksLayout,CommentLayout},
+  components:{TracksLayout,CommentLayout, CoverImage},
   data() {
     return {
       albumInfo: {}, songs: [],

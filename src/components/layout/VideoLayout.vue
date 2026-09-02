@@ -4,7 +4,7 @@
       <li v-for="v in list" :key="v.vid" class="list-item v" @click="vClk(v.vid)">
         <el-card :body-style="{ padding: 0 }">
           <div class="imgContainer">
-            <img :src="v[coverImg] | imgParam('500y280')" alt="" class="image">
+            <cover-image :src="v[coverImg] | imgParam('500y280')" :alt="v.title + '的封面'" custom-class="image"/>
           </div>
           <div class="moreInfo">
             <div class="title">{{ v.title }}</div>
@@ -23,7 +23,7 @@
       <li v-for="v in list" :key="v.id" class="list-item v" @click="vClk(v.id)">
         <el-card :body-style="{ padding: 0 }">
           <div class="imgContainer">
-            <img :src="v.resource.mlogBaseData.coverUrl | imgParam('500y280')" alt="" class="image">
+            <cover-image :src="v.resource.mlogBaseData.coverUrl | imgParam('500y280')" :alt="v.resource.mlogBaseData.text + '的封面'" custom-class="image"/>
           </div>
           <div class="moreInfo">
             <div class="title">{{ v.resource.mlogBaseData.text }}</div>
@@ -41,8 +41,11 @@
 </template>
 
 <script>
+import CoverImage from "@/components/common/CoverImage";
+
 export default {
   name: "VideoLayout",
+  components: { CoverImage },
   props: {
     list: { type: Array, required: true },
     coverImg: { type: String, default: "coverUrl" },
