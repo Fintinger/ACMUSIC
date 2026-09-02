@@ -35,6 +35,53 @@
 
 ## 历史记录
 
+### 2026-09-02 — OPT-5 清理死代码
+
+### 修改内容
+清理 5 项死代码 / 残留配置，每项都已 grep 确认无外部引用：
+
+1. 删除 `src/utils/location.js`（已被 `areaCode.js` 取代）
+2. 删除 `src/utils/config/icon.js`（早期 iconify 残留，整目录变空）
+3. 删除 `src/components/layout/VoiceLayout.vue`（空壳组件，未被任何路由/页面引用）
+4. 删除 `src/store/modules/Status.js`（仅占位 `showSearchPage: false`），并从 `src/store/index.js` 模块注册中移除 `StatusAbout`
+5. 清理 `src/components/playTracksBtn.vue` 中 line 55-59 自定义 `nextTick` 方法（覆盖 Vue 内置、仅 console.log）+ 移除 line 53 注释的 `// ...mapActions(...)`
+
+### 修改文件
+- 删除 `src/utils/location.js`
+- 删除 `src/utils/config/icon.js`（同时 `src/utils/config/` 目录变空，未来可一起删目录）
+- 删除 `src/components/layout/VoiceLayout.vue`
+- 删除 `src/store/modules/Status.js`
+- 修改 `src/store/index.js`（移除 `StatusAbout` import 和注册）
+- 修改 `src/components/playTracksBtn.vue`（删除 7 行死代码）
+- 修改 `docs/PROJECT_CONTEXT.md`（同步清理：移除死代码在已知问题中的引用 +目录树）
+
+### 修改原因
+- 参考 `docs/优化.md` 中的 OPT-5 优化分析
+- 每个文件都 grep 验证无引用 → 安全删除
+- `playTracksBtn.vue` 自定义方法覆盖 Vue 内置 `nextTick`，是潜在踩坑点
+- 同步 PROJECT_CONTEXT.md 避免后续 AI 重复识别这些"已知问题"
+
+### 测试结果
+- `yarn lint` ✅（错误数从 8 降至 7 — `VoiceLayout.vue` 的 `vue/valid-template-root` 错误随之消失，剩余 7 个均为预存在）
+- `yarn build` ✅（DONE Build complete，dist 生成成功）
+
+### 注意事项
+- `src/utils/config/` 目录现在为空（仅删除子文件，未删父目录，避免 IDE 重启等副作用）
+- 后续 OPT-3b / 其他清理任务时一并删除空目录
+- `playTracksBtn.vue` 删除自定义 `nextTick` 后，未来如需真正的 next-tick 行为，可直接用 Vue 内置 `this.$nextTick(...)`
+
+### Git 建议
+- **Commit 类型**：`chore`（代码清理，不影响功能）
+- **Commit message**：`chore: remove dead code (location, icon config, VoiceLayout, Status module, custom nextTick)`
+- **包含文件**：
+  - 上述 4 个删除（git rm）
+  - `src/store/index.js`（修改）
+  - `src/components/playTracksBtn.vue`（修改）
+- **不包含文件**：
+  - `docs/PROJECT_CONTEXT.md`（docs/AI 文档，独立 docs commit）
+
+---
+
 ### 2026-09-02 — OPT-3 a11y 修复（图片 alt 文本）
 
 ### 修改内容

@@ -180,8 +180,7 @@ ACMUSIC/
 │   │   │   ├── CommentLayout.vue          # 评论区整体（含热门/最新/写评论弹窗）
 │   │   │   ├── CommentContentLayout.vue   # 单条评论渲染 + 回复/点赞/删除
 │   │   │   ├── UserDetailLayout.vue       # 用户详情（共享给 UserPage + UserDetail）
-│   │   │   ├── VideoPlayerLayout.vue      # 视频/MV 播放器外壳
-│   │   │   └── VoiceLayout.vue            # ⚠️ 空组件，未实现
+│   │   │   └── VideoPlayerLayout.vue      # 视频/MV 播放器外壳
 │   │   ├── musicPlayer/        # ⭐⭐ 播放器核心（高耦合，请勿随意重构）
 │   │   │   ├── MusicPlayer.vue    # 外壳 + mini/expand 模式 + 歌词 + 相似
 │   │   │   ├── PlayerCore.vue     # ⭐⭐ 核心控制器（1300+ 行，含播放链路、URL 降级链、缓冲预加载、状态恢复）
@@ -242,21 +241,17 @@ ACMUSIC/
 │   │   ├── index.js
 │   │   └── modules/
 │   │       ├── User.js         # profile / IS_LOGIN（命名空间 UserAbout）
-│   │       ├── Tracks.js       # currentPlaylist / isPersonalFM（命名空间 TracksAbout）
-│   │       └── Status.js       # ⚠️ 仅占位 showSearchPage，几乎未使用
+│   │       └── Tracks.js       # currentPlaylist / isPersonalFM（命名空间 TracksAbout）
 │   ├── utils/
 │   │   ├── auth.js             # ⭐ 统一登录态：setLogin / getLogin / doLogout
 │   │   ├── audioCache.js       # 音频 URL 缓存 + pending 去重（TTL 30min）
 │   │   ├── colorExtractor.js   # 封面图片 → 主色调背景（HSL 调节）
 │   │   ├── filters.js          # 全局过滤器（formatCount/formatMs/formatS/fromNow/imgParam）
 │   │   ├── ipLocation.js       # IP → 地理位置（高德 + ipwho.is 兜底）
-│   │   ├── location.js         # ⚠️ 旧版行政区划（民政部 API），已被 areaCode.js 取代
 │   │   ├── areaCode.js         # ⭐ 6 位区划代码 → 省市名（内置 GB/T 2260 表）
 │   │   ├── normalize.js        # ⭐⭐ 数据适配层（coverOf/artistOf/normalizeTrack）
 │   │   ├── title.js            # document.title 管理（路由标题 + 播放标题）
-│   │   ├── tools.js            # toggleScrollY（弹层期间锁定 body 滚动）
-│   │   └── config/
-│   │       └── icon.js         # ⚠️ 残留死文件（早期 iconify 配置）
+│   │   └── tools.js            # toggleScrollY（弹层期间锁定 body 滚动）
 │   ├── App.vue                 # 根组件（顶栏 + 路由出口 + 全局播放器 + 搜索弹层）
 │   └── main.js                 # ⭐ 入口：全局过滤器、Vue.use、$bus、登录初始化
 ├── .env                        # VUE_APP_API_BASE_URL + 高德 Key
@@ -541,19 +536,20 @@ App.vue
 
 ## 高优先级
 
-1. **`playTracksBtn.vue` 中覆盖了 Vue 内置 `nextTick`**（line 55-59）— 死代码，无业务影响但应删除
-2. **`VoiceLayout.vue` 是空壳组件**—搜索"声音"tab 仍走 `TracksLayout`
-3. **`pages/UserPage.vue` 内有重复的 cookie 解析逻辑**（`storeCookie` 方法）— 与 `utils/auth.js` 的 `setLogin` 功能重叠，应重构统一
-4. **`utils/config/icon.js` 是死文件**— 早期遗留，外部无引用
-5. **`utils/location.js` 已被 `areaCode.js` 取代**— 外部无引用，可清理
+1. **`pages/UserPage.vue` 内有重复的 cookie 解析逻辑**（`storeCookie` 方法）— 与 `utils/auth.js` 的 `setLogin` 功能重叠，应重构统一
+
+> 以下已通过 OPT-5 清理（2026-09-02 commit `chore: remove dead code`）：
+> - ~~`playTracksBtn.vue` 中覆盖了 Vue 内置 `nextTick`~~ ✅
+> - ~~`VoiceLayout.vue` 是空壳组件~~ ✅
+> - ~~`utils/config/icon.js` 是死文件~~ ✅
+> - ~~`utils/location.js` 已被 `areaCode.js` 取代~~ ✅
+> - ~~`store/modules/Status.js` 仅占位~~ ✅（连同 `store/index.js` 注册同步移除）
 
 ## 中优先级
 
-1. **`components/layout/VoiceLayout.vue` 没实现**，但路由里 `voiceRes` 仍能进入（实际渲染空白）
-2. **`store/modules/Status.js` 仅占位**，可删除或并入 UserAbout
-3. **`mixin` 路径分裂**：`src/assets/mixin/index.js` 存在但 `src/mixins/coverLight.js` 也存在—容易混淆，新代码应统一到 `src/mixins/`
-4. **`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期
-5. **`pubsub.publish('getPersonalFM', ...)` 无订阅者**：PlayerCore 在切到下一首 / 播完时 publish，没人 subscribe。FM 实际靠 HomePage 启动时一次性调用 `/personal_fm` 获取批量歌曲后由用户手动循环消费，存在 FM 不刷新体验差的问题
+1. **`mixin` 路径分裂**：`src/assets/mixin/index.js` 存在但 `src/mixins/coverLight.js` 也存在—容易混淆，新代码应统一到 `src/mixins/`
+2. **`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期
+3. **`pubsub.publish('getPersonalFM', ...)` 无订阅者**：PlayerCore 在切到下一首 / 播完时 publish，没人 subscribe。FM 实际靠 HomePage 启动时一次性调用 `/personal_fm` 获取批量歌曲后由用户手动循环消费，存在 FM 不刷新体验差的问题
 
 ## 低优先级 / 已容忍
 
