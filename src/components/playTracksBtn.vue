@@ -50,12 +50,6 @@ export default {
           this.getByAlbum(val.id);
       }
     }
-    // ...mapActions('TracksAbout', {playAllTracks: 'playAllTracks'})
-  },
-  nextTick(callback, context) {
-    console.log("nextTick");
-    console.log(callback);
-    console.log(context);
   }
 }
 </script>
