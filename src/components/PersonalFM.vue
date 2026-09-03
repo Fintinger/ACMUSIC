@@ -52,6 +52,8 @@
 </template>
 
 <script>
+import pubsub from 'pubsub-js'
+
 export default {
   name: "PersonalFM",
   props: {
@@ -64,7 +66,11 @@ export default {
       fmTimer: null,
       tiltX: 0,
       tiltY: 0,
-      coverLight: {}
+      coverLight: {},
+      // OPT-FM 自动续播（订阅 PlayerCore publish 的 'getPersonalFM'）
+      fmSubId: null,
+      fmFetching: false,
+      fmLastFetchAt: 0
     }
   },
   computed: {
@@ -201,6 +207,38 @@ export default {
       if (!this.currentList.length) return
       this.$store.state.TracksAbout.isPersonalFM = true
       this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
+    },
+    /**
+     * FM 自动续播
+     * 订阅 'getPersonalFM' 事件（PlayerCore 在 FM 模式切歌时 publish）
+     * 拉取新一批 FM 歌曲，追加到 currentPlaylist
+     * - 5 秒去抖 + in-flight 检查，避免短时间重复请求
+     * - 网络失败仅 console.error，不影响当前播放
+     */
+    fetchMoreFM() {
+      const now = Date.now()
+      if (this.fmFetching) return
+      if (now - this.fmLastFetchAt < 5000) return
+
+      this.fmFetching = true
+      this.$axios('/personal_fm', { params: { t: now } })
+        .then(res => {
+          const songs = res.data && res.data.data
+          if (!Array.isArray(songs) || !songs.length) return
+          // 记录追加前的长度，PlayerCore 据此把 curIndex 推进到新批次的首曲
+          const oldLength = this.$store.state.TracksAbout.currentPlaylist.length
+          this.$store.commit('TracksAbout/PUSH_PLAYLIST', songs)
+          this.fmLastFetchAt = Date.now()
+          // 通知 PlayerCore：列表已扩展，请在 oldLength 位置开始播
+          pubsub.publish('fmNewBatch', oldLength)
+        })
+        .catch(err => {
+          console.error('[FMRefresh] failed', err)
+          if (this.$message) this.$message.warning('FM 续播失败，请稍后再试')
+        })
+        .finally(() => {
+          this.fmFetching = false
+        })
     }
   },
   mounted() {
@@ -210,9 +248,14 @@ export default {
         this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
       }
     })
+    // 订阅 PlayerCore 发布的事件，实现 FM 列表耗尽后自动续播
+    this.fmSubId = pubsub.subscribe('getPersonalFM', () => {
+      this.fetchMoreFM()
+    })
   },
   beforeDestroy() {
     this.stopCarousel()
+    if (this.fmSubId !== null) pubsub.unsubscribe(this.fmSubId)
   }
 }
 </script>

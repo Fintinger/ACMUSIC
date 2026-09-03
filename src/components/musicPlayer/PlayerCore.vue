@@ -779,6 +779,17 @@ export default {
       this.currentSongSource = 'playlist'
       console.log('[SongState]', { action: 'playAllSong', currentSongId: this.currentSong.id, mode, requestId: this.playRequestId })
     },
+    /**
+     * FM 续播：PersonalFM 拉取新批次成功后，publish 'fmNewBatch' 并附带 startIndex
+     * 这里把 curIndex 推进到 startIndex，让 watch 链路自动加载并播放新曲
+     */
+    playFmNewBatch(msgName, startIndex) {
+      if (!this.isPersonalFM) return
+      if (typeof startIndex !== 'number' || startIndex < 0) return
+      if (startIndex >= this.currentPlaylist.length) return
+      console.log('[FMRefresh] advance curIndex', { from: this.curIndex, to: startIndex, total: this.currentPlaylist.length })
+      this.curIndex = startIndex
+    },
     clearPlaylist() {
       this.$confirm('确定清空全部播放歌曲？', '提示', {
         confirmButtonText: '确定',
@@ -1018,13 +1029,14 @@ export default {
     } catch (e) { /* ignore */ }
     this.addEventListeners()
     this.pubId = pubsub.subscribe('playAll', this.playAllSong)
+    this.fmBatchId = pubsub.subscribe('fmNewBatch', this.playFmNewBatch)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
   },
   beforeDestroy() {
     window.removeEventListener('beforeunload', this._onBeforeUnload)
     this._saveState()
-    this.removeEventListeners(); this.init(); this.clearHideTimer(); pubsub.unsubscribe(this.pubId)
+    this.removeEventListeners(); this.init(); this.clearHideTimer(); pubsub.unsubscribe(this.pubId); pubsub.unsubscribe(this.fmBatchId)
   }
 }
 </script>
