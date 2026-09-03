@@ -490,6 +490,46 @@ _autoNext() {
 
 ---
 
+## 决策 17：playAllTracks 默认重置 isPersonalFM 标志
+
+**日期**：2026-09-03
+
+**背景**：
+决策 15-16 实施后测试发现严重回归：进入 FM 模式后 `TracksAbout.isPersonalFM` 被置为 `true`，但**离开 FM 模式时无任何代码重置该标志**。`PlayerCore.nextSong()` / `_autoNext()` 检查 `isPersonalFM === true` 时直接 publish + return，导致：
+1. 普通歌单 next 按钮失效（误判为 FM 模式）
+2. 切回普通模式后所有切歌逻辑走错分支
+
+**根因**（共 2 处 pre-existing bug）：
+- `store/modules/Tracks.js:8` `playAllTracks` action 中 `context.state.isPersonalFM = false` 被注释掉
+- `App.vue:137` `this.$store.state.isPersonalFM = false` 缺少模块前缀（应该是 `TracksAbout.isPersonalFM`），重置无效
+
+**最终方案**：
+1. 新增 mutation `SET_PERSONAL_FM`（专用于设置该标志）
+2. `playAllTracks` action 入口处**默认** `commit SET_PERSONAL_FM false`（普通来源的播放请求应让标志为 false）
+3. FM 来源（PersonalFM.vue 3 处）**先 dispatch，再覆盖** `isPersonalFM = true`
+4. 同步把 `fetchMoreFM` 去抖窗口从 5s **缩短至 1.5s**，让快速连点 next 不被卡
+
+**原因**：
+1. **简单性**：单一入口（playAllTracks）控制状态切换，无需在每个调用方手动重置
+2. **对称性**：App.vue 的 songClick 重置是"事后清理"，action 内重置是"入口前置"，二者形成纵深防御
+3. **向后兼容**：playAllTracks 签名不变，外部调用无需感知
+4. **顺序约束**：PersonalFM 必须**先 dispatch 后 set true**——因为 action 内部已 commit 重置，需让重置生效后再覆盖
+
+**关键设计**：
+- action 内 commit 顺序：先 SET_PERSONAL_FM，再 REPLACE_PLAYLIST，再 publish 'playAll'
+- PersonalFM 的 3 处调用（playCard / playAllFM / initPlay 的 $on）必须先 dispatch
+- 1.5s 去抖已足够缓冲自然播放完的请求间隔（歌曲至少 1-2 分钟），同时避免快速连点 next 时被卡
+
+**影响范围**：2 个文件
+- `src/store/modules/Tracks.js`（加 1 mutation + 1 commit）
+- `src/components/PersonalFM.vue`（3 处调用顺序 + 1 行数字）
+
+**未来注意事项**：
+- 任何新增的播放入口（歌单 / 专辑 / 歌手 / 排行榜）若绕过 `playAllTracks` 直接 commit playlist，需自行重置 `isPersonalFM`
+- 1.5s 去抖是 UX 折中，若实测触发过于频繁可回调
+
+---
+
 # 未来可改进（非决策）
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。

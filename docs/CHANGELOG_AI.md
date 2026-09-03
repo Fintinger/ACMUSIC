@@ -35,6 +35,46 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-fix2 修复 next 失效 + isPersonalFM 状态污染
+
+### 修改内容
+恢复 `playAllTracks` action 的 isPersonalFM 重置逻辑（pre-existing bug），并调整 PersonalFM 调用顺序，把 fetchMoreFM 去抖窗口从 5s 缩短至 1.5s。
+
+### 修改文件
+- 修改 `src/store/modules/Tracks.js`（加 `SET_PERSONAL_FM` mutation + 恢复 commit）
+- 修改 `src/components/PersonalFM.vue`（3 处调用顺序 + 去抖 5s→1.5s）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增第 17 条决策记录）
+
+### 修改原因
+- 决策 15-16 实施后测试发现：进入 FM 模式后 `isPersonalFM` 被永久置为 `true`
+- `PlayerCore.nextSong` 检查 `isPersonalFM === true` → publish + return → 普通模式 next 按钮失效
+- `App.vue:137` 也有 bug：写的是 `state.isPersonalFM`（缺模块前缀），重置无效
+- FM 模式主动 next 还会因 5s 去抖被卡（用户连点体验差）
+
+### 关键设计
+- **入口前置**：`playAllTracks` action 入口 commit `SET_PERSONAL_FM false`，所有非 FM 来源都安全
+- **顺序覆盖**：PersonalFM 3 处调用（playCard / playAllFM / initPlay）改为"先 dispatch 后 set true"，让重置生效后再覆盖
+- **去抖优化**：5s → 1.5s，让快速连点 next 不被卡（自然播放完间隔是分钟级，1.5s 足够）
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 任何新增播放入口若绕过 `playAllTracks`，需自行重置 `isPersonalFM`
+- 1.5s 去抖是 UX 折中，若实测触发过于频繁可回调
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: reset isPersonalFM on playAllTracks + tighten FM debounce`
+- **包含**：
+  - `src/store/modules/Tracks.js`
+  - `src/components/PersonalFM.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-fix 修复 FM 续播卡住
 
 ### 修改内容
