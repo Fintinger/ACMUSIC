@@ -552,6 +552,9 @@ App.vue
 
 1. ~~**`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期~~ ✅ 2026-09-03 commit `fix: comment like uses Vue state instead of DOM`
 
+> 以下已通过本次 commit `fix: song like actually calls /like API` 修复（2026-09-03）：
+> - ~~歌曲"喜欢"功能完全没接 API（PlayerCore/MusicPlayer `toggleLike` 只本地翻 `isLiked`，`likedCount++` 是假数据；`Tracks.like` API 封装存在但从未被调用）~~ ✅ PlayerCore 真实调用 `/like`，登录后 fetch `/likelist` 填充 `likedSongIds` Set，歌曲切换时同步初始状态
+
 > 以下已通过 OPT-FM 修复（2026-09-02 commit `feat: implement FM auto-refresh`）：
 > - ~~`pubsub.publish('getPersonalFM', ...)` 无订阅者~~ ✅ PersonalFM.vue 已订阅 + 实现 fetchMoreFM（5s 去抖 + 错误处理）
 

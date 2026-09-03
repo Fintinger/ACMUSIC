@@ -35,6 +35,64 @@
 
 ## 历史记录
 
+### 2026-09-03 — FIX-song-like 歌曲喜欢真正接入 NetEase /like API
+
+### 修改内容
+让 PlayerCore / MusicPlayer 的红心按钮真实调用 `/like` API，登录后拉 `/likelist` 填充 likedSongIds Set，歌曲切换时同步 liked 状态。
+
+### 修改文件
+- 修改 `src/api/Tracks.js`（+ `likelist()` wrapper）
+- 修改 `src/components/musicPlayer/PlayerCore.vue`：
+  - 加 `likedSongIds: Set`、`likePending: boolean` data
+  - 加 `isLogin` watcher：登录变化时重新拉 `/likelist`
+  - 加 `currentSong` watcher 同步：从 Set 判断初始 `isLiked`
+  - 加 `_initLikedSet()`：fetch `/likelist` 填充 Set
+  - 改写 `toggleLike()`：登录检查 + 乐观更新 + `/like` API + 失败回滚 + emit `likeChange`
+  - mounted 启动登录后立即拉一次
+  - 加 `import * as tracks from "@/api/Tracks"`
+- 修改 `src/components/musicPlayer/MusicPlayer.vue`：
+  - 删 `isLiked: false`、`likedCount: 0` data
+  - 加 `likeMirror: false` data + `isLiked` computed
+  - mounted 监听 PlayerCore emit 的 `'likeChange'` 事件
+  - `toggleLike()` 委托给 `this.$refs.pgPanel.toggleLike()`（单数据源）
+  - 模板：去掉 `likedCount` 显示（NetEase 无此 API）
+
+### 修改原因
+- 原 `toggleLike` 只本地翻 `isLiked`，**完全没接 `/like` API**
+- `likedCount++` 是假数据（NetEase 无 likedCount 公开 API）
+- 用户点击红心后，"我的喜欢歌单"中**没有**这首歌
+- `Tracks.like()` API 封装存在但从未被调用
+
+### 关键设计
+- **单数据源**：PlayerCore 维护真实 `isLiked` + `likedSongIds` Set，MusicPlayer 通过 `$on('likeChange')` 镜像展示
+- **持久化**：likedSongIds Set 增量同步（toggleLike 成功后 add/delete），避免每次切歌查接口
+- **乐观更新 + 失败回滚**：UI 立即翻转体验好，失败不影响服务端
+- **并发保护**：`likePending` 锁，快速连点不会多次请求
+- **登录复用**：用项目 `UserAbout/isLogin` getter（与 App.vue/HomePage.vue 一致）
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 需要在浏览器验证
+- Network 标签：登录后看到 `/likelist` 请求；点红心看到 `/like?id=xxx&like=true`
+- 音乐平台「我的喜欢」歌单确认歌曲出现
+- 快速连点：只发1 次请求
+- 不同歌曲切换：liked 状态从服务端真实同步
+- 刷新页面：服务端返回的 liked 状态正确显示
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: song like actually calls /like API`
+- **包含**：
+- `src/api/Tracks.js`
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+- **不包含**：
+- docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — FIX-comment-like 评论点赞改为 Vue 状态驱动
 
 ### 修改内容

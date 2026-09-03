@@ -827,6 +827,63 @@ getNextIndex() {
 **未来注意事项**：
 - 如果未来 NetEase `/comment/like` 返回完整 `likedCount`，可去掉手动 `± 1` 改用 API 返回值
 - `likePending` 仅前端锁定，并发场景需配合服务端幂等设计
+
+---
+
+## 决策 23：歌曲喜欢功能真正接入 NetEase `/like` API
+
+**日期**：2026-09-03
+
+**背景**：
+原"喜欢歌曲"功能完全没接 NetEase API：
+- `PlayerCore.toggleLike()` 只翻本地 `this.isLiked = !this.isLiked`
+- `MusicPlayer.toggleLike()` 本地翻 + 假 `likedCount++` / `--`
+- `src/api/Tracks.js:40` 有 `like(id, like)` 封装但**从未被调用**
+- 没有 liked 状态初始化机制（歌曲切换时）
+
+用户点击红心 → 服务端零交互 → "我的喜欢歌单"始终不含当前歌曲。
+
+**调研结论**：
+- `/like?id=xxx&like=true|false` 走 `/api/song/like`，返回 `{`code: 200/301}`（301 = 未登录）
+- `/likelist` 走 `/api/song/like/get`，返回 `{`ids: number[]}` 是当前用户所有喜欢歌曲 ID
+- NetEase 没有公开 API 给单首歌曲的"喜欢总数"，所以去掉 likedCount 显示
+- `/song/detail` 不带 per-song liked 字段，必须用 `/likelist` 缓存判断
+
+**最终方案**：
+1. **Tracks.js** 加 `likelist()` wrapper
+2. **PlayerCore.vue**：
+   - data: `likedSongIds: Set`（持久化 liked歌单快照） + `likePending: boolean`
+   - `mounted` 后若已登录调 `_initLikedSet()` → `/likelist` 填充 Set
+   - `watch.isLogin`: 登录后重新拉取
+   - `watch.currentSong` (val.id 变化)：`this.isLiked = likedSongIds.has(String(val.id))`
+   - `toggleLike`：登录检查 → likePending 锁 → 乐观更新 isLiked → 调 `/like` → 成功同步 Set + emit `'likeChange'` → 失败回滚
+3. **MusicPlayer.vue**：
+   - 删本地 `isLiked` / `likedCount`
+   - 加 `likeMirror: false` data + `isLiked` computed (从 likeMirror)
+   - mounted 监听 `'likeChange'` 同步 mirror
+   - `toggleLike()` 委托给 `this.$refs.pgPanel.toggleLike()` （PlayerCore 单源）
+   - 模板去掉 likedCount 显示（NetEase 无此 API）
+
+**关键设计**：
+- **单数据源**：PlayerCore 是唯一真实状态，MusicPlayer 只做镜像展示
+- **乐观更新**：UI 立即翻转（用户体验），失败回滚
+- **持久化**：`likedSongIds` Set 跟随 toggleLike 增量同步，避免每次歌曲切换都查接口
+- **并发保护**：`likePending` 锁，快速连点不会产生多请求
+- **不引入 Vuex/Pinia**：按评论点赞同样的策略，组件级 data
+- **不存 localStorage**：likedSongIds 跟 likedSongIds 都是内存级，重新进入页面时 mounted 重新拉取（服务端是真实源）
+
+**影响范围**：3 个文件
+- `src/api/Tracks.js`（+1 wrapper）
+- `src/components/musicPlayer/PlayerCore.vue`（data + toggleLike + watchers + _initLikedSet）
+- `src/components/musicPlayer/MusicPlayer.vue`（删除 isLiked/likedCount，委托）
+- `docs/`（更新已知问题 + 决策 23 + CHANGELOG）
+
+**未来注意事项**：
+- 如果未来需要 likedCount（喜欢这首歌的人数），目前 NetEase 无公开 API，需客户端单独记录
+- `likedSongIds` 是 Set 不是数组，O(1) 查询，但占用内存（按用户喜欢数）
+- 如果用户有几千首喜欢歌曲，Set 内存约 100KB，可接受
+
+---
 - 不要把 `cm.liked` / `cm.likedCount` 替换为独立 `likeState` 字典（会增加复杂度，comment 自身已含状态）
 
 ---
