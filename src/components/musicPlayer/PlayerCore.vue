@@ -685,10 +685,18 @@ export default {
       this.curIndex = this.getNextIndex()
     },
     getNextIndex() {
+      // FM 模式：保持推荐算法给出的顺序，不走 shuffle（shuffle 会破坏 NetEase /personal_fm 的推荐排序）
+      if (this.isPersonalFM) {
+        return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
+      }
       if (this.playMode === 'random') return this._nextShuffleIndex()
       return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
     },
     getPrevIndex() {
+      // FM 模式：同上，不走 shuffle
+      if (this.isPersonalFM) {
+        return this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1
+      }
       if (this.playMode === 'random') return this._prevShuffleIndex()
       return this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1
     },
