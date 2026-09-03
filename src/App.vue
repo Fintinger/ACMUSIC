@@ -78,7 +78,6 @@
 import MusicPlayer from "@/components/musicPlayer/MusicPlayer";
 import DoSearch from "@/components/DoSearch";
 import PageBack from "@/components/common/PageBack";
-import Cookies from 'js-cookie'
 import {doLogout} from "@/utils/auth";
 import config from "./config"
 
@@ -167,7 +166,8 @@ export default {
       command();
     },
     clearAll() {
-      this.$store.state.TracksAbout.currentPlaylist = []
+      // 走 Vuex mutation，不直接修改 state（避免 strict mode 警告 + 触发响应式）
+      this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [])
       this.song = {}
     },
     toggleSearch(key) {

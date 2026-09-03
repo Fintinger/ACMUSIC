@@ -1,8 +1,9 @@
 <template>
   <div class="VideoPlay">
-    <VideoPlayerLayout :id="newId||id" :detail="detail" :nameConfig="nameConfig" :simi-click-evt="vClk"
-                       :simi-video="simiVid"
-                       :url="url"/>
+    <!-- id 为 undefined 时（如直接访问 /video 路径），不渲染子组件避免 Vue required prop 警告 -->
+    <VideoPlayerLayout v-if="newId || id" :id="newId || id" :detail="detail" :nameConfig="nameConfig" :simi-click-evt="vClk"
+                         :simi-video="simiVid"
+                         :url="url"/>
   </div>
 </template>
 
