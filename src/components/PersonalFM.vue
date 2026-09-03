@@ -177,8 +177,10 @@ export default {
     playCard(item, evt) {
       // 阻止冒泡到外层 wrapper 的 playPersonalFM
       if (evt) evt.stopPropagation()
-      this.$store.state.TracksAbout.isPersonalFM = true
+      // dispatch 先：playAllTracks 内部会重置 isPersonalFM = false
       this.$store.dispatch('TracksAbout/playAllTracks', [item])
+      // 重新设回 true，保持 FM 模式
+      this.$store.state.TracksAbout.isPersonalFM = true
       this.activeIndex = this.currentList.findIndex(s => s.id === item.id)
       this.$nextTick(() => this.startCarousel())
     },
@@ -205,20 +207,20 @@ export default {
     },
     playAllFM() {
       if (!this.currentList.length) return
-      this.$store.state.TracksAbout.isPersonalFM = true
       this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
+      this.$store.state.TracksAbout.isPersonalFM = true
     },
     /**
      * FM 自动续播
      * 订阅 'getPersonalFM' 事件（PlayerCore 在 FM 模式切歌时 publish）
      * 拉取新一批 FM 歌曲，追加到 currentPlaylist
-     * - 5 秒去抖 + in-flight 检查，避免短时间重复请求
+     * - 1.5 秒去抖 + in-flight 检查，避免快速连点 next 触发重复请求
      * - 网络失败仅 console.error，不影响当前播放
      */
     fetchMoreFM() {
       const now = Date.now()
       if (this.fmFetching) return
-      if (now - this.fmLastFetchAt < 5000) return
+      if (now - this.fmLastFetchAt < 1500) return
 
       this.fmFetching = true
       this.$axios('/personal_fm', { params: { t: now } })
@@ -244,8 +246,8 @@ export default {
   mounted() {
     this.$on('initPlay', () => {
       if (this.currentList.length) {
-        this.$store.state.TracksAbout.isPersonalFM = true
         this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
+        this.$store.state.TracksAbout.isPersonalFM = true
       }
     })
     // 订阅 PlayerCore 发布的事件，实现 FM 列表耗尽后自动续播

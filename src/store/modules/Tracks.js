@@ -4,8 +4,9 @@ export default {
     namespaced: true,//开启命名空间
     actions: {
         playAllTracks(context, list) {
-            /*//普通类型，先更新私人FM状态
-            context.state.isPersonalFM = false*/
+            // 默认重置 FM 标志：非 FM 来源的播放请求应让 isPersonalFM = false，
+            // 否则 PlayerCore.nextSong 会误判为 FM 模式导致下一首按钮失效
+            context.commit("SET_PERSONAL_FM", false)
             context.commit("REPLACE_PLAYLIST", list)
 
         /*    if (context.state.isPersonalFM) {
@@ -25,6 +26,10 @@ export default {
         }
     },
     mutations: {
+        // 设置 FM 模式标志（FM 调用方在 dispatch 后再设回 true）
+        SET_PERSONAL_FM(state, val) {
+            state.isPersonalFM = !!val
+        },
         //playList中添加歌曲
         PUSH_PLAYLIST(state, val) {
             //添加多首
