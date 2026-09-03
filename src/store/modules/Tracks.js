@@ -30,6 +30,14 @@ export default {
         SET_PERSONAL_FM(state, val) {
             state.isPersonalFM = !!val
         },
+        // FM 预加载的暂存批次：proactive 拉到的下一批 3 首歌暂存于此，
+        // 等歌曲自然结束 / 用户点 next 时由 reactive 流程应用（REPLACE_PLAYLIST + curIndex=0）
+        SET_FM_STAGED_BATCH(state, batch) {
+            state.fmStagedBatch = Array.isArray(batch) ? batch.slice(0, 3) : null
+        },
+        CLEAR_FM_STAGED_BATCH(state) {
+            state.fmStagedBatch = null
+        },
         //playList中添加歌曲
         PUSH_PLAYLIST(state, val) {
             //添加多首
@@ -59,5 +67,7 @@ export default {
         //正在播放的歌曲列表
         currentPlaylist: [],
         isPersonalFM: false,
+        // FM 暂存批次（详见 SET_FM_STAGED_BATCH）
+        fmStagedBatch: null,
     },
 }

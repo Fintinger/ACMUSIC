@@ -67,10 +67,14 @@ export default {
       tiltX: 0,
       tiltY: 0,
       coverLight: {},
-      // OPT-FM 自动续播（订阅 PlayerCore publish 的 'getPersonalFM'）
-      fmSubId: null,
+      // OPT-FM 双事件订阅：'fmPrefetch'（proactive，只拉数据）+ 'getPersonalFM'（reactive，应用或拉取）
+      fmPrefetchSubId: null,
+      fmReactiveSubId: null,
       fmFetching: false,
-      fmLastFetchAt: 0
+      fmLastFetchAt: 0,
+      // reactive 触发时若 staged 不在且 fetch 进行中，设此标志
+      // 等 fetch 完成后由 fetchAndStage 检测并立即应用
+      fmPendingApply: false
     }
   },
   computed: {
@@ -211,41 +215,79 @@ export default {
       this.$store.state.TracksAbout.isPersonalFM = true
     },
     /**
-     * FM 自动续播（替换模式）
-     * 订阅 'getPersonalFM' 事件（PlayerCore 在 FM 模式切到末尾时 publish）
-     * 拉取新一批 FM 歌曲，**替换** currentPlaylist（保持 3 首循环）
-     * - 1.5 秒去抖 + in-flight 检查，避免快速连点 next 触发重复请求
-     * - 网络失败仅 console.error，不影响当前播放
-     * - 替换后同步 PersonalFM 的 currentList（UI 始终显示 3 张卡片）
+     * FM 预加载（proactive）：PlayerCore 进入 song 3 时 publish 'fmPrefetch'
+     * 拉取新一批 FM 歌曲并暂存到 store.fmStagedBatch（**不 REPLACE_PLAYLIST**）
+     * 这样 song 3 继续播放，等歌曲自然结束时 reactive 流程再无缝切换
+     * - 1.5 秒去抖 + in-flight 检查
+     * - 若 reactive 期间已发起请求（用户在 song 3 末尾点了 next），fetch 完成后立即应用
      */
-    fetchMoreFM() {
+    fetchAndStage() {
+      this._doFetch().then(batch => {
+        if (!batch) return
+        this.$store.commit('TracksAbout/SET_FM_STAGED_BATCH', batch)
+        // 若 reactive 期间正在在等待，则 fetch 完成后立即应用
+        if (this.fmPendingApply) {
+          this.fmPendingApply = false
+          this._applyBatch(batch)
+        }
+      })
+    },
+    /**
+     * FM 应用（reactive）：歌曲自然结束 / 用户在末尾点 next 时 publish 'getPersonalFM'
+     * - 若 staged 已就绪：立即 REPLACE_PLAYLIST + curIndex=0（无缝过渡）
+     * - 若 staged 不在且无 in-flight：fetch 后应用（首次 ~200ms 静音）
+     * - 若 staged 不在但 fetch 在中：设 fmPendingApply，等待 fetch 完成
+     */
+    applyStagedOrFetch() {
+      const staged = this.$store.state.TracksAbout.fmStagedBatch
+      if (staged) {
+        this._applyBatch(staged)
+        return
+      }
+      if (this.fmFetching) {
+        // proactive fetch 还在进行，设置标志，fetch 完成后 fetchAndStage 会处理
+        this.fmPendingApply = true
+        return
+      }
+      this._doFetch().then(batch => {
+        if (batch) this._applyBatch(batch)
+      })
+    },
+    /**
+     * 公共 fetch 逻辑：1.5s 去抖 + in-flight，返回新批次或 null
+     */
+    _doFetch() {
       const now = Date.now()
-      if (this.fmFetching) return
-      if (now - this.fmLastFetchAt < 1500) return
+      if (this.fmFetching) return Promise.resolve(null)
+      if (now - this.fmLastFetchAt < 1500) return Promise.resolve(null)
 
       this.fmFetching = true
-      this.$axios('/personal_fm', { params: { t: now } })
+      return this.$axios('/personal_fm', { params: { t: now } })
         .then(res => {
           const songs = res.data && res.data.data
-          if (!Array.isArray(songs) || !songs.length) return
-          // 替换为新 3 首（不追加）
-          const next = songs.slice(0, 3)
-          this.$store.commit('TracksAbout/REPLACE_PLAYLIST', next)
+          if (!Array.isArray(songs) || !songs.length) return null
           this.fmLastFetchAt = Date.now()
-          // 通知 PlayerCore：从第 0 首开始播（curIndex = 0）
-          pubsub.publish('fmNewBatch', 0)
-          // 同步 PersonalFM 组件自己的 currentList（UI 始终显示 3 张卡片）
-          this.currentList = next
-          this.activeIndex = 0
-          this.$nextTick(() => this.startCarousel())
+          return songs.slice(0, 3)
         })
         .catch(err => {
           console.error('[FMRefresh] failed', err)
           if (this.$message) this.$message.warning('FM 续播失败，请稍后再试')
+          return null
         })
         .finally(() => {
           this.fmFetching = false
         })
+    },
+    /**
+     * 应用批次：REPLACE_PLAYLIST + 同步 PersonalFM 组件 UI + 通知 PlayerCore
+     */
+    _applyBatch(batch) {
+      this.$store.commit('TracksAbout/REPLACE_PLAYLIST', batch)
+      this.$store.commit('TracksAbout/CLEAR_FM_STAGED_BATCH')
+      this.currentList = batch
+      this.activeIndex = 0
+      this.$nextTick(() => this.startCarousel())
+      pubsub.publish('fmNewBatch', 0)
     }
   },
   mounted() {
@@ -255,14 +297,20 @@ export default {
         this.$store.state.TracksAbout.isPersonalFM = true
       }
     })
-    // 订阅 PlayerCore 发布的事件，实现 FM 列表耗尽后自动续播
-    this.fmSubId = pubsub.subscribe('getPersonalFM', () => {
-      this.fetchMoreFM()
+    // 订阅 PlayerCore 的双事件：
+    // - 'fmPrefetch'（proactive）：进入 song 3 时触发，只拉数据并 stage，不影响播放
+    // - 'getPersonalFM'（reactive）：song 3 结束 / 末尾 next 时触发，应用 staged 或重新拉
+    this.fmPrefetchSubId = pubsub.subscribe('fmPrefetch', () => {
+      this.fetchAndStage()
+    })
+    this.fmReactiveSubId = pubsub.subscribe('getPersonalFM', () => {
+      this.applyStagedOrFetch()
     })
   },
   beforeDestroy() {
     this.stopCarousel()
-    if (this.fmSubId !== null) pubsub.unsubscribe(this.fmSubId)
+    if (this.fmPrefetchSubId !== null) pubsub.unsubscribe(this.fmPrefetchSubId)
+    if (this.fmReactiveSubId !== null) pubsub.unsubscribe(this.fmReactiveSubId)
   }
 }
 </script>

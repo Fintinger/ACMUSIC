@@ -326,32 +326,12 @@ export default {
       if (!val) this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [this.currentSong])
     },
     /**
-     * FM 模式下 playlist 被 REPLACE_PLAYLIST 时（如 fetchMoreFM 完成），
-     * 若 currentSong 不在新列表中（说明它被换走了），按 curIndex 重新同步 currentSong
-     * 这是 proactive prefetch + reactive set curIndex=0 协调的关键：
-     * 若 reactive 已先 set curIndex=0（target=旧 playlist[0]），proactive 完成后此 watcher
-     * 会把 currentSong 重新指向新 playlist[curIndex]
-     */
-    currentPlaylist(newList) {
-      if (!this.isPersonalFM) return
-      if (!this.currentSong || !this.currentSong.id) return
-      const inNew = newList.findIndex(s => s.id === this.currentSong.id) !== -1
-      if (inNew) return
-      // currentSong 不在新列表里（被 REPLACE 走了），重新按 curIndex 同步
-      if (this.curIndex >= 0 && this.curIndex < newList.length) {
-        this.currentSong = newList[this.curIndex]
-      } else {
-        this.curIndex = 0
-        this.currentSong = newList[0]
-      }
-    },
-    /**
-     * FM 预加载：进入最后一首时主动 publish 'getPersonalFM'
-     * PersonalFM.fetchMoreFM 的 1.5s 去抖 + in-flight 检查保证不会重复触发
-     * _autoNext / nextSong 在末尾直接 set curIndex=0 完成过渡，proactive 只负责提前拉数据
+     * FM 预加载：进入最后一首时主动 publish 'fmPrefetch'（**只拉数据，不应用**）
+     * PersonalFM 收到后 fetch /personal_fm 并 SET_FM_STAGED_BATCH（暂存，不 REPLACE）
+     * 真正的切换由 reactive 流程在歌曲自然结束 / 用户点 next 时触发
      */
     fmShouldPrefetch(needed) {
-      if (needed) pubsub.publish('getPersonalFM', Date.now())
+      if (needed) pubsub.publish('fmPrefetch', Date.now())
     },
     'currentSong.id'() {
       this._syncTitle()
@@ -654,13 +634,12 @@ export default {
     nextSong() {
       this.onInteract()
       if (this.isPersonalFM) {
-        // FM 模式：未到末尾时顺序切，到末尾则跳到新批次第 1 首
+        // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
         if (this.curIndex < this.currentPlaylist.length - 1) {
           this.curIndex = this.curIndex + 1
         } else {
-          // 末尾：直接 set curIndex = 0（数据应已被 proactive prefetch 替换）
-          // 同时 publish 兜底：若数据未就绪则触发 fetch
-          this.curIndex = 0
+          // 末尾：通知 PersonalFM 应用 staged batch（数据应已 prefetch 完毕）
+          // curIndex 由 playFmNewBatch 在 staged 应用后推进
           pubsub.publish('getPersonalFM', new Date().getTime())
         }
         return
@@ -677,13 +656,12 @@ export default {
     _autoNext() {
       if (this.playMode === 'loop') { this._restartCurrent(); return }
       if (this.isPersonalFM) {
-        // FM 模式：未到末尾时顺序切，到末尾则跳到新批次第 1 首
+        // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
         if (this.curIndex < this.currentPlaylist.length - 1) {
           this.curIndex = this.curIndex + 1
         } else {
-          // 末尾：直接 set curIndex = 0（数据应已被 proactive prefetch 替换）
-          // 同时 publish 兜底：若数据未就绪则触发 fetch
-          this.curIndex = 0
+          // 末尾：通知 PersonalFM 应用 staged batch（proactive prefetch 应已就绪）
+          // 若是首次 FM session（无 staged），PersonalFM 会同步 fetch + apply（有 ~200ms 静音）
           pubsub.publish('getPersonalFM', new Date().getTime())
         }
         return
@@ -844,14 +822,15 @@ export default {
      * 这里把 curIndex 推进到 startIndex，让 watch 链路自动加载并播放新曲
      */
     /**
-     * FM 续播：保留为 no-op。
-     * PersonalFM.fetchMoreFM 完成时会 publish 'fmNewBatch'，但本组件已通过
-     * currentPlaylist watcher 主动同步 currentSong（见下方 watcher），
-     * 且 nextSong / _autoNext 在末尾直接 set curIndex = 0，无需此方法再推进。
-     * 保留订阅是为了不破坏 PersonalFM 的事件流。
+     * FM 续播：PersonalFM 在 reactive 路径下完成 REPLACE_PLAYLIST 后 publish 'fmNewBatch'
+     * 此时把 curIndex 推进到 startIndex（替换模式下永远传 0），让 watch 链路加载并播放新曲
+     * proactive 路径不调用此方法（PersonalFM 只 SET_FM_STAGED_BATCH，不 publish fmNewBatch）
      */
-    playFmNewBatch() {
-      // no-op: curIndex 推进由 nextSong / _autoNext / currentPlaylist watcher 处理
+    playFmNewBatch(msgName, startIndex) {
+      if (!this.isPersonalFM) return
+      if (typeof startIndex !== 'number' || startIndex < 0) return
+      if (startIndex >= this.currentPlaylist.length) return
+      this.curIndex = startIndex
     },
     clearPlaylist() {
       this.$confirm('确定清空全部播放歌曲？', '提示', {
