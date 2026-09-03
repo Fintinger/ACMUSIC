@@ -628,13 +628,75 @@ T=180.2s : audio 播新 song 1
 **影响范围**：3 个文件
 - `src/store/modules/Tracks.js`（+1 state + 2 mutations）
 - `src/components/PersonalFM.vue`（拆 fetchAndStage / applyStagedOrFetch / _doFetch / _applyBatch 4 个方法，双事件订阅）
-- `src/components/musicPlayer/PlayerCore.vue`（-1 watcher、+1 个新事件 publish）
+- `src/components/musicPlayer/PlayerCore.vue`（-1 watcher、+1 个新事件 publish、+1 lock 字段）
 
 **未来注意事项**：
 - `fmStagedBatch` 仅 FM 模式有意义，应用时 CLEAR
 - `fmPendingApply` 在 fetchAndStage 完成时检查并应用（reactive 在 proactive 期间的边缘场景）
+- `autoNextLocked` 防止 song end 期间 timeNow watcher 多次触发导致 curIndex++（见下方 bugfix）
 - 若未来 FM 批次大小可变，staged batch 也应 slice(0, N) 保持一致
 - 若从 REPLACE 模式改回 PUSH 模式，需重新设计 staged 语义
+
+---
+
+### 决策 19.1：autoNextLocked 修复"自然播完跳到第二首首"bug
+
+**日期**：2026-09-03
+
+**背景**：
+决策 19 实施后实测发现：自然播完 song 3 时，会跳到新批次第二首（curIndex=1），而非第一首（curIndex=0）。手动点击 next 正常。
+
+**根因**：
+`timeNow` watcher 在音频结束时会**多次**触发 `_autoNext()`：
+
+```js
+timeNow(n) {
+  // ...
+  if (this.sel.currentTime === this.timeDuration) this._autoNext()
+  if ((this.timeDuration - n) < 0.5 && this.sel.currentTime !== this.timeDuration) {
+    this._autoNext()
+  }
+}
+```
+
+第二个条件在 audio 距结束 0.5s 内即触发（n=179.6 → 179.7 → 179.8 ...）。每次 timeupdate 都会触发。
+
+**时序图**：
+```
+t=0ms   : audio.currentTime=179.6, timeupdate → timeNow=179.6
+t=0ms   : timeNow watcher → _autoNext (curIndex 2→0, curIndex=0 锁, audio 暂停中)
+t=0ms   : $nextTick queued
+t=1ms   : curIndex/currentSong watcher 同步 flush
+t=1ms   : audio 暂停（旧 currentTime=179.6）
+t=2ms   : audio 又触发 timeupdate（currentTime=179.7，暂停前最后一帧）
+t=2ms   : timeNow watcher → _autoNext ❌
+           curIndex=0 (已切到新批次首), 0 < 2 = true → curIndex=1
+           用户听到新批次第 2 首
+```
+
+手动点击 next 不受影响，因为没有 timeupdate 残留事件。
+
+**最终方案**：
+在 `_autoNext` 入口加 `autoNextLocked` 锁：
+
+```js
+_autoNext() {
+  if (this.autoNextLocked) return
+  this.autoNextLocked = true
+  this.$nextTick(() => {
+    this.autoNextLocked = false
+  })
+  // ... existing logic
+}
+```
+
+第一次 _autoNext 后锁住整个微任务周期（覆盖同步过渡 + 残留 timeupdate 事件），$nextTick 后释放。
+
+**影响范围**：仅 PlayerCore.vue（+1 data field + 4 行 _autoNext 入口代码）
+
+**未来注意事项**：
+- 锁覆盖同步过渡 + Vue watcher flush + 残留 audio event
+- 非 FM 模式（如普通歌单）的 _autoNext 也被锁住，但下一首歌曲的 _autoNext 是下一 tick，无影响
 
 ---
 

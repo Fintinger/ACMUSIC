@@ -35,6 +35,44 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-fix6 修复自然播完跳到第二首
+
+### 修改内容
+加 `autoNextLocked` 锁防止 song end 期间 timeNow watcher 多次触发 _autoNext。
+
+### 修改文件
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（+1 data 字段 + 4 行 _autoNext 入口代码）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（追加决策 19.1）
+- 修改 `docs/CHANGELOG_AI.md`（本条目）
+
+### 修改原因
+- 决策 19 实施后用户实测：自然播完 song 3 时跳到新批次第二首而非第一首
+- 根因：timeNow watcher 在 audio 距结束 0.5s 内即触发 _autoNext，每次 timeupdate 都触发，导致 _autoNext 被多次调用
+- 第一次 _autoNext 触发过渡（curIndex 2→0），后续 _autoNext 看到 curIndex=0 误判为"未到末尾"，执行 curIndex++ 到 1
+
+### 关键设计
+- `_autoNext` 入口加锁：`if (this.autoNextLocked) return`
+- 第一次触发后设锁，$nextTick 回调释放（覆盖同步过渡 + Vue watcher flush + 残留 audio event）
+- 不影响手动点击（无残留 timeupdate 事件）
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 锁覆盖整个微任务周期，包括 audio 暂停前的最后一两个 timeupdate
+- 普通歌单（非 FM）的 _autoNext 也被锁住，但下一首歌曲是下一 tick，无副作用
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: lock _autoNext to prevent multi-fire on natural song end`
+- **包含**：
+  - `src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-fix5 FM staged batch + 双事件路径
 
 ### 修改内容
