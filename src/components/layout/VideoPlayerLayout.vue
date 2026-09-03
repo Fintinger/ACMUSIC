@@ -41,9 +41,9 @@
     </div>
 
     <div v-else class="video-loading">
-      <div class="skel-player"></div>
-      <div class="skel-line skel-line--long"></div>
-      <div class="skel-line skel-line--short"></div>
+      <div class="skel-player skeleton-item"></div>
+      <div class="skel-line skel-line--long skeleton-item"></div>
+      <div class="skel-line skel-line--short skeleton-item"></div>
     </div>
   </div>
 </template>
@@ -177,20 +177,11 @@ export default {
   max-width: 1100px; margin: 0 auto; padding: 24px 0;
   .skel-player {
     width: 100%; aspect-ratio: 16/9; border-radius: 16px;
-    background: linear-gradient(90deg,#e8e8e8 25%,#f0f0f0 50%,#e8e8e8 75%);
-    background-size: 200% 100%; animation: shimmer 1.5s infinite;
   }
   .skel-line {
     height: 16px; border-radius: 8px; margin-top: 16px;
-    background: linear-gradient(90deg,#e8e8e8 25%,#f0f0f0 50%,#e8e8e8 75%);
-    background-size: 200% 100%; animation: shimmer 1.5s infinite;
     &--long { width: 50%; }
     &--short { width: 30%; height: 12px; }
   }
-}
-
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 </style>

@@ -2,7 +2,7 @@
   <div class="VoiceRes">
     <h2>声音</h2>
     <div v-if="searchLoading" class="skel-list">
-      <div v-for="n in 6" :key="n" class="skel-row"><div class="skel-bar"></div></div>
+      <div v-for="n in 6" :key="n" class="skel-row"><div class="skel-bar skeleton-item"></div></div>
     </div>
     <TracksLayout v-if="!searchLoading" :list="list"/>
     <el-row>
@@ -60,6 +60,5 @@ export default {
 ::v-deep .tracksContainer { margin: 0; }
 .skel-list { padding: 8px 0; }
 .skel-row { padding: 10px 0; }
-.skel-bar { height: 14px; border-radius: 6px; width: 80%; background: linear-gradient(90deg,#e8e8e8 25%,#f0f0f0 50%,#e8e8e8 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
-@keyframes shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+.skel-bar { height: 14px; border-radius: 6px; width: 80%; }
 </style>

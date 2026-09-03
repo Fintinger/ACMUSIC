@@ -2,19 +2,19 @@
   <div class="artistDetail">
     <div v-if="loading" class="artist-hero skel-hero">
       <div class="hero-content">
-        <div class="hero-avatar skel-avatar"></div>
+        <div class="hero-avatar skel-avatar skeleton-item"></div>
         <div class="hero-info">
-          <div class="skel-line skel-line--lg"></div>
-          <div class="skel-line skel-line--md"></div>
-          <div class="skel-line skel-line--sm"></div>
+          <div class="skel-line skel-line--lg skeleton-item"></div>
+          <div class="skel-line skel-line--md skeleton-item"></div>
+          <div class="skel-line skel-line--sm skeleton-item"></div>
         </div>
       </div>
     </div>
     <div v-if="loading" class="skel-sections">
       <div v-for="s in 4" :key="s" class="skel-sec">
-        <div class="skel-line skel-line--title"></div>
+        <div class="skel-line skel-line--title skeleton-item"></div>
         <div class="skel-grid">
-          <div v-for="c in 4" :key="c" class="skel-card"><div class="skel-card-img"></div><div class="skel-card-line"></div></div>
+          <div v-for="c in 4" :key="c" class="skel-card"><div class="skel-card-img skeleton-item"></div><div class="skel-card-line skeleton-item"></div></div>
         </div>
       </div>
     </div>
@@ -189,8 +189,8 @@ export default {
 ::v-deep .mvList.gridLayout { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important; }
 
 .skel-hero { border-radius: 20px; overflow: hidden; margin-bottom: 40px; background: rgba(0,0,0,.06); }
-.skel-avatar { width: 180px; height: 180px; background: #e0e0e0; border-radius: 50%; flex-shrink: 0; }
-.skel-line { height: 14px; border-radius: 6px; background: linear-gradient(90deg, #e0e0e0 25%, #eee 50%, #e0e0e0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; margin-bottom: 12px; }
+.skel-avatar { width: 180px; height: 180px; border-radius: 50%; flex-shrink: 0; }
+.skel-line { height: 14px; border-radius: 6px; margin-bottom: 12px; }
 .skel-line--lg { width: 240px; height: 28px; }
 .skel-line--md { width: 160px; }
 .skel-line--sm { width: 120px; }
@@ -199,8 +199,8 @@ export default {
 .skel-sec { margin-bottom: 44px; }
 .skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .skel-card { border-radius: 12px; overflow: hidden; background: #fff; border: 1px solid rgba(0,0,0,.04); }
-.skel-card-img { aspect-ratio: 1; background: linear-gradient(90deg, #e0e0e0 25%, #eee 50%, #e0e0e0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
-.skel-card-line { height: 12px; border-radius: 6px; margin: 10px 8px; width: 70%; background: linear-gradient(90deg, #e0e0e0 25%, #eee 50%, #e0e0e0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+.skel-card-img { aspect-ratio: 1; }
+.skel-card-line { height: 12px; border-radius: 6px; margin: 10px 8px; width: 70%; }
 
 .ar-mv-section ::v-deep .playCount,
 .ar-mv-section ::v-deep .duration,
@@ -226,5 +226,4 @@ export default {
 @for $i from 1 through 6 { .ar-section:nth-child(#{$i}) { animation-delay: #{$i*.06}s; } }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 </style>

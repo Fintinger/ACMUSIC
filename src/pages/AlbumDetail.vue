@@ -2,15 +2,15 @@
   <div class="albumDetail">
     <div v-if="loading" class="album-skel">
       <div class="skel-hero">
-        <div class="skel-cover"></div>
+        <div class="skel-cover skeleton-item"></div>
         <div class="skel-info">
-          <div class="skel-line skel-line--lg"></div>
-          <div class="skel-line skel-line--md"></div>
-          <div class="skel-line skel-line--sm"></div>
-          <div class="skel-line skel-line--sm"></div>
+          <div class="skel-line skel-line--lg skeleton-item"></div>
+          <div class="skel-line skel-line--md skeleton-item"></div>
+          <div class="skel-line skel-line--sm skeleton-item"></div>
+          <div class="skel-line skel-line--sm skeleton-item"></div>
         </div>
       </div>
-      <div class="skel-tracks"><div v-for="n in 8" :key="n" class="skel-row"><div class="skel-bar"></div></div></div>
+      <div class="skel-tracks"><div v-for="n in 8" :key="n" class="skel-row"><div class="skel-bar skeleton-item"></div></div></div>
     </div>
     <template v-else>
     <div class="album-hero">
@@ -134,16 +134,15 @@ export default {
 /* skeleton */
 .album-skel { padding-top: 40px; }
 .skel-hero { display: flex; gap: 40px; margin-bottom: 40px; }
-.skel-cover { width: 260px; height: 260px; border-radius: 16px; background: linear-gradient(90deg,#e8e8e8 25%,#f0f0f0 50%,#e8e8e8 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; flex-shrink: 0; }
+.skel-cover { width: 260px; height: 260px; border-radius: 16px; flex-shrink: 0; }
 .skel-info { flex: 1; padding-top: 16px; }
-.skel-line { height: 14px; border-radius: 6px; margin-bottom: 14px; background: linear-gradient(90deg,#e8e8e8 25%,#f0f0f0 50%,#e8e8e8 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
+.skel-line { height: 14px; border-radius: 6px; margin-bottom: 14px; }
 .skel-line--lg { width: 60%; height: 28px; }
 .skel-line--md { width: 40%; }
 .skel-line--sm { width: 30%; height: 12px; }
 .skel-tracks { margin-top: 20px; }
 .skel-row { padding: 12px 0; }
-.skel-bar { height: 14px; border-radius: 6px; width: 70%; background: linear-gradient(90deg,#e8e8e8 25%,#f0f0f0 50%,#e8e8e8 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
+.skel-bar { height: 14px; border-radius: 6px; width: 70%; }
 
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 </style>
