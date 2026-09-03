@@ -133,7 +133,6 @@ export default {
     },
     songClick(song) {
       //更新私人FM 标志
-      console.log('[SongClickInput]', { id: song && song.id, name: song && song.name, source: 'unknown' })
       this.$store.state.isPersonalFM = false
       this.song = { ...song }
     },
@@ -160,11 +159,7 @@ export default {
     },
     logout() {
       if (confirm('是否退出登录')) {
-        console.log("清除所有数据");
         doLogout();
-      } else {
-        console.log(Cookies.get())
-        console.log("取消退出");
       }
     },
     handleCommand(command) {

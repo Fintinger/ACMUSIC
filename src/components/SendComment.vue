@@ -68,7 +68,6 @@ export default {
           }
           this.$emit('updateNewestComment')
           this.commentContent = ""
-          console.log(res);
         })
       } else {
         alert('评论不为空')

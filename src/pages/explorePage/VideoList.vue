@@ -103,7 +103,6 @@ export default {
       this.offset++;
       this.loadingMore = true
       this.getRecommendedVideos().then(res => {
-        console.log(res);
         res.data.datas.forEach(val => {
           if (this.renderList.findIndex(item => item.vid === val.vid) === -1) {
             this.renderList.push(val.data)

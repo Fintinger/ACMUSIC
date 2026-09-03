@@ -160,9 +160,7 @@ export default {
       return tracksApi.detail(ids)
     },
     songClk(song) {
-      console.log('[DoSearchClick]', song && song.id, song && song.name)
       this.getCoverUrl(song.id).then(res => {
-        console.log('[DoSearchEmit]', res.data.songs[0] && res.data.songs[0].id, res.data.songs[0] && res.data.songs[0].name)
         this.$bus.$emit('songClk', res.data.songs[0])
       })
     },

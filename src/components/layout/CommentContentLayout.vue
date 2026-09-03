@@ -149,7 +149,6 @@ export default {
         type: 'warning'
       }).then(() => {
         comment.del(this.type, this.id, cm.commentId).then(res => {
-          console.log(res);
           //更新最新评论数据
           this.$emit('updateNewestComment')
           this.$message({

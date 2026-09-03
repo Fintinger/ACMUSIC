@@ -61,14 +61,12 @@ export default {
       this.albumInfo = {}; this.songs = []; this.loading = true
       albumApi.getDetail(this.id).then(res => {
         this.albumInfo = res.data.album; this.songs = res.data.songs
-        console.log('[AlbumDetail] loaded, name:', this.albumInfo.name, 'songs:', this.songs.length)
       }).catch(err => {
         console.error('[AlbumDetail] load error:', err)
       }).finally(() => { this.loading = false })
     }
   },
   activated() {
-    console.log('[AlbumDetail] activated, id:', this.id, 'query:', this.$route.query.id)
     this.loadAlbum()
   }
 }

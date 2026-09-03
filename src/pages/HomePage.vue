@@ -224,7 +224,6 @@ export default {
       setTimeout(() => { if (pending > 0) { pending = 0; this[readyKey] = true } }, 3000)
     },
     goDailySongs() {
-      console.log('goDailySongs');
       //路由到每日推荐界面
       this.$router.push({
         name: "dailySongs",

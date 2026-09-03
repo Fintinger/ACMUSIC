@@ -342,7 +342,7 @@ export default {
         .then(this.$axios.spread((tracks, list) => {
           this.simiTracks = tracks.data.songs || []
           this.simiPlaylist = list.data.playlists || []
-        })).catch(err => { console.log(err.message) })
+        })).catch(err => { console.error(err.message) })
     },
     togglePlay() { const p = this.$refs.pgPanel; if (p) p.isPlay ? p.pauseSong() : p.playSong() },
     prevTrack() { if (this.$refs.pgPanel) this.$refs.pgPanel.preSong() },

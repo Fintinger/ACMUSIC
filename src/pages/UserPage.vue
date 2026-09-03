@@ -98,7 +98,7 @@ export default {
         }
       }).catch(err => {
         alert("登陆失败")
-        console.log(err.message)
+        console.error(err.message)
       })
     },
     //设置cookie

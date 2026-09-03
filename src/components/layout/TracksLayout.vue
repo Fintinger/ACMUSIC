@@ -103,7 +103,6 @@ export default {
       this.$bus.$emit('mvClk', id)
     },
     songClk(song) {
-      console.log('[TracksLayoutClick]', song && song.id, song && song.name)
       this.$bus.$emit('songClk', song)
     },
     arClk(id) {

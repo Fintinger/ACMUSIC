@@ -69,7 +69,6 @@ export default {
           let newVid = res.data.data
           //保存mblog转换后的新id
           this.newId = newVid
-          console.log(newVid);
           this.getVidDetail(newVid).then(res => {
             //正常，是视频
             this.detail = res.data.data;

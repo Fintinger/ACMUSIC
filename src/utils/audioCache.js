@@ -12,7 +12,6 @@ export function setAudioCache(id, url) {
   try {
     cache.set(id, { url, timestamp: Date.now() })
     pending.delete(id)
-    console.log('[AudioCache]', { action: 'set', songId: id })
   } catch (e) { /* ignore */ }
 }
 
@@ -20,15 +19,12 @@ export function getAudioCache(id) {
   try {
     const entry = cache.get(id)
     if (!entry) {
-      console.log('[AudioCache]', { action: 'miss', songId: id })
       return null
     }
     if (Date.now() - entry.timestamp > TTL) {
       cache.delete(id)
-      console.log('[AudioCache]', { action: 'expired', songId: id })
       return null
     }
-    console.log('[AudioCache]', { action: 'hit', songId: id })
     return entry.url
   } catch (e) { return null }
 }
@@ -45,11 +41,9 @@ export function getAudioUrl(id, fetchFn) {
 
   const existing = pending.get(id)
   if (existing) {
-    console.log('[AudioPending]', { action: 'reuse', songId: id })
     return existing
   }
 
-  console.log('[AudioPending]', { action: 'start', songId: id })
   const promise = fetchFn().then(url => {
     if (url) setAudioCache(id, url)
     return url

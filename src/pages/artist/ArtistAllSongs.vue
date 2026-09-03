@@ -79,7 +79,6 @@ export default {
       this.loadSongs(this.id)
     },
     songClk(song) {
-      console.log(song)
       this.$bus.$emit('songClk', song)
     }
   },

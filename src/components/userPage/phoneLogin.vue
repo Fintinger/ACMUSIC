@@ -70,7 +70,6 @@ export default {
           this.login(this.ruleForm.phoneNumber, this.ruleForm.verifyCode)
           // alert('submit!');
         } else {
-          console.log('error submit!!');
           return false;
         }
       });
@@ -105,7 +104,7 @@ export default {
                 callback();
               }
             }, err => {
-              console.log(err.message);
+              console.error(err.message);
             })
       }
     },
@@ -122,9 +121,8 @@ export default {
                 clearInterval(this.tipsTimer)
                 this.tips = 60
               }
-              console.log(res.data);
             }, err => {
-              console.log(err.message);
+              console.error(err.message);
             })
       }
     },
@@ -137,7 +135,7 @@ export default {
             // console.log("%cphoneLoginData:","color:#335eea;background-color:#eaeffd")
             // console.log(res.data);
           }, err => {
-            console.log(err.message);
+            console.error(err.message);
           })
     }
   },
