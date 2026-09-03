@@ -658,13 +658,17 @@ export default {
     },
     // 自动播放到结尾触发：loop 模式重播当前曲
     _autoNext() {
-      // 防止 song end 触发多次：timeNow watcher 在音频暂停前会持续触发 _autoNext
-      // 第一次触发后加锁，$nextTick 后释放（覆盖同步过渡 + 残留 timeupdate 事件）
+      // 防止 song end 触发多次：timeNow watcher + audio 'ended' 事件都可能触发 _autoNext
+      // 第一次触发后：
+      // 1) 同步暂停 audio（阻止后续 timeupdate）
+      // 2) setTimeout 锁 1s（比 $nextTick 更长，覆盖所有残留事件）
+      // 双保险：$nextTick 在 microtask 释放，但 audio 事件在 macrotask，可能仍在锁释放后触发
       if (this.autoNextLocked) return
       this.autoNextLocked = true
-      this.$nextTick(() => {
+      if (this.sel && !this.sel.paused) this.sel.pause()
+      setTimeout(() => {
         this.autoNextLocked = false
-      })
+      }, 1000)
       if (this.playMode === 'loop') { this._restartCurrent(); return }
       if (this.isPersonalFM) {
         // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
@@ -862,6 +866,7 @@ export default {
       this.sel.addEventListener('pause', this._onPause)
       this.sel.addEventListener('progress', this._onProgress)
       this.sel.addEventListener('error', this._onAudioError)
+      this.sel.addEventListener('ended', this._onAudioEnded)
     },
     removeEventListeners() {
       this.sel.removeEventListener('timeupdate', this._currentTime)
@@ -869,6 +874,7 @@ export default {
       this.sel.removeEventListener('pause', this._onPause)
       this.sel.removeEventListener('progress', this._onProgress)
       this.sel.removeEventListener('error', this._onAudioError)
+      this.sel.removeEventListener('ended', this._onAudioEnded)
     },
     _currentTime() {
       if (this.sel) {
@@ -911,6 +917,13 @@ export default {
           this.bufferedTime = b.end(b.length - 1)
         }
       } catch (e) { /* ignore */ }
+    },
+    /**
+     * audio 'ended' 事件：audio 播放到结尾时触发
+     * 这是 _autoNext 的主触发器（timeNow watcher 是兜底，处理 audio 异常未触发 ended 的场景）
+     */
+    _onAudioEnded() {
+      this._autoNext()
     },
     _onAudioError() {
       const curSrc = this.sel.src || this.audioLastSrc
