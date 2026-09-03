@@ -35,6 +35,56 @@
 
 ## 历史记录
 
+### 2026-09-03 — REFACTOR-fm-state isPersonalFM 从 Vuex 下沉到 PlayerCore
+
+### 修改内容
+将 `isPersonalFM` 从 Vuex store 下沉到 PlayerCore 内部 data，通过 `$bus` 通信。删除 `SET_PERSONAL_FM` mutation，PersonalFM/HomePage/App 改用 `$bus.$emit('fm-mode', val)` 通知 PlayerCore。
+
+### 修改文件
+- 修改 `src/components/musicPlayer/PlayerCore.vue`：
+  - `mapState` 删除 `isPersonalFM`
+  - `data()` 加 `isPersonalFM: false`（与 `playMode` 同类）
+  - `mounted` 监听 `$bus.$on('fm-mode', this._fmModeHandler)`
+  - `beforeDestroy` 清理 `$bus.$off('fm-mode', this._fmModeHandler)`
+  - `isPersonalFM` watcher 行为保留（true→false 时 REPLACE_PLAYLIST [currentSong]）
+- 修改 `src/components/PersonalFM.vue`（3 处）：`this.$store.state.TracksAbout.isPersonalFM = true` → `this.$bus.$emit('fm-mode', true)`
+- 修改 `src/pages/HomePage.vue`（1 处）：同上
+- 修改 `src/App.vue`（1 处 + 修 bug）：`this.$store.state.isPersonalFM = false`（缺模块前缀，写到根 state，**实际没生效**）→ `this.$bus.$emit('fm-mode', false)`
+- 修改 `src/store/modules/Tracks.js`：
+  - 删 `state.isPersonalFM: false`
+  - 删 `SET_PERSONAL_FM` mutation
+  - `playAllTracks` action 内不再 commit `SET_PERSONAL_FM`
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增决策 26 + 划掉"未来可改进"项 1）
+
+### 修改原因
+- "未来可改进"中识别：`isPersonalFM` 与 `playMode` 同性质但分散在 Vuex，**不一致**
+- 4 处组件跨边界直接 `state.X = true`，违反 Vuex 原则
+- App.vue:136 隐藏 bug（写错根 state，完全没生效）
+- PlayerCore 依赖 Vuex 读取纯内部状态 → 跨组件耦合
+
+### 关键设计
+- **单数据源**：PlayerCore.data 唯一真源
+- **唯一写入点**：PlayerCore mounted 监听 `$bus('fm-mode')`，所有外部请求都走此
+- **不引入新依赖**：$bus 已有 25+ 事件（`clearPlaylist` / `loggedIn` / `vClk` 等），与项目模式一致
+- **零业务逻辑变化**：PlayerCore 内部 6 处 `if (this.isPersonalFM)` 逻辑全部保持
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+- `yarn lint` ⚠️ 8 个错误，其中 7 个为预存在，**1 个为上轮 commit 漏修**（`App.vue:81 'Cookies' is defined but never used`——上轮删 `console.log(Cookies.get())` 后 import 未清理，**不属于本任务范围**，建议下个 commit 顺手修）
+
+### 注意事项
+- `$bus('fm-mode')` 是新的全局事件，命名遵循 `$bus('xxx')` 风格
+- 写入唯一性：禁止在 PlayerCore 之外的任何地方直接修改 `isPersonalFM`（包括 Vuex 路径）
+- 之后新增的 FM 相关跨组件通信，沿用 `$bus('fm-mode:xxx')` 风格
+
+### Git 建议
+- **Commit 类型**：`refactor`
+- **Commit message**：`refactor: move isPersonalFM from Vuex to PlayerCore (with $bus)`
+- **包含**：5 个源文件
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — CHORE-console-cleanup 清理临时 console 日志
 
 ### 修改内容

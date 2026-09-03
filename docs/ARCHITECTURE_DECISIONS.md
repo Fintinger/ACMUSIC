@@ -892,7 +892,7 @@ getNextIndex() {
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。
 
-1. **状态管理拆分**：可以把播放器的 `isPersonalFM` 标志从 Vuex 移到 PlayerCore 内部（避免跨组件耦合）
+1. ~~**状态管理拆分**：可以把播放器的 `isPersonalFM` 标志从 Vuex 移到 PlayerCore 内部（避免跨组件耦合）~~ ✅ 2026-09-03 commit `refactor: move isPersonalFM from Vuex to PlayerCore`
 2. ~~**API 封装补全**：目前 50% 的 API 调用直接写在页面里，可统一封装到 `src/api/*.js`~~ ✅ 2026-09-03 commit `refactor: consolidate scattered API calls into api wrappers`
 3. **TypeScript 迁移**：项目庞大，可逐步迁移到 Vue 3 + TS + Pinia（但需要用户授权且是大工程）
 4. **CSS 主题化**：变量已存在，可考虑 dark mode 支持
@@ -1007,5 +1007,50 @@ getNextIndex() {
 - 新增代码如需调试：优先用语义化标签（`[Context] message`）
 - `console.error` / `console.warn` 永远保留
 - 生产构建依赖 terser 剥离 `console.log` / `console.trace`（vue.config.js 配置），但开发体验仍应保持干净
+
+---
+
+## 决策 26：isPersonalFM 从 Vuex 下沉到 PlayerCore（$bus 通信）
+
+**日期**：2026-09-03
+
+**背景**：
+之前"未来可改进"中列出"状态管理拆分：`isPersonalFM` 从 Vuex 移到 PlayerCore"。本次完成：
+
+**问题**：
+1. `isPersonalFM` 业务上是 PlayerCore 的"播放模式标志"（FM / 普通歌单），与 `playMode`（order/random/loop）同性质
+2. `playMode` 已是 PlayerCore.data；`isPersonalFM` 却在 Vuex → **不一致**
+3. 4 处组件跨边界直接 `this.$store.state.X = true` 写入，**违反 Vuex 原则**
+4. **App.vue:136 隐藏 bug**：`this.$store.state.isPersonalFM = false`（缺 `TracksAbout` 模块前缀，实际写到根 state，**完全没生效**）
+5. PlayerCore 依赖 Vuex 读取这个纯内部状态，跨组件耦合
+
+**最终方案**（方案B：$bus 通信）：
+- `PlayerCore.data()` 加 `isPersonalFM: false`（与 `playMode` 同列）
+- PersonalFM / HomePage / App 改用 `this.$bus.$emit('fm-mode', true|false)` 通知
+- PlayerCore `mounted` 监听 `'fm-mode'` 事件，**唯一写入点**
+- 保留 `isPersonalFM` watcher（line 353）行为：true→false 时 `REPLACE_PLAYLIST [currentSong]`
+- `mapState` 去掉 `isPersonalFM`（只保留 `currentPlaylist`）
+- Vuex store 删除 `isPersonalFM` state 和 `SET_PERSONAL_FM` mutation
+
+**附带修复**：
+- App.vue:136 `state.isPersonalFM = false`（写错根 state）→ `$bus.$emit('fm-mode', false)`（真实生效）
+
+**关键设计**：
+- `$bus` 是项目已有 25+ 事件的成熟模式（参考 `clearPlaylist` / `loggedIn` / `vClk` 等）
+- 不引入新依赖（provide/inject、ref chain 都不如 $bus 直观）
+- 写入唯一化（PlayerCore mounted 唯一监听点），减少分散写入风险
+- 读取保持不变（PlayerCore 内部 6 处 `if (this.isPersonalFM)` 逻辑零变化）
+
+**影响范围**：5 个文件
+- `src/components/musicPlayer/PlayerCore.vue`（-1 mapState、+1 data、+1 mounted listener、+1 beforeDestroy 清理）
+- `src/components/PersonalFM.vue`（3 处写改 $bus）
+- `src/pages/HomePage.vue`（1 处写改 $bus）
+- `src/App.vue`（1 处写改 $bus + 修 bug）
+- `src/store/modules/Tracks.js`（删 state + 删 mutation + 删 playAllTracks 内的 commit）
+
+**未来注意事项**：
+- `isPersonalFM` 完全属于 PlayerCore 内部状态，类似 `playMode` / `fmShouldPrefetch`
+- 任何跨组件切换 FM 模式必须走 `$bus.$emit('fm-mode', val)`，**禁止**再写回 Vuex
+- 未来若需要更多跨组件 FM 相关通信，可加 `'fm-mode:reason'` / `'fm-mode:source'` 等细分事件
 
 ---
