@@ -954,3 +954,58 @@ getNextIndex() {
 - 替换完成不代表完成：仍建议实际跑一遍主流程（首页/搜索/歌单详情/歌手详情/MV/视频）确认无回归
 
 ---
+
+## 决策 25：清理临时 console 日志（保留必要日志）
+
+**日期**：2026-09-03
+
+**背景**：
+之前"未来可改进"中列出"大量 `console.log` / `console.trace`"。本次清理：
+- 统计：项目共 107 处 console 调用
+- 分布：PlayerCore 68 处（语义化追踪标签如 `[PlayIntent]` / `[SongState]` / `[SourceChange]`）+ 其他文件 39 处（多为开发期 `console.log('error submit!!')` 之类的临时调试）
+
+**最终方案**：
+1. **PlayerCore.vue 全部保留**：68 处 console 都是带语义化标签的播放流程追踪日志（`[PlayIntent]`、`[SongState]`、`[SourceChange]`、`[PlayRace]`、`[CurIndexGuard]`、`[PlayReady]`、`[PlayerLoading]` 等），排查播放问题必需
+2. **其他文件**：
+   - `console.log` / `console.trace` 全删除（24 处）
+   - `console.log(err.message)` 升级为 `console.error(err.message)`（3 处），错误追踪更准确
+   - `console.error` / `console.warn` 全保留
+
+**结果**：
+- 清理前：107 处（log 82 + trace 10 + warn 4 + error 11）
+- 清理后：84 处（log 54 [全在 PlayerCore] + trace 10 [全在 PlayerCore] + warn 4 + error 16 [error +5]）
+- 净减 23 处，error 反而增加 5（升级更准确）
+
+**清理范围**（15 个文件）：
+- `src/utils/audioCache.js`（6 处 log 全部删）
+- `src/App.vue`（4 处 log 全部删）
+- `src/components/userPage/phoneLogin.vue`（1 删 + 3 升级）
+- `src/pages/AlbumDetail.vue`（2 处 log 删，warn/error 保留）
+- `src/components/DoSearch.vue`（2 处 log 删）
+- `src/components/musicPlayer/MusicPlayer.vue`（1 升级 log→error）
+- `src/pages/UserPage.vue`（1 升级 log→error）
+- `src/pages/search/TrackRes.vue`（1 处 log 删）
+- `src/components/layout/TracksLayout.vue`（1 处 log 删）
+- `src/components/layout/CommentContentLayout.vue`（1 处 log 删，error 保留）
+- `src/components/SendComment.vue`（1 处 log 删）
+- `src/pages/HomePage.vue`（1 处 log 删）
+- `src/pages/VideoPlay.vue`（1 处 log 删）
+- `src/pages/explorePage/VideoList.vue`（1 处 log 删）
+- `src/pages/artist/ArtistAllSongs.vue`（1 处 log 删）
+
+**保留原则**（供未来参考）：
+- `console.error` / `console.warn` **永远保留**（生产环境排查错误必需）
+- `console.log` / `console.trace` **仅当标有语义化标签**（如 `[PlayIntent]`）才保留，作为开发期追踪
+- 临时 `console.log('error submit!!')` / `console.log(newVid)` / `console.log(res)` **全部删除**
+- 错误追踪用 `console.error` 而不是 `console.log`
+
+**影响范围**：15 个文件
+- 30 行删除（`console.log` / `console.trace`）
+- 6 行升级（`console.log` → `console.error`）
+
+**未来注意事项**：
+- 新增代码如需调试：优先用语义化标签（`[Context] message`）
+- `console.error` / `console.warn` 永远保留
+- 生产构建依赖 terser 剥离 `console.log` / `console.trace`（vue.config.js 配置），但开发体验仍应保持干净
+
+---

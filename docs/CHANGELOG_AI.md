@@ -35,6 +35,55 @@
 
 ## 历史记录
 
+### 2026-09-03 — CHORE-console-cleanup 清理临时 console 日志
+
+### 修改内容
+删除 15 个文件中的 30 处 `console.log` / `console.trace` 临时调试日志，3 处 `console.log(err.message)` 升级为 `console.error(err.message)`。PlayerCore.vue 全部 68 处保留（语义化追踪标签）。
+
+### 修改文件
+- `src/utils/audioCache.js`（6 log 删）
+- `src/App.vue`（4 log 删）
+- `src/components/userPage/phoneLogin.vue`（1 删 + 3 升级 log→error）
+- `src/pages/AlbumDetail.vue`（2 log 删，warn/error 保留）
+- `src/components/DoSearch.vue`（2 log 删）
+- `src/components/musicPlayer/MusicPlayer.vue`（1 升级）
+- `src/pages/UserPage.vue`（1 升级）
+- `src/pages/search/TrackRes.vue`（1 log 删）
+- `src/components/layout/TracksLayout.vue`（1 log 删）
+- `src/components/layout/CommentContentLayout.vue`（1 log 删）
+- `src/components/SendComment.vue`（1 log 删）
+- `src/pages/HomePage.vue`（1 log 删）
+- `src/pages/VideoPlay.vue`（1 log 删）
+- `src/pages/explorePage/VideoList.vue`（1 log 删）
+- `src/pages/artist/ArtistAllSongs.vue`（1 log 删）
+
+### 修改原因
+- 之前"未来可改进"中列出"大量 console.log / console.trace"
+- 项目散落大量临时调试 echo 风格的 log，无语义化标签
+- 这些 log 既不保留错误信息，也无法定位问题（与 PlayerCore 的语义化 log 形成对比）
+
+### 关键设计
+- **保留原则**：`console.error` / `console.warn` 永远保留（生产环境排查错误必需）
+- **PlayerCore 例外**：68 处 console 都是带语义化标签的播放流程追踪（`[PlayIntent]` / `[SongState]` / `[SourceChange]` 等），删除后排查播放问题困难 → 全部保留
+- **升级原则**：`console.log(err.message)` 升级为 `console.error(err.message)`，错误追踪更准确
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+- 净减 23 处 console（107 → 84），error 反而增加 5 处（升级）
+
+### 注意事项
+- 未来新增代码：优先用语义化标签（`[Context] message`）而不是裸 console.log
+- 生产构建依赖 terser 剥离 log/trace（vue.config.js），但开发体验仍应保持干净
+- `console.error` / `console.warn` 是必需的运行时反馈，不可删
+
+### Git 建议
+- **Commit 类型**：`chore`
+- **Commit message**：`chore: clean up console.log/trace (keep error/warn)`
+- **包含**：15 个源文件
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — REFACTOR-api-wrappers API 封装补全
 
 ### 修改内容
