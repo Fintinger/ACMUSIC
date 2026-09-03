@@ -184,8 +184,8 @@ export default {
       if (evt) evt.stopPropagation()
       // dispatch 先：playAllTracks 内部会重置 isPersonalFM = false
       this.$store.dispatch('TracksAbout/playAllTracks', [item])
-      // 重新设回 true，保持 FM 模式
-      this.$store.state.TracksAbout.isPersonalFM = true
+      // 重新设回 true，保持 FM 模式（isPersonalFM 已下沉到 PlayerCore，通过 $bus 通知）
+      this.$bus.$emit('fm-mode', true)
       this.activeIndex = this.currentList.findIndex(s => s.id === item.id)
       this.$nextTick(() => this.startCarousel())
     },
@@ -213,7 +213,8 @@ export default {
     playAllFM() {
       if (!this.currentList.length) return
       this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
-      this.$store.state.TracksAbout.isPersonalFM = true
+      // FM 模式标志（已下沉到 PlayerCore，通过 $bus 通知）
+      this.$bus.$emit('fm-mode', true)
     },
     /**
      * FM 预加载（proactive）：PlayerCore 进入 song 3 时 publish 'fmPrefetch'
@@ -295,7 +296,8 @@ export default {
     this.$on('initPlay', () => {
       if (this.currentList.length) {
         this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
-        this.$store.state.TracksAbout.isPersonalFM = true
+        // FM 模式标志（已下沉到 PlayerCore，通过 $bus 通知）
+        this.$bus.$emit('fm-mode', true)
       }
     })
     // 订阅 PlayerCore 的双事件：

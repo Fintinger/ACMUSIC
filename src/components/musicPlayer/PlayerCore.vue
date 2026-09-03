@@ -173,6 +173,8 @@ export default {
       audioUseProxy: false,
       playMode: 'order',
       shuffleOrder: [],
+      // FM 模式标志（从 Vuex 下沉到 PlayerCore 内部，PersonalFM/HomePage/App 通过 $bus 切换）
+      isPersonalFM: false,
       shufflePos: -1,
       // _autoNext 锁：防止 song end 期间 timeNow watcher 多次触发 _autoNext
       // （音频暂停前 timeupdate 事件持续触发，会让 _autoNext 被多次调用）
@@ -186,7 +188,7 @@ export default {
     }
   },
   computed: {
-    ...mapState('TracksAbout', ['currentPlaylist', 'isPersonalFM']),
+    ...mapState('TracksAbout', ['currentPlaylist']),
     isLogin() { return this.$store.getters["UserAbout/isLogin"] },
     progress() { return (this.timeNow / this.timeDuration) * 100 || 0 },
     /**
@@ -344,6 +346,10 @@ export default {
       }
     },
     volume(val) { this.sel.volume = val / 100 },
+    /**
+     * 退出 FM 模式时（如 App.vue 跳到非 FM 歌单）清空播放列表，只留当前歌曲
+     * currentPlaylist 仍在 Vuex，所以走 commit
+     */
     isPersonalFM(val) {
       if (!val) this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [this.currentSong])
     },
@@ -1193,6 +1199,9 @@ mounted() {
     this.addEventListeners()
     this.pubId = pubsub.subscribe('playAll', this.playAllSong)
     this.fmBatchId = pubsub.subscribe('fmNewBatch', this.playFmNewBatch)
+    // FM 模式标志（从 Vuex 下沉）：PersonalFM / HomePage / App 通过 $bus 通知
+    this._fmModeHandler = (val) => { this.isPersonalFM = !!val }
+    this.$bus.$on('fm-mode', this._fmModeHandler)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
     // 登录态启动后拉取一次 /likelist 填充 likedSongIds
@@ -1201,7 +1210,12 @@ mounted() {
   beforeDestroy() {
     window.removeEventListener('beforeunload', this._onBeforeUnload)
     this._saveState()
-    this.removeEventListeners(); this.init(); this.clearHideTimer(); pubsub.unsubscribe(this.pubId); pubsub.unsubscribe(this.fmBatchId)
+    this.removeEventListeners()
+    this.init()
+    this.clearHideTimer()
+    pubsub.unsubscribe(this.pubId)
+    pubsub.unsubscribe(this.fmBatchId)
+    this.$bus.$off('fm-mode', this._fmModeHandler)
   }
 }
 </script>

@@ -233,8 +233,8 @@ export default {
       })
     },
     playPersonalFM() {
-      //更新私人FM 标志
-      this.$store.state.TracksAbout.isPersonalFM = true
+      //更新私人FM 标志（已下沉到 PlayerCore，通过 $bus 通知）
+      this.$bus.$emit('fm-mode', true)
       //初次播放私人FM：只取前 3 首，列表始终保持 3 首歌循环
       this.getPersonalFM().then(res => {
         this.personalFM = (res.data.data || []).slice(0, 3)

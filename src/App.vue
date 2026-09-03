@@ -132,8 +132,9 @@ export default {
       })
     },
     songClick(song) {
-      //更新私人FM 标志
-      this.$store.state.isPersonalFM = false
+      //退出 FM 模式（isPersonalFM 已下沉到 PlayerCore，通过 $bus 通知）
+      //原实现写的是 this.$store.state.isPersonalFM = false（缺模块前缀，实际没生效）
+      this.$bus.$emit('fm-mode', false)
       this.song = { ...song }
     },
     mvClick(id) {

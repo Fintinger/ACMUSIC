@@ -4,21 +4,12 @@ export default {
     namespaced: true,//开启命名空间
     actions: {
         playAllTracks(context, list) {
-            // 默认重置 FM 标志：非 FM 来源的播放请求应让 isPersonalFM = false，
-            // 否则 PlayerCore.nextSong 会误判为 FM 模式导致下一首按钮失效
-            context.commit("SET_PERSONAL_FM", false)
+            // isPersonalFM 已下沉到 PlayerCore（data 字段）
+            // PersonalFM / HomePage / App 通过 $bus('fm-mode') 通知 PlayerCore
             context.commit("REPLACE_PLAYLIST", list)
-
-        /*    if (context.state.isPersonalFM) {
-                context.commit("REPLACE_PLAYLIST", list)
-            } else {
-                //先添加
-                context.commit("PUSH_PLAYLIST", list)
-            }*/
             //播放所有歌曲
             //subscribe in PlayCore.vue
             pubsub.publish('playAll')
-            // Vue.$bus.$emit("playAllSong", "random")
         },
         pushAllTracks(context, list) {
             //仅添加
@@ -26,10 +17,6 @@ export default {
         }
     },
     mutations: {
-        // 设置 FM 模式标志（FM 调用方在 dispatch 后再设回 true）
-        SET_PERSONAL_FM(state, val) {
-            state.isPersonalFM = !!val
-        },
         // FM 预加载的暂存批次：proactive 拉到的下一批 3 首歌暂存于此，
         // 等歌曲自然结束 / 用户点 next 时由 reactive 流程应用（REPLACE_PLAYLIST + curIndex=0）
         SET_FM_STAGED_BATCH(state, batch) {
@@ -66,7 +53,6 @@ export default {
     state: {
         //正在播放的歌曲列表
         currentPlaylist: [],
-        isPersonalFM: false,
         // FM 暂存批次（详见 SET_FM_STAGED_BATCH）
         fmStagedBatch: null,
     },
