@@ -26,17 +26,12 @@
             <span v-else>未知</span>
           </template>
           <template artist>
+            <!-- t.ar / t.artists 在 normalizeTrack 后互相备份，永远存在（见 utils/normalize.js:84-85），
+                 v-else-if / v-else 分支是死代码，删除 -->
             <scoText v-if="t.ar">
             <span v-for="(a,ind) in t.ar" :key="ind" class="artist" @click="arClk(a.id)">{{ a.name }} <i
                 v-if="ind!==t.ar.length-1">, </i></span>
             </scoText>
-            <scoText v-else-if="t.artists">
-            <span v-for="(a,ind) in t.artists" :key="ind" class="artist" @click="arClk(a.id)">{{ a.name }}
-              <i v-if="ind!==t.ar.length-1">, </i> </span>
-            </scoText>
-            <el-col v-else>
-              <span v-for="(a,ind) in t.artists" :key="ind">未知</span>
-            </el-col>
           </template>
         </el-col>
         <template album-name>
