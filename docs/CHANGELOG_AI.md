@@ -35,6 +35,45 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-fix7 加强 _autoNext 锁（setTimeout + audio ended）
+
+### 修改内容
+`_autoNext` 锁改用 `setTimeout(1000)` 替代 `$nextTick`，并加 audio 'ended' 事件监听作为主触发器。
+
+### 修改文件
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（锁改 setTimeout + 加 audio 'ended' 监听 + _onAudioEnded 方法）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（更新决策 19.1）
+- 修改 `docs/CHANGELOG_AI.md`（本条目）
+
+### 修改原因
+- 决策 19.1 用 `$nextTick` 释放锁，但实测仍有问题
+- 根因：`$nextTick` 是 microtask，audio timeupdate 是 macrotask，audio 暂停前已 dispatch 的 timeupdate 在 `$nextTick` 之后才执行
+- 修复：用 `setTimeout(1000)` 覆盖所有残留 audio 事件；加 audio 'ended' 事件作为主触发器
+
+### 关键设计
+- `setTimeout(1000)`：1s 锁覆盖所有 audio 事件（microtask + macrotask）
+- `audio.pause()`：在 `_autoNext` 入口同步调用，立即阻止后续 timeupdate
+- `audio 'ended'`：主触发器（audio 播到结尾时由浏览器原生触发）
+- `timeNow` watcher 保留：作为兜底，处理 'ended' 未触发的边缘情况
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 1s 锁对正常歌曲切换无影响（歌曲 >1min）
+- `_onAudioEnded` 和 timeNow watcher 都调 `_autoNext`，锁防止重复
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: harden _autoNext lock with setTimeout + audio ended event`
+- **包含**：
+  - `src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-fix6 修复自然播完跳到第二首
 
 ### 修改内容

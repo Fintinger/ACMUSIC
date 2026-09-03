@@ -661,42 +661,52 @@ timeNow(n) {
 
 第二个条件在 audio 距结束 0.5s 内即触发（n=179.6 → 179.7 → 179.8 ...）。每次 timeupdate 都会触发。
 
-**时序图**：
-```
-t=0ms   : audio.currentTime=179.6, timeupdate → timeNow=179.6
-t=0ms   : timeNow watcher → _autoNext (curIndex 2→0, curIndex=0 锁, audio 暂停中)
-t=0ms   : $nextTick queued
-t=1ms   : curIndex/currentSong watcher 同步 flush
-t=1ms   : audio 暂停（旧 currentTime=179.6）
-t=2ms   : audio 又触发 timeupdate（currentTime=179.7，暂停前最后一帧）
-t=2ms   : timeNow watcher → _autoNext ❌
-           curIndex=0 (已切到新批次首), 0 < 2 = true → curIndex=1
-           用户听到新批次第 2 首
-```
+**初次方案（_autoNextTick 锁）**：
+第一次 _autoNext 后 `$nextTick` 释放锁。但实测仍有问题：
+- Vue 微任务（包含 watcher flush + `$nextTick`）完成后，audio timeupdate 事件才在 macrotask 中触发
+- `$nextTick` 锁已释放，但 timeupdate 仍在路上 → 第二次 `_autoNext` 触发
 
-手动点击 next 不受影响，因为没有 timeupdate 残留事件。
+**最终方案（setTimeout 锁 + ended 事件）**：
 
-**最终方案**：
-在 `_autoNext` 入口加 `autoNextLocked` 锁：
+1. `autoNextLocked` 锁改用 **`setTimeout(1000)`** 释放（覆盖任何残留 audio 事件，100ms 已够但取 10x 余量）
+2. **`audio.pause()` 同步调用**——立即阻止后续 timeupdate 事件
+3. **加 audio `'ended'` 事件监听**——`_autoNext` 的主触发器，timeNow watcher 作为兜底
 
 ```js
 _autoNext() {
   if (this.autoNextLocked) return
   this.autoNextLocked = true
-  this.$nextTick(() => {
-    this.autoNextLocked = false
-  })
+  if (this.sel && !this.sel.paused) this.sel.pause()  // 同步暂停 audio
+  setTimeout(() => { this.autoNextLocked = false }, 1000)
   // ... existing logic
+}
+
+// mounted
+this.sel.addEventListener('ended', this._onAudioEnded)
+
+// _onAudioEnded
+_onAudioEnded() {
+  this._autoNext()
 }
 ```
 
-第一次 _autoNext 后锁住整个微任务周期（覆盖同步过渡 + 残留 timeupdate 事件），$nextTick 后释放。
+**为什么 setTimeout 而非 $nextTick**：
+- `$nextTick` 是 microtask，在 Vue flush 完成后立即执行
+- audio timeupdate 是 macrotask，在所有 microtask 完成后才执行
+- 如果 audio 暂停前最后一帧已 dispatch 到 macrotask 队列，它会在 `$nextTick` 之后才执行 → bug
+- `setTimeout(1000)` 是 macrotask，肯定在所有 audio 事件之后执行 → 安全
 
-**影响范围**：仅 PlayerCore.vue（+1 data field + 4 行 _autoNext 入口代码）
+**为什么 1000ms**：
+- audio 暂停后，残余 timeupdate 通常 < 100ms 内全部触发
+- 1s 留 10x 余量，避免边界情况
+- 不影响下一首 _autoNext（下一首开始播放时已 >1s 后）
+
+**影响范围**：仅 PlayerCore.vue（+1 data field + 4 行 _autoNext 入口代码 + 1 audio event listener + 1 handler 方法）
 
 **未来注意事项**：
-- 锁覆盖同步过渡 + Vue watcher flush + 残留 audio event
-- 非 FM 模式（如普通歌单）的 _autoNext 也被锁住，但下一首歌曲的 _autoNext 是下一 tick，无影响
+- 1s 锁对正常歌曲切换无影响（歌曲 >1min 远大于 1s）
+- 若未来需要更精细控制，可改用 audio 'ended' 作为唯一触发器，去掉 timeNow 触发
+- audio 'ended' 在某些边缘情况（如网络卡顿、缓冲）可能不触发，timeNow 兜底保留
 
 ---
 
