@@ -573,6 +573,59 @@ _autoNext() {
 
 ---
 
+## 决策 19：FM 预加载协调机制（proactive 不打断当前歌）
+
+**日期**：2026-09-03
+
+**背景**：
+决策 18 实现了"进入第 3 首即预加载"机制，但实测发现严重 bug：进入第 3 首的瞬间，proactive prefetch 触发的 `playFmNewBatch` 把 `curIndex = 0`，导致旧 song 3 被立刻打断、新 song 1 开始播放。
+
+**根因**：
+- proactive（prefetch）和 reactive（歌曲结束/用户点 next）共用同一个 `'getPersonalFM'` 事件
+- PersonalFM.fetchMoreFM 在成功后**总是** publish 'fmNewBatch' 强制 curIndex=0
+- proactive 触发时 REPLACE_PLAYLIST 已发生但歌曲还在播，curIndex=0 强制切歌
+
+**最终方案**：
+让 `nextSong` / `_autoNext` 在末尾**直接 set `curIndex = 0`**（不再依赖 fetch 完成事件），并用 `currentPlaylist` watcher 兜底：
+
+| 触发源 | curIndex | publish 'getPersonalFM' | 行为 |
+| --- | --- | --- | --- |
+| proactive prefetch | 不变（=2） | 是 | PersonalFM fetchMoreFM 拉数据 + REPLACE_PLAYLIST，**curIndex 不动**，song 3 继续播 |
+| reactive（_autoNext / nextSong 末尾） | 直接 set 0 | 是（兜底） | 立即切到 playlist[0]（若已 prefetch 替换则播新歌） |
+
+**currentPlaylist watcher 兜底**：
+- 在 FM 模式下，当 playlist 被 REPLACE_PLAYLIST 时
+- 若 `currentSong.id` 不在新列表中（即 proactive 已完成但 reactive 之前 set curIndex=0 时 target 是旧 playlist[0]）
+- 重新按 `curIndex` 同步 `currentSong`
+
+**原因**：
+1. reactive 直接 set curIndex=0 是最简单的过渡，无需等待事件
+2. proactive 不主动改 curIndex，靠 REPLACE_PLAYLIST 让 reactive 流程生效
+3. currentPlaylist watcher 处理"reactive 抢在 proactive 之前"的时序竞争
+
+**时序图**（自然结束场景）：
+```
+T=0     : song 3 开始, curIndex=2
+T=0     : fmShouldPrefetch=true → publish 'getPersonalFM'
+T=0.2s  : PersonalFM fetchMoreFM: REPLACE_PLAYLIST 新 3 首
+T=0.2s  : currentPlaylist watcher: currentSong 还在旧列表, currentSong = 新列表[2] (仍是新 song 3)
+T=0.2s  : 等等，curIndex=2 但 currentSong 已被换成新 song 3
+          ⚠️ 此时 audio 仍在播旧 song 3（currentSong 是 object reference）
+          audio 的 src 仍是旧 song 3 的 URL，不会被 currentSong 引用变化打断
+T=180s  : 旧 song 3 自然结束, _autoNext: curIndex=0
+T=180s  : curIndex watcher: target=新 playlist[0], currentSong=新 song 1
+T=180s  : 无缝衔接，无空白
+```
+
+**影响范围**：仅 PlayerCore.vue（+1 watcher、-1 data 字段、playFmNewBatch 改为 no-op、nextSong/_autoNext 末尾 set curIndex=0）
+
+**未来注意事项**：
+- playFmNewBatch 保留订阅但 no-op，避免破坏 PersonalFM 事件流
+- currentPlaylist watcher 仅在 FM 模式生效，非 FM 不受影响
+- 若未来 FM 切换到 PUSH_PLAYLIST 模式，watcher 需调整（现假设 REPLACE 模式）
+
+---
+
 # 未来可改进（非决策）
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。

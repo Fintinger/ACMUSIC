@@ -35,6 +35,44 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-fix4 修复预加载打断当前歌曲
+
+### 修改内容
+让 proactive prefetch 不打断当前歌曲（song 3 继续播完），同时保证末尾 reactive trigger 能无缝过渡到新批次。
+
+### 修改文件
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（nextSong/_autoNext 末尾 set curIndex=0 + 新增 currentPlaylist watcher + playFmNewBatch 改 no-op）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增第 19 条决策记录）
+
+### 修改原因
+- 决策 18 实施后用户反馈：进入第 3 首的瞬间，proactive prefetch 触发的 playFmNewBatch 把 curIndex=0，旧 song 3 被立即打断
+- 根因：proactive 和 reactive 共用同一事件，PersonalFM.fetchMoreFM 总是 publish fmNewBatch 强制 curIndex=0
+- 之前的 fmPendingTransition flag 方案有 bug：proactive 完成后 reactive publish 走 in-flight 跳过，curIndex 永远不推进
+
+### 关键设计
+- **proactive 不动 curIndex**：fmShouldPrefetch 仅 publish，PersonalFM fetchMoreFM 拉数据 + REPLACE_PLAYLIST
+- **reactive 直接 set curIndex=0**：nextSong/_autoNext 末尾 set curIndex=0 立即过渡，不依赖事件
+- **currentPlaylist watcher 兜底**：当 REPLACE_PLAYLIST 发生时，若 currentSong 不在新列表，重新按 curIndex 同步
+- **playFmNewBatch 改 no-op**：curIndex 推进由 nextSong/_autoNext 和 watcher 协调
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 时序：reactive set curIndex=0 后，proactive 完成 REPLACE_PLAYLIST，watcher 重新同步 currentSong
+- playFmNewBatch 订阅保留（no-op），不破坏 PersonalFM 事件流
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: FM prefetch no longer interrupts current song`
+- **包含**：
+  - `src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-fix3 FM 预加载 + 3 首循环模式
 
 ### 修改内容
