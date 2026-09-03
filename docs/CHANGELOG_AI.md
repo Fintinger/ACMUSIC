@@ -35,6 +35,51 @@
 
 ## 历史记录
 
+### 2026-09-03 — REFACTOR-api-wrappers API 封装补全
+
+### 修改内容
+将散落在页面里的 `$axios(...)` 调用统一到 `src/api/*.js`，新建 5 个封装 + 扩充 2 个封装 + 替换 23 个调用方。
+
+### 修改文件
+- 新增 `src/api/Search.js`（6 个导出：search/searchV2/suggest/multimatch/defaultKeyword/hotDetail）
+- 新增 `src/api/Video.js`（8 个：detail/url/related/mlogToVideo/groupList/group/timelineRecommend）
+- 新增 `src/api/Mv.js`（5 个：detail/url/simi/all/first）
+- 新增 `src/api/Artist.js`（7 个：detail/topSongs/albums/mvs/simi/videos/songs）
+- 新增 `src/api/UserDetail.js`（3 个：detail/playlists/record）
+- 扩充 `src/api/Tracks.js`（+9 个：personalFM/songUrlV1/songUrl/songUrlMatch/detail/recommendSongs/personalized/recommendResource/simiPlaylist）
+- 扩充 `src/api/Playlist.js`（+9 个：detail/catlist/highqualityTags/highquality/top/toplistDetail/toplistArtist/newest/topArtists）
+- 替换 23 个 .vue 调用方
+- 修复 `AlbumDetail.vue:61` 路径 `'album'`（缺前导 `/`）→ 用 `Album.getDetail()` 正确路径
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增决策 24 + 划掉"未来可改进"项 2）
+- 修改 `docs/CHANGELOG_AI.md`（本条目）
+
+### 修改原因
+- 之前"未来可改进"清单中识别"50% API 调用散落在页面里"
+- 违反了"所有 API 走 `src/api/*.js`"设计
+- 不利于 URL 集中管理、TypeScript 类型化、单测 mock
+
+### 关键设计
+- 严格 1:1 替换：不动逻辑、不改参数形状、不改响应处理
+- 命名空间 import：`import * as xxxApi from "@/api/..."` 区分模块
+- 已有 wrapper 不动：仅追加新导出，不修改原函数签名
+- 故意保留 1 处直接 `$axios`：`PlayerCore.vue:559` 的 `/song/url/v1` 带额外 `level/unblock/timestamp` 参数，当前 wrapper 不支持这些参数
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete（26 个文件，241 行新代码 / 94 行删除）
+
+### 注意事项
+- 建议实际跑一遍：首页/搜索/歌单详情/歌手详情/MV/视频/专辑详情
+- 替换 ≠ 完成：需要在浏览器验证主流程无回归
+
+### Git 建议
+- **Commit 类型**：`refactor`
+- **Commit message**：`refactor: consolidate scattered API calls into api wrappers`
+- **包含**：5 个新增封装 + 2 个扩充 + 23 个 .vue 替换
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — FIX-song-like 歌曲喜欢真正接入 NetEase /like API
 
 ### 修改内容

@@ -893,8 +893,64 @@ getNextIndex() {
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。
 
 1. **状态管理拆分**：可以把播放器的 `isPersonalFM` 标志从 Vuex 移到 PlayerCore 内部（避免跨组件耦合）
-2. **API 封装补全**：目前 50% 的 API 调用直接写在页面里，可统一封装到 `src/api/*.js`
+2. ~~**API 封装补全**：目前 50% 的 API 调用直接写在页面里，可统一封装到 `src/api/*.js`~~ ✅ 2026-09-03 commit `refactor: consolidate scattered API calls into api wrappers`
 3. **TypeScript 迁移**：项目庞大，可逐步迁移到 Vue 3 + TS + Pinia（但需要用户授权且是大工程）
 4. **CSS 主题化**：变量已存在，可考虑 dark mode 支持
 5. **测试**：项目零测试，未来加 Vitest + Vue Test Utils
 6. **`mixin` 路径统一**：`src/assets/mixin/` 与 `src/mixins/` 分裂，新代码建议统一到 `src/mixins/`
+
+---
+
+## 决策 24：API 封装补全（散落调用 → src/api/*.js）
+
+**日期**：2026-09-03
+
+**背景**：
+项目 50% 的 API 调用直接写在页面里（`this.$axios('/xxx', {params: {}})`），违反了之前提出的"所有 API 走 `src/api/*.js`"设计。本次完成补全。
+
+**新建 5 个封装**：
+- `src/api/Search.js`（6 个导出）：`search`、`searchV2`、`suggest`、`multimatch`、`defaultKeyword`、`hotDetail`
+- `src/api/Video.js`（8 个）：`detail`、`url`、`related`、`mlogToVideo`、`groupList`、`group`、`timelineRecommend`
+- `src/api/Mv.js`（5 个）：`detail`、`url`、`simi`、`all`、`first`
+- `src/api/Artist.js`（7 个）：`detail`、`topSongs`、`albums`、`mvs`、`simi`、`videos`、`songs`
+- `src/api/UserDetail.js`（3 个）：`detail`、`playlists`、`record`
+
+**扩充 2 个**：
+- `src/api/Tracks.js`（+9 个）：`personalFM`、`songUrlV1`、`songUrl`、`songUrlMatch`、`detail`、`recommendSongs`、`personalized`、`recommendResource`、`simiPlaylist`
+- `src/api/Playlist.js`（+9 个）：`detail`、`catlist`、`highqualityTags`、`highquality`、`top`、`toplistDetail`、`toplistArtist`、`newest`、`topArtists`
+
+**附带修复**：`AlbumDetail.vue:61` 路径 `'album'` 缺前导 `/` → `Album.getDetail()`（正确 `/album`）
+
+**有意保留 1 处直接 `$axios`**：`PlayerCore.vue:559` `/song/url/v1` 调用带额外 `level/unblock/timestamp` 参数，`tracks.songUrlV1(id, br)` 不支持这些参数。保留直接调用以避免丢失功能。
+
+**23 个 .vue 调用方改为封装**：
+- `mixins/searchMixin.js`
+- `pages/VideoPlay.vue`、`pages/explorePage/VideoList.vue`
+- `pages/explorePage/MvList.vue`、`pages/mvPlay.vue`
+- `pages/explorePage/playlist/{BoutiqueList,AllList}.vue`
+- `pages/explorePage/LeaderBoard/{LeaderBoard,ArtistList}.vue`
+- `pages/artist/{ArtistDetail,ArtistAllSongs}.vue`
+- `pages/AlbumDetail.vue`、`pages/ListDetail.vue`、`pages/SearchResult.vue`、`pages/UserPage.vue`
+- `pages/search/VoiceRes.vue`、`pages/HomePage.vue`
+- `components/DoSearch.vue`、`components/PersonalFM.vue`、`components/musicPlayer/MusicPlayer.vue`、`components/layout/UserDetailLayout.vue`
+- `components/userPage/{phoneLogin,qrcodeLogin}.vue`
+
+**关键设计**：
+- **严格 1:1 替换**：不改逻辑、不改参数形状、不改响应处理、不改 `.then(...)` 调用结构
+- **命名空间 import**：`import * as xxxApi from "@/api/..."` 区分不同模块（`searchApi`/`tracksApi`/`videoApi` 等）
+- **重复 import 去重**：例如 PlayerCore 已有 `import * as tracks`，不再重复添加
+- **不动已有 wrapper 行为**：不修改 `auth.js`、`Comment.js`、`Tracks.js` 原有函数，仅追加新导出
+
+**影响范围**：31 个文件
+- 5 个新增封装
+- 2 个封装扩充
+- 23 个 .vue 替换
+- 1 个附带 bug 修复
+- docs/ 更新（决策 24 + CHANGELOG + "未来可改进"清单划掉）
+
+**未来注意事项**：
+- 新增 API 必须先在 `src/api/` 对应模块封装，禁止页面直接 `this.$axios(...)`
+- 已有 wrapper 若签名不全（缺参数），需扩展后再用，不要回退直接调用（除非像 PlayerCore.vue:559 那种确实无法覆盖的场景）
+- 替换完成不代表完成：仍建议实际跑一遍主流程（首页/搜索/歌单详情/歌手详情/MV/视频）确认无回归
+
+---
