@@ -550,7 +550,7 @@ App.vue
 
 ## 中优先级
 
-1. **`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期
+1. ~~**`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期~~ ✅ 2026-09-03 commit `fix: comment like uses Vue state instead of DOM`
 
 > 以下已通过 OPT-FM 修复（2026-09-02 commit `feat: implement FM auto-refresh`）：
 > - ~~`pubsub.publish('getPersonalFM', ...)` 无订阅者~~ ✅ PersonalFM.vue 已订阅 + 实现 fetchMoreFM（5s 去抖 + 错误处理）

@@ -780,6 +780,57 @@ getNextIndex() {
 
 ---
 
+## 决策 22：评论点赞改为 Vue 状态驱动（替代 DOM 操作）
+
+**日期**：2026-09-03
+
+**背景**：
+`CommentContentLayout.vue` 的点赞功能使用 DOM 操作（`evt.target.classList.replace` + `nextElementSibling.innerText`）维护 UI 状态，存在多个问题：
+- `evt.target` 依赖 BaseIcon 渲染结构（`<i>` 元素），点击不同位置可能命中不同节点，class 操作失效
+- DOM 操作不响应 Vue 状态变化，刷新后 class 不会自动恢复
+- 与响应式状态（`cm.liked` / `cm.likedCount`）割裂——服务端返回 `liked=true` 但 DOM class 没被 Vue 渲染覆盖
+- 快速连点时缺少并发保护（DOM 多次直接修改 + `nextElementSibling.innerText` 累加错误）
+- 无法扩展（加 loading、错误回滚等）
+
+**调研结论**：
+- 项目使用的 `/comment/new`（列表）+ `/comment/like`（点赞） API 都由 NeteaseCloudMusicApi 提供
+- `/comment/like` 只返回状态码（`{code: 200}`），**不返回最新 likedCount**
+- `/comment/new` 返回的 comment 对象天然带 `liked` 和 `likedCount` 字段，作为服务端真实状态
+- `comment.like(this.id, cm.commentId, t, this.type)` API 封装已存在于 `src/api/Comment.js:26`，签名正确无需改动
+
+**最终方案**：
+1. **状态管理**：在 `cm` 自身的 `liked` / `likedCount` 上读写（comment 对象来自 API，已被 Vue 2 reactivity 处理；新增/更新字段用 `this.$set` 保证响应）
+2. **并发保护**：data 加 `likePending: { [commentId]: true }` map，只锁当前评论不影响其他评论
+3. **流程**（安全模式：API 成功后更新 UI）：
+   - 登录检查 → 并发检查 → 锁定 → 调用 `/comment/like`
+   - 成功（`res.data.code === 200`）：`cm.liked = !wasLiked`、`cm.likedCount = max(0, prev ± 1)`
+   - 失败/网络错误：仅 `$message` 提示，**不改 cm**
+   - finally：解锁
+4. **模板**：
+   - `@click="handleLike($event, cm)"` → `@click="toggleLike(cm)"`（直接传 cm，不依赖 evt.target）
+   - 加 `:class="{ pending: likePending[cm.commentId] }"` 给视觉反馈
+5. **登录判断**：复用项目 `UserAbout/isLogin` getter（与 App.vue / HomePage 一致）
+
+**关键设计**：
+- 不引入 Vuex / Pinia（项目原则）
+- 不引入 localStorage / sessionStorage 缓存点赞状态
+- `likePending` 是组件级 data，仅当前 CommentContentLayout 实例生效
+- `Math.max(0, prev + delta)` 防止计数出现负数
+- 复用项目已有 `this.$message` 提示机制
+- 复用 `@/api/Comment.like` API 封装
+
+**影响范围**：3 个文件
+- `src/components/layout/CommentContentLayout.vue`（模板 + 脚本）
+- `src/assets/scss/comment/commentContentLayout.scss`（加 `.like.pending` 视觉反馈）
+- `docs/`（更新已知问题清单 + 决策 22 + CHANGELOG）
+
+**未来注意事项**：
+- 如果未来 NetEase `/comment/like` 返回完整 `likedCount`，可去掉手动 `± 1` 改用 API 返回值
+- `likePending` 仅前端锁定，并发场景需配合服务端幂等设计
+- 不要把 `cm.liked` / `cm.likedCount` 替换为独立 `likeState` 字典（会增加复杂度，comment 自身已含状态）
+
+---
+
 # 未来可改进（非决策）
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。

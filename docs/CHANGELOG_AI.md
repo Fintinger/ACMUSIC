@@ -35,6 +35,54 @@
 
 ## 历史记录
 
+### 2026-09-03 — FIX-comment-like 评论点赞改为 Vue 状态驱动
+
+### 修改内容
+重写 `CommentContentLayout.toggleLike`，从 DOM 操作改为 Vue 响应式状态。
+
+### 修改文件
+- 修改 `src/components/layout/CommentContentLayout.vue`（模板 + 脚本）：
+  - 模板：`@click="handleLike($event,cm)"` → `@click="toggleLike(cm)"`，加 `:class="{ pending }"`
+  - data：：加 `likePending: {}`
+  - computed：：加 `isLogin`（复用项目 `UserAbout/isLogin` getter）
+  - methods：：删 `handleLike` / `toggleLike` / `alertLike` / `alertUnlike` / `alertErr`，合并为新 `toggleLike(cm)`
+- 修改 `src/assets/scss/comment/commentContentLayout.scss`（加 `.like.pending { opacity: 0.5; cursor: wait; }`）
+
+### 修改原因
+- 原实现用 DOM 操作（`evt.target.classList.replace` + `nextElementSibling.innerText`）
+- evt.target 依赖 BaseIcon 渲染结构，点击不同位置（`<i>` vs `<span>`）会失效
+- DOM 操作不响应 Vue 状态变化，刷新后 class 不会跟随服务端 `liked` 字段
+- 快速连点无并发保护，innerText 累加错误
+- 与项目"Vue 状态驱动 UI"的设计哲学不符
+
+### 关键设计
+- **状态绑定**：直接修改 `cm.liked` / `cm.likedCount`（API 返回的对象自带这些字段，Vue 2 已自动响应）
+- **$set 兜底**：用 `this.$set(cm, 'liked', !wasLiked)` 保证响应式更新
+- **并发保护**：`likePending[cm.commentId]` map，仅锁当前评论，不影响其他评论
+- **安全模式**：API 成功后才更新 UI，失败仅提示不修改
+- **计数防护**：`Math.max(0, prev + delta)` 防止负数
+- **登录判断**：复用 `UserAbout/isLogin` getter
+- **消息提示**：复用项目 `this.$message`（success / warning / error）
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 未在浏览器实际点击测试（仅完成代码 + lint/build 验证）
+- 用户需要在浏览器 console 验证 Network 请求和参数
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: comment like uses Vue state instead of DOM`
+- **包含**：
+- `src/components/layout/CommentContentLayout.vue`
+- `src/assets/scss/comment/commentContentLayout.scss`
+- **不包含**：
+- docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-mixin mixin 路径统一
 
 ### 修改内容
