@@ -35,6 +35,48 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-fix5 FM staged batch + 双事件路径
+
+### 修改内容
+彻底重构 FM 预加载机制：proactive prefetch 只拉数据并 stage 到 store，**不 REPLACE_PLAYLIST**；reactive 在歌曲自然结束时应用 staged batch 并切换。
+
+### 修改文件
+- 修改 `src/store/modules/Tracks.js`（+1 state `fmStagedBatch` + 2 mutations）
+- 修改 `src/components/PersonalFM.vue`（重构为 fetchAndStage / applyStagedOrFetch / _doFetch / _applyBatch + 双事件订阅 + fmPendingApply 标志）
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（删除 currentPlaylist watcher，fmShouldPrefetch 改 publish 'fmPrefetch'，nextSong/_autoNext 末尾 publish 'getPersonalFM'，playFmNewBatch 恢复简单逻辑）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（重写第 19 条）
+
+### 修改原因
+- 决策 18 + 19 实测均失败：proactive 仍会打断当前 song 3
+- 用户明确要求"proactive 只拉元数据不做任何操作，等 song 3 自然结束再切换"
+- 类比 NetEase 项目的"预加载下一首歌信息"模式
+
+### 关键设计
+- **staged batch**：proactive 拉到的数据暂存到 `store.state.TracksAbout.fmStagedBatch`，不替换 playlist
+- **双事件**：`'fmPrefetch'`（proactive）+ `'getPersonalFM'`（reactive），PersonalFM 分别处理
+- **fmPendingApply**：处理"reactive 触发时 proactive fetch 还在进行"的边缘情况
+- **currentPlaylist watcher 已删除**：之前就是这个 watcher 导致数据竞争
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 首次 FM session（无 staged）有 ~200ms 静音，可接受
+- 多次点 next 不会引起重复 fetch（in-flight + 1.5s debounce）
+
+### Git 建议
+- **Commit 类型**：`refactor`
+- **Commit message**：`refactor: FM staged batch with dual-event flow`
+- **包含**：
+  - `src/store/modules/Tracks.js`
+  - `src/components/PersonalFM.vue`
+  - `src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-fix4 修复预加载打断当前歌曲
 
 ### 修改内容

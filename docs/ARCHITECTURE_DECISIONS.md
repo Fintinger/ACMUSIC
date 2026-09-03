@@ -573,56 +573,68 @@ _autoNext() {
 
 ---
 
-## 决策 19：FM 预加载协调机制（proactive 不打断当前歌）
+## 决策 19：FM 预加载协调机制（staged batch + 双事件路径）
 
 **日期**：2026-09-03
 
 **背景**：
-决策 18 实现了"进入第 3 首即预加载"机制，但实测发现严重 bug：进入第 3 首的瞬间，proactive prefetch 触发的 `playFmNewBatch` 把 `curIndex = 0`，导致旧 song 3 被立刻打断、新 song 1 开始播放。
+决策 18 实现了"进入第 3 首即预加载"机制，但实测发现严重 bug：
+- 进入第 3 首的瞬间，proactive prefetch 触发的 `playFmNewBatch` 把 `curIndex = 0`，导致旧 song 3 被立刻打断、新 song 1 开始播放
+- 后续引入 `currentPlaylist` watcher 试图解决，但仍有数据竞争
 
-**根因**：
-- proactive（prefetch）和 reactive（歌曲结束/用户点 next）共用同一个 `'getPersonalFM'` 事件
-- PersonalFM.fetchMoreFM 在成功后**总是** publish 'fmNewBatch' 强制 curIndex=0
-- proactive 触发时 REPLACE_PLAYLIST 已发生但歌曲还在播，curIndex=0 强制切歌
+用户明确要求：
+1. proactive prefetch **只拉元数据，不做任何操作**
+2. 等当前第 3 首歌**完全播放结束**，再**迅速**切换到新列表
+3. 类比"当前歌曲播放到一定时间去加载下一首歌的相关信息"的现有模式
 
-**最终方案**：
-让 `nextSong` / `_autoNext` 在末尾**直接 set `curIndex = 0`**（不再依赖 fetch 完成事件），并用 `currentPlaylist` watcher 兜底：
+**最终方案：staged batch + 双事件**
 
-| 触发源 | curIndex | publish 'getPersonalFM' | 行为 |
-| --- | --- | --- | --- |
-| proactive prefetch | 不变（=2） | 是 | PersonalFM fetchMoreFM 拉数据 + REPLACE_PLAYLIST，**curIndex 不动**，song 3 继续播 |
-| reactive（_autoNext / nextSong 末尾） | 直接 set 0 | 是（兜底） | 立即切到 playlist[0]（若已 prefetch 替换则播新歌） |
+引入 `fmStagedBatch` Vuex 状态作为**暂存区**，proactive 拉到的数据只放入这里，不动 currentPlaylist；reactive 触发时把 staged 应用（REPLACE + curIndex=0）。
 
-**currentPlaylist watcher 兜底**：
-- 在 FM 模式下，当 playlist 被 REPLACE_PLAYLIST 时
-- 若 `currentSong.id` 不在新列表中（即 proactive 已完成但 reactive 之前 set curIndex=0 时 target 是旧 playlist[0]）
-- 重新按 `curIndex` 同步 `currentSong`
+**两个事件**：
+- `'fmPrefetch'`（proactive）：PlayerCore `fmShouldPrefetch` watcher 在 curIndex === length-1 时发布，PersonalFM 收到后 fetch + SET_FM_STAGED_BATCH（**不 REPLACE_PLAYLIST**）
+- `'getPersonalFM'`（reactive）：PlayerCore `nextSong` / `_autoNext` 在末尾发布，PersonalFM 收到后 applyStagedOrFetch（应用 staged 或重新拉）
 
-**原因**：
-1. reactive 直接 set curIndex=0 是最简单的过渡，无需等待事件
-2. proactive 不主动改 curIndex，靠 REPLACE_PLAYLIST 让 reactive 流程生效
-3. currentPlaylist watcher 处理"reactive 抢在 proactive 之前"的时序竞争
+**关键设计**：
+- proactive 不改 currentPlaylist → song 3 不被打断
+- reactive 应用 staged 时已替换完成 → 同步 currentSong 到新列表 → 无缝衔接
+- `fmPendingApply` 处理"reactive 触发时 proactive fetch 还在进行"的边缘情况
 
-**时序图**（自然结束场景）：
+**时序图（自然结束，常见情况）**：
 ```
-T=0     : song 3 开始, curIndex=2
-T=0     : fmShouldPrefetch=true → publish 'getPersonalFM'
-T=0.2s  : PersonalFM fetchMoreFM: REPLACE_PLAYLIST 新 3 首
-T=0.2s  : currentPlaylist watcher: currentSong 还在旧列表, currentSong = 新列表[2] (仍是新 song 3)
-T=0.2s  : 等等，curIndex=2 但 currentSong 已被换成新 song 3
-          ⚠️ 此时 audio 仍在播旧 song 3（currentSong 是 object reference）
-          audio 的 src 仍是旧 song 3 的 URL，不会被 currentSong 引用变化打断
-T=180s  : 旧 song 3 自然结束, _autoNext: curIndex=0
-T=180s  : curIndex watcher: target=新 playlist[0], currentSong=新 song 1
-T=180s  : 无缝衔接，无空白
+T=0    : song 3 开始, curIndex=2
+T=0    : fmShouldPrefetch=true → publish 'fmPrefetch'
+T=0    : PersonalFM fetchAndStage: _doFetch 发起
+T=0.2s : fetch 返回, SET_FM_STAGED_BATCH（new 3首暂存）
+T=0.2s : curIndex 仍是 2, audio 继续播旧 song 3 ✓ 无打断
+T=180s : 旧 song 3 自然结束, _autoNext: publish 'getPersonalFM'
+T=180s : PersonalFM applyStagedOrFetch: staged 不空 → _applyBatch
+T=180s : REPLACE_PLAYLIST 新 3 首, currentList 同步, publish 'fmNewBatch'
+T=180s : PlayerCore playFmNewBatch: curIndex=0
+T=180s : curIndex watcher: target=新 playlist[0], currentSong=新 song 1
+T=180s : audio 立即播新 song 1，无空白 ✓
 ```
 
-**影响范围**：仅 PlayerCore.vue（+1 watcher、-1 data 字段、playFmNewBatch 改为 no-op、nextSong/_autoNext 末尾 set curIndex=0）
+**时序图（首次 FM session，staged 不存在）**：
+```
+T=0    : song 3 开始
+T=180s : _autoNext: publish 'getPersonalFM'
+T=180s : applyStagedOrFetch: staged null → _doFetch
+T=180.2s : _applyBatch（同上）
+T=180.2s : audio 播新 song 1
+≈200ms 静音（可接受）
+```
+
+**影响范围**：3 个文件
+- `src/store/modules/Tracks.js`（+1 state + 2 mutations）
+- `src/components/PersonalFM.vue`（拆 fetchAndStage / applyStagedOrFetch / _doFetch / _applyBatch 4 个方法，双事件订阅）
+- `src/components/musicPlayer/PlayerCore.vue`（-1 watcher、+1 个新事件 publish）
 
 **未来注意事项**：
-- playFmNewBatch 保留订阅但 no-op，避免破坏 PersonalFM 事件流
-- currentPlaylist watcher 仅在 FM 模式生效，非 FM 不受影响
-- 若未来 FM 切换到 PUSH_PLAYLIST 模式，watcher 需调整（现假设 REPLACE 模式）
+- `fmStagedBatch` 仅 FM 模式有意义，应用时 CLEAR
+- `fmPendingApply` 在 fetchAndStage 完成时检查并应用（reactive 在 proactive 期间的边缘场景）
+- 若未来 FM 批次大小可变，staged batch 也应 slice(0, N) 保持一致
+- 若从 REPLACE 模式改回 PUSH 模式，需重新设计 staged 语义
 
 ---
 
