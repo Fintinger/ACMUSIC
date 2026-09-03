@@ -561,8 +561,8 @@ App.vue
 ## 低优先级 / 已容忍
 
 1. ~~大量 `console.log` / `console.trace` — 生产构建通过 `terser pure_funcs` 已剥离~~ ✅ 2026-09-03 commit `chore: clean up console.log/trace (keep error/warn)`（决策 25）
-2. 多次重复的"骨架屏 → 列表"切换 — 各页面独立实现，未抽公共组件
-3. `TracksLayout.vue` 模板中 `el-col v-if="t.artists"` 处 `t.artists` 永远为 truthy（数组永远存在）— 不影响功能
+2. ~~多次重复的"骨架屏 → 列表"切换 — 各页面独立实现，未抽公共组件~~ ✅ 2026-09-03 commit `refactor: use shared .skeleton-item class` + `refactor: AlbumDetail uses PlaylistInfoSkeleton + TrackListSkeleton` — motion.scss 已有公共 `.skeleton-item` / 7 个文件去重 + mvPlay 死 CSS 删 + AlbumDetail 复用公共组件
+3. ~~`TracksLayout.vue` 模板中 `el-col v-if="t.artists"` 处 `t.artists` 永远为 truthy（数组永远存在）— 不影响功能~~ ✅ 2026-09-03 commit `chore: remove dead t.artists branch in TracksLayout (normalize guarantees t.ar)`
 4. SCSS 文件中**模块化分割但 `<style lang="scss" scoped>` 大量覆盖到子组件样式**—通过 `::v-deep` 实现，可能影响可维护性
 
 # 开发注意事项

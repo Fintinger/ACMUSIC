@@ -35,6 +35,55 @@
 
 ## 历史记录
 
+### 2026-09-03 — REFACTOR-skeleton-shimmer 7 文件去重 + AlbumDetail 复用公共组件 + 删 3 项低优先级
+
+### 修改内容
+3 个 commit 一起做（低优先级清理 + 抽公共组件）：
+1. **chore: remove dead t.artists branch in TracksLayout**（7 行删）
+2. **refactor: use shared .skeleton-item class**（7 个文件删本地重复 `@keyframes shimmer`，统一用 `motion.scss` 公共 class；顺手删 mvPlay 死 CSS `.mvPlaySkeleton` 21 行）
+3. **refactor: AlbumDetail uses PlaylistInfoSkeleton + TrackListSkeleton**（AlbumDetail 删 11 行自定义 `skel-*` CSS，改用公共组件）
+
+### 修改文件
+- `src/components/layout/TracksLayout.vue`（删 7 行 `v-else-if="t.artists"` + `v-else` 死代码）
+- `src/components/layout/VideoPlayerLayout.vue`（删 `@keyframes shimmer` + 内联 shimmer 样式，加 `skeleton-item` class）
+- `src/pages/AlbumDetail.vue`（用 `<PlaylistInfoSkeleton>` + `<TrackListSkeleton>`，删 11 行自定义 CSS + 1 个 `<div class="album-skel">`）
+- `src/pages/artist/ArtistDetail.vue`（删 `@keyframes shimmer` + 内联样式，加 `skeleton-item` class）
+- `src/pages/search/{Lyric,Track,Voice}Res.vue`（同样处理）
+- `src/pages/mvPlay.vue`（删 21 行死 CSS `.mvPlaySkeleton`）
+- `docs/PROJECT_CONTEXT.md`（划掉 3 项已修）
+
+### 修改原因
+- 之前"未来可改进"列了 3 条（骨架屏 / t.artists 死代码 / 重复 console）
+- 实际调查发现 `motion.scss` 早就有公共 `.skeleton-item` + `@keyframes skeleton-shimmer`，**但 7 个文件不知道，全部重复实现**——典型的"公共能力已存在但未复用"
+- `TracksLayout.vue` 的 `t.artists` v-else-if 永远不执行（normalizeTrack 保证 `t.ar` 永远 truthy）
+- `mvPlay` 的 `.mvPlaySkeleton` 死 CSS（模板不引用）
+- `AlbumDetail` 不知道已有 `PlaylistInfoSkeleton` + `TrackListSkeleton` 可用
+
+### 关键设计
+- 抽公共 shimmer 不需要新建 SCSS 文件——`motion.scss` 已有公共 `.skeleton-item`
+- 替换原则：每个文件保留几何/尺寸样式（width/height/border-radius），**只删** `linear-gradient + background-size + animation`
+- HTML 模板加 `skeleton-item` class（替代 CSS 中的 `animation: shimmer`）
+- 不抽新组件（每个使用方单点，**抽组件不划算**）
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete（每个 commit 都过）
+- 视觉影响：shimmer 动画时长统一为 1.6s（之前部分文件用 1.5s）—— 实际看不出差别
+
+### 注意事项
+- `motion.scss` 是全局加载（`main.js:25` 引入 reset 链），所以 `.skeleton-item` 全局可用
+- `shimmer` keyframe 名称已统一为 `skeleton-shimmer`（在 motion.scss），本地 `shimmer` 名称已全部删除
+- 未来如需支持深色模式，shimmer 颜色通过 `$shimmer-color-*` 变量调整（motion.scss 已有 token）
+
+### Git 建议
+- **Commit 类型**：`refactor` + `chore`（混合）
+- **3 个 commit**（已分别执行）：
+  - `chore: remove dead t.artists branch in TracksLayout (normalize guarantees t.ar)`
+  - `refactor: use shared .skeleton-item class (motion.scss) instead of 7 duplicate shimmer impls`
+  - `refactor: AlbumDetail uses PlaylistInfoSkeleton + TrackListSkeleton (drop 11 custom skel- CSS lines)`
+- **不包含**：docs（独立 commit 之前已划掉 PROJECT_CONTEXT 3 条）
+
+---
+
 ### 2026-09-03 — FIX-console-runtime-bugs 修复控制台出现的 2 个 runtime BUG
 
 ### 修改内容
