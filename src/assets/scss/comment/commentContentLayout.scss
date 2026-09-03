@@ -29,6 +29,8 @@
       display: flex; align-items: center; gap: 22px;
       > span { display: flex; align-items: center; gap: 5px; font-size: 14px; color: rgba(255,255,255,.4); cursor: pointer; transition: color .2s; i { font-size: 16px; } &:hover { color: $color-main; } }
       .comment-like .like i.ac-likefill { color: #ef4444; }
+      // 点赞请求中：视觉降权，避免重复点击
+      .comment-like .like.pending { opacity: 0.5; cursor: wait; }
       .comment-delete .el-button { color: rgba(255,255,255,.35); font-size: 13px; padding: 0; transition: color .2s; &:hover { color: #ef4444; } }
     }
   }

@@ -12,7 +12,10 @@
         <div class="time-ribbon">
           <div class="ribbon">
             <span class="comment-like">
-              <span class="like" @click="handleLike($event,cm)">
+              <span
+                class="like"
+                :class="{ pending: likePending[cm.commentId] }"
+                @click="toggleLike(cm)">
                 <BaseIcon v-if="!cm.liked" name="like"/>
                 <BaseIcon v-if="cm.liked" name="likeFill"/>
               </span>
@@ -73,52 +76,65 @@ export default {
   computed: {
     loggedUser() {
       return this.$store.getters["UserAbout/userProfile"]
+    },
+    isLogin() {
+      return this.$store.getters["UserAbout/isLogin"]
     }
   },
   data() {
     return {
       replyTarget: null,
+      // 单条评论点赞请求锁定：{ [commentId]: true } 表示该评论正在请求
+      // 仅只锁定该评论，不影响其他评论 /不阻塞列表渲染
+      likePending: {}
     }
   },
   methods: {
-    handleLike(evt, cm) {
-      let t = cm.liked ? 0 : 1;
-      console.log(cm);
-      comment.like(this.id, cm.commentId, t, this.type).then(res => {
-        if (res.data.code === 200) {
-          this.toggleLike(evt)
-          console.log(res.data);
-        } else {
-          this.alertErr()
-        }
-      })
-    },
-    toggleLike(evt) {
-      const like = "ac-likefill", unlike = "ac-like";
-      const likeCount = evt.target.parentElement.nextElementSibling.innerHTML * 1
-      if (evt.target.classList.contains(like)) {
-        //取消赞
-        evt.target.classList.replace(like, unlike)
-        evt.target.parentElement.nextElementSibling.innerText = likeCount - 1
-        this.alertUnlike()
-      } else {
-        //点赞
-        evt.target.classList.replace(unlike, like)
-        evt.target.parentElement.nextElementSibling.innerText = likeCount + 1
-        this.alertLike()
+    /**
+     * 点赞 / 取消点赞评论
+     * 流程：
+     *   1. 登录检查（未登录直接提示，不发请求）
+     *   2. 同一条评论的请求锁：避免快速连点产生并发请求
+     *   3. 计算 t：根据当前 liked 状态决定点赞(1) 或 取消点赞(0)
+     *   4. 调用 /comment/like（项目已有 @/api/Comment 的 like 封装）
+     *   5. API 成功后：更新 cm.liked 反转 + cm.likedCount ± 1
+     *   6. 失败 /网络错误：仅提示，不修改 UI（保持与服务端一致）
+     *   7. 无论结果都解锁
+     * 点击事件不依赖 evt.target，直接传 cm 对象，避免点击子节点导致 classList 失效
+     */
+    toggleLike(cm) {
+      if (!this.isLogin) {
+        this.$message.warning('请先登录')
+        return
       }
-    },
-    alertLike() {
-      this.$message({
-        message: '点赞成功',
-        type: 'success'
-      });
-    },
-    alertUnlike() {
-      this.$message.error("取消点赞")
-    },
-    alertErr() {
-      this.$message.error("出现错误")
+      if (!cm || !cm.commentId) return
+      // 同条评论并发保护
+      if (this.likePending[cm.commentId]) return
+
+      const wasLiked = !!cm.liked
+      const t = wasLiked ? 0 : 1
+      // 锁定该评论的点赞请求
+      this.$set(this.likePending, cm.commentId, true)
+
+      comment.like(this.id, cm.commentId, t, this.type)
+        .then(res => {
+          if (res && res.data && res.data.code === 200) {
+            // 服务端成功 → 反映到 UI
+            this.$set(cm, 'liked', !wasLiked)
+            const prev = Number(cm.likedCount) || 0
+            this.$set(cm, 'likedCount', Math.max(0, prev + (wasLiked ? -1 : 1)))
+            this.$message.success(wasLiked ? '已取消点赞' : '点赞成功')
+          } else {
+            this.$message.error('操作失败，请稍后重试')
+          }
+        })
+        .catch(err => {
+          console.error('[CommentLike] failed', err)
+          this.$message.error('网络错误，点赞失败')
+        })
+        .finally(() => {
+          this.$set(this.likePending, cm.commentId, false)
+        })
     },
     replyComment(cm) {
       this.replyTarget = cm;
