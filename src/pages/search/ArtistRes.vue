@@ -15,7 +15,7 @@
 import LoadMore from "@/components/LoadMore";
 import ArtistLayout from "@/components/layout/ArtistLayout";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
-import {searchMixin} from "@/assets/mixin";
+import {searchMixin} from "@/mixins/searchMixin";
 
 export default {
   name: "ArtistRes",

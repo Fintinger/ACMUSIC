@@ -15,7 +15,7 @@
 import VideoLayout from "@/components/layout/VideoLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
-import {searchMixin} from "@/assets/mixin";
+import {searchMixin} from "@/mixins/searchMixin";
 
 export default {
   name: "VideoRes",

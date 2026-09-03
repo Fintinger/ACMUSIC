@@ -14,7 +14,7 @@
 <script>
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
-import {searchMixin} from "@/assets/mixin";
+import {searchMixin} from "@/mixins/searchMixin";
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 
 export default {

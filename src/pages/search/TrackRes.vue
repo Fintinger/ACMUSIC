@@ -14,7 +14,7 @@
 <script>
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
-import {searchMixin} from "@/assets/mixin";
+import {searchMixin} from "@/mixins/searchMixin";
 
 export default {
   name: "TrackRes",

@@ -26,7 +26,7 @@
 <script>
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
-import {searchMixin} from "@/assets/mixin";
+import {searchMixin} from "@/mixins/searchMixin";
 import CoverImage from "@/components/common/CoverImage";
 
 export default {
