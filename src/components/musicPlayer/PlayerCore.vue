@@ -243,7 +243,12 @@ export default {
         normalizeTrack(val)
         this.updateMiniBackground()
         // 歌曲切换 → 同步服务端真实 liked 状态（从 /likelist 缓存读取）
-        this.isLiked = this.likedSongIds.has(String(val.id))
+        const nextLiked = this.likedSongIds.has(String(val.id))
+        if (nextLiked !== this.isLiked) {
+          this.isLiked = nextLiked
+          // 通知 MusicPlayer 等镜像组件同步 liked 状态（避免切歌时大播放器红心样式不更新）
+          this.$emit('likeChange', { id: val.id, liked: nextLiked })
+        }
         if (this.isRestoring) {
           this.isRestoring = false
           this.isPlay = false
