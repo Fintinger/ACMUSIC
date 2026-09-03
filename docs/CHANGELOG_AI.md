@@ -35,6 +35,44 @@
 
 ## 历史记录
 
+### 2026-09-03 — FIX-console-runtime-bugs 修复控制台出现的 2 个 runtime BUG
+
+### 修改内容
+- **BUG 1**：`VideoPlay.vue:3` 当直接访问 `/video`（无 `?id=...` query）时 `id` 是 undefined，导致 `newId||id` 也为 undefined，触发 Vue 警告 `Missing required prop: "id"`（连锁触发 VideoPlayerLayout + CommentLayout 的同样警告）。加 `v-if="newId || id"` 守卫
+- **BUG 2**：`App.vue:170` `clearAll` 直接 `this.$store.state.TracksAbout.currentPlaylist = []` 修改 Vuex state，触发 strict mode 警告 `Do not mutate vuex store state outside mutation handlers`，且与 `PlayerCore.isPersonalFM` watcher（L353）的 `REPLACE_PLAYLIST([currentSong])` 顺序竞争，导致 `_saveState` 保存陈旧状态（oldSong + 空 playlist）→ 刷新后 UI 不一致。改用 `this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [])`
+- 顺带：`App.vue:81` 删除上轮 console 清理漏掉的 `import Cookies from 'js-cookie'`（unused import）
+
+### 修改文件
+- 修改 `src/pages/VideoPlay.vue`（+1 v-if 守卫 + 1 注释）
+- 修改 `src/App.vue`（`clearAll` 改用 commit；删 `import Cookies`）
+- 修改 `docs/CHANGELOG_AI.md`（本条目）
+
+### 修改原因
+用户报告 dev server 控制台出现 2 个 BUG，审计后发现：
+- BUG 1：路由进入 `/video` 无 query 时 Vue prop required 警告
+- BUG 2：与上次 isPersonalFM 拆分同期遗留的同类反模式（App.vue:136 修了，但 L170 没修）
+
+### 关键设计
+- BUG 1 用 `v-if` 而非 fallback 值（如 `:id="id || 'placeholder'"`）—— 避免在子组件中引入"假 id"导致后续 API 调用错误
+- BUG 2 用 commit 而非直接赋值——Vuex 响应式链路正常触发，且 strict mode 不报警告
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+- `yarn lint` ✅ 错误数从 8 降到 7（修了 Cookies unused）
+
+### 注意事项
+- `v-if` 守卫意味着 id 不存在时**整个组件不渲染**（连占位 DOM 都没有），符合 required prop 约束
+- Vuex state 直接赋值在其他位置可能还有，需要 grep 后续审查
+- 上次 `isPersonalFM` 拆分决策 26 强调"禁止再写回 Vuex"——本次 BUG 2 的修复是同一原则的延伸
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: resolve 2 console runtime bugs (VideoPlay prop + clearAll mutation)`
+- **包含**：2 个源文件
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — FIX-clear-persisted-playlist 清空播放列表时同步删除 localStorage
 
 ### 修改内容
