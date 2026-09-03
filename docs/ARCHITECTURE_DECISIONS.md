@@ -710,6 +710,47 @@ _onAudioEnded() {
 
 ---
 
+## 决策 20：FM 模式下禁用随机播放
+
+**日期**：2026-09-03
+
+**背景**：
+用户分析"FM 模式下 shuffle 是否必要"后确认应禁用：
+- NetEase `/personal_fm` 接口返回的歌曲**已按推荐度排序**（最匹配 → 次匹配）
+- shuffle 破坏这个顺序，用户体验割裂
+- 推荐算法基于"听完整首 = 喜欢"信号，洗牌后无法准确反馈
+
+**最终方案**：
+在 `getNextIndex` / `getPrevIndex` 入口加 `isPersonalFM` 短路：
+
+```js
+getNextIndex() {
+  if (this.isPersonalFM) {
+    return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
+  }
+  if (this.playMode === 'random') return this._nextShuffleIndex()
+  return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
+}
+```
+
+**原因**：
+1. FM 模式下的 `nextSong` / `_autoNext` 之前已自定义走顺序逻辑，但**手动上一首（preSong）** 走 `getPrevIndex` → 仍可能命中 shuffle
+2. 在源头短路最干净，无需在 4 个调用点分别判断
+3. `playMode` 状态保持不变（用户切出 FM 后仍是 random 模式）
+
+**关键设计**：
+- 只影响 FM 模式，非 FM 模式行为完全不变
+- playMode 仍保留 random 选项（用户切回普通歌单时仍是 random）
+- shuffle 数据（shuffleOrder）保留，离开 FM 后仍有效
+
+**影响范围**：仅 PlayerCore.vue（getNextIndex / getPrevIndex 各加 3 行）
+
+**未来注意事项**：
+- 决策 15-19 的所有 FM 优化（auto-refresh、staged batch、proactive prefetch）不受影响
+- 若未来 FM 也想支持单曲循环（loop），需在 nextSong / _autoNext 的 FM 分支再加判断
+
+---
+
 # 未来可改进（非决策）
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。

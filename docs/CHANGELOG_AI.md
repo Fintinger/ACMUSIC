@@ -35,6 +35,45 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-random FM 模式下禁用随机播放
+
+### 修改内容
+`getNextIndex` / `getPrevIndex` 入口加 `isPersonalFM` 短路，FM 模式下不走 shuffle。
+
+### 修改文件
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（getNextIndex / getPrevIndex 各加 3 行短路逻辑）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增第 20 条）
+- 修改 `docs/CHANGELOG_AI.md`（本条目）
+
+### 修改原因
+- NetEase `/personal_fm` 接口返回的歌曲已按推荐度排序
+- shuffle 破坏推荐顺序，且不符合 NetEase 推荐算法"听完整首=喜欢"的信号反馈
+- 之前决策 15-19 的 nextSong / _autoNext 已自定义走顺序，但 preSong 走 getPrevIndex 仍可能命中 shuffle
+
+### 关键设计
+- 源头短路最干净（`getNextIndex` / `getPrevIndex` 入口判断）
+- 不影响 playMode 状态（用户切出 FM 后仍是 random 模式）
+- shuffle 数据保留，离开 FM 后仍有效
+- 非 FM 模式行为完全不变
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 之前决策 15-19 全部不受影响
+- 用户可以保持 random 模式，进入 FM 时自动走顺序，切出 FM 仍是 random
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: disable shuffle in FM mode (preserve recommendation order)`
+- **包含**：
+  - `src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-fix7 加强 _autoNext 锁（setTimeout + audio ended）
 
 ### 修改内容
