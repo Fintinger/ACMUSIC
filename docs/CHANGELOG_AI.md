@@ -35,6 +35,95 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-fix 修复 FM 续播卡住
+
+### 修改内容
+PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然播完最后一首后 UI 卡在暂停状态"的 bug。
+
+### 修改文件
+- 修改 `src/components/PersonalFM.vue`（fetchMoreFM 中加 3 行：捕获 oldLength + publish）
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（加 1 方法 + mounted/beforeDestroy 订阅管理）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增第 16 条决策记录）
+
+### 修改原因
+- 实测发现：仅决策 15 后，FM 列表播完最后一首时，UI 卡在"已暂停"状态
+- 根因：`_autoNext` / `nextSong` 在 FM 模式下 publish 后直接 return，无人推进 curIndex
+- 手动点击 FM 卡片看似"能播"，是因为 `playCard` → `playAllTracks` 替换了整个 playlist + 触发 `playAll` 事件
+
+### 关键设计
+- PersonalFM 在 PUSH_PLAYLIST 前捕获 `oldLength`，追加后 publish `('fmNewBatch', oldLength)`
+- PlayerCore `playFmNewBatch` 订阅后把 `curIndex = oldLength`，`watch.curIndex` 链路自动播放
+- 严格边界检查：仅 FM 模式生效、startIndex 必须合法、不能越界
+- 独立 `fmBatchId` 字段，与原 `pubId` 生命周期独立
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在，本轮未新增错误
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 若新 batch 较小（如 < 3 首），可能仍然无法"自然循环"，需实测
+- 当前实现是"反应式"（耗尽时触发），如需"预加载"见决策 16 未来注意事项
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: advance curIndex on FM new batch (resolve play-end stall)`
+- **包含**：
+  - `src/components/PersonalFM.vue`
+  - `src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
+### 2026-09-02 — OPT-FM 实现 FM 自动续播
+
+### 修改内容
+补全 PlayerCore 早先 publish 但无人订阅的 `'getPersonalFM'` 事件链路，实现 FM 列表耗尽时自动拉取新歌曲。
+
+### 修改文件
+- 修改 `src/components/PersonalFM.vue`（+ 1 import、3 data 字段、1 方法、2 处 lifecycle 钩子改动）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增第 15 条决策记录）
+- 修改 `docs/PROJECT_CONTEXT.md`（移除该问题 + 修正 pubsub 描述）
+
+### 修改原因
+- 参考 `docs/优化.md` 中的 OPT-7 计划
+- 分析 NeteaseCloudMusicApi Enhanced 文档后确认：`/personal_fm` 接口已支持"每次返回不同歌曲"（基于时间戳），无需新 API
+- `pubsub.publish('getPersonalFM', ...)` 在 PlayerCore line 618/630 已发布多年，但全项目**无任何订阅者**
+- FM 模式播完首批后无法继续，体验差
+
+### 关键设计
+- **5 秒去抖**（`fmLastFetchAt`）+ **in-flight 检查**（`fmFetching` flag）→ 防止快速切歌触发重复请求
+- **错误降级** → 网络失败仅 `console.error` + Element UI Message 提示，不影响当前播放
+- **复用现有 mutation** → `TracksAbout/PUSH_PLAYLIST` 已存在（含去重逻辑），无需修改
+- **生命周期绑定** → mounted 订阅 / beforeDestroy unsubscribe，无内存泄漏
+
+### 测试结果
+- `yarn lint` ✅（8 个错误均为预存在，本轮首次新增错误已修复）
+  - **自修复**：首次 lint 触发 `Parsing error: The only valid meta property for new is new.target`（line 227:47），因变量名 `newSongs` 误用 `new` 关键字；改名为 `songs` 后通过
+- `yarn build` ✅（DONE Build complete，dist 生成成功）
+
+### 注意事项
+- 5 秒去抖时间窗是经验值，若实测仍频繁请求可上调
+- `/personal_fm` 接口格式若未来变化，需调整 `res.data.data` 解析路径
+- 完整架构决策记录见 `ARCHITECTURE_DECISIONS.md` 第 15 条
+
+### Git 建议
+- **Commit 1 类型**：`feat`
+- **Commit 1 message**：`feat: implement PersonalFM auto-refresh via pubsub (5s debounce)`
+- **Commit 1 包含**：
+  - `src/components/PersonalFM.vue`
+- **Commit 1 不包含**：
+  - `docs/`（独立 docs commit）
+
+- **Commit 2 类型**：`docs`
+- **Commit 2 message**：`docs: record FM auto-refresh architecture decision`
+- **Commit 2 包含**：
+  - `docs/ARCHITECTURE_DECISIONS.md`
+  - `docs/PROJECT_CONTEXT.md`
+  - `docs/CHANGELOG_AI.md`
+
+---
+
 ### 2026-09-02 — OPT-5 清理死代码
 
 ### 修改内容

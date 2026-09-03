@@ -347,7 +347,10 @@ methods: { getList, initLoad, load }
 ## 5. 跨组件通信
 
 - **`$bus`（Vue.prototype）**：路由跳转、点击事件总线。事件名见下表
-- **`pubsub-js`**：`PlayerCore` 订阅 `'playAll'`（来自 store action `TracksAbout/playAllTracks`），监听 `'getPersonalFM'`
+- **`pubsub-js`**：
+  - `PlayerCore` 订阅 `'playAll'`（来自 store action `TracksAbout/playAllTracks`）
+  - `PlayerCore` 在 FM 模式 publish `'getPersonalFM'`（详见 ARCHITECTURE_DECISIONS 第 15 条）
+  - `PersonalFM.vue` 订阅 `'getPersonalFM'` 实现 FM 自动续播
 
 ### $bus 事件一览
 
@@ -549,7 +552,9 @@ App.vue
 
 1. **`mixin` 路径分裂**：`src/assets/mixin/index.js` 存在但 `src/mixins/coverLight.js` 也存在—容易混淆，新代码应统一到 `src/mixins/`
 2. **`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期
-3. **`pubsub.publish('getPersonalFM', ...)` 无订阅者**：PlayerCore 在切到下一首 / 播完时 publish，没人 subscribe。FM 实际靠 HomePage 启动时一次性调用 `/personal_fm` 获取批量歌曲后由用户手动循环消费，存在 FM 不刷新体验差的问题
+
+> 以下已通过 OPT-FM 修复（2026-09-02 commit `feat: implement FM auto-refresh`）：
+> - ~~`pubsub.publish('getPersonalFM', ...)` 无订阅者~~ ✅ PersonalFM.vue 已订阅 + 实现 fetchMoreFM（5s 去抖 + 错误处理）
 
 ## 低优先级 / 已容忍
 

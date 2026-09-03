@@ -413,6 +413,83 @@ normalizeTrack(t) {
 
 ---
 
+## 决策 15：FM 自动续播（PersonalFM.vue 订阅 PlayerCore 事件）
+
+**日期**：2026-09-02
+
+**背景**：
+PlayerCore 中 `nextSong()` 与 `_autoNext()` 在 `isPersonalFM === true` 时 publish `'getPersonalFM'` 事件（line 618、630），但全项目从未实现订阅者。FM 列表只能由 HomePage 启动时一次性拉取，播完后无续播能力。
+
+**问题**：如何让 FM 列表耗尽后自动拉取新歌曲？
+
+**选择方案**：
+- A) PersonalFM.vue 订阅 `'getPersonalFM'`，收到事件后调用 `/personal_fm` 拉取新一批，追加到 `currentPlaylist`
+- B) 维持现状（删除 publish 作为死代码，FM 不续播）
+- C) 在 HomePage 中监听并刷新（依赖 HomePage 一直挂载，耦合度更高）
+
+**最终方案**：A
+
+**原因**：
+1. PersonalFM.vue 已是 FM 播放的唯一 UI 上下文，订阅与组件生命周期绑定最自然
+2. `/personal_fm` 接口本身就支持"每次返回不同歌曲"（基于时间戳），无需新 API
+3. 与 PlayerCore 现有 publish 完美契合（仅 FM 模式发布）
+4. `store/modules/Tracks.js` 的 `PUSH_PLAYLIST` mutation 已支持去重追加，无需修改
+
+**关键设计（防止滥用 API 配额）**：
+- **in-flight 检查**：fetch 进行中 → 跳过
+- **5 秒时间戳去抖**：上次成功 fetch 5s 内 → 跳过
+- **错误降级**：网络失败仅 console.error + Element UI Message 提示，不影响当前播放
+
+**影响范围**：仅修改 `src/components/PersonalFM.vue`（+ 1 个 import + 3 个 data 字段 + 1 个方法 + 2 个 lifecycle 钩子改动）
+
+**未来注意事项**：
+- 若未来 FM 接口返回格式变更，需调整 `res.data.data` 解析
+- 5 秒去抖时间窗是经验值，若实测仍触发频繁请求可上调
+
+---
+
+## 决策 16：FM 续播 curIndex 推进机制（解决"自然播完卡住"）
+
+**日期**：2026-09-03
+
+**背景**：
+决策 15 实现了 PersonalFM 订阅 `'getPersonalFM'` 拉取新批次，但**测试发现**：当最后一首自然播完触发 `_autoNext` 时，仅 publish 事件后 `return`，无任何代码把 `curIndex` 推进到新追加的歌曲上 → **UI 卡在"暂停"状态**，用户必须手动点 FM 卡片才能继续。
+
+**根因**（PlayerCore.vue:628-633）：
+```js
+_autoNext() {
+  if (this.playMode === 'loop') { this._restartCurrent(); return }
+  if (this.isPersonalFM) { pubsub.publish('getPersonalFM', ...); return }  // ← 直接 return
+  if (!this._inPlaylist()) return
+  this.curIndex = this.getNextIndex()  // ← 永远走不到
+}
+```
+
+**最终方案**：双端协调
+- **PersonalFM.fetchMoreFM** 成功时记录追加前的 `oldLength`，追加后 `pubsub.publish('fmNewBatch', oldLength)`
+- **PlayerCore.playFmNewBatch** 订阅后把 `curIndex = oldLength`（即新批次的首曲），`watch.curIndex` 链路自动播放
+
+**原因**：
+1. 利用已有 `curIndex` watch（line 296-305），无需新增播放触发逻辑
+2. payload 仅为 `number`（oldLength），接口最简
+3. 边界检查齐全（仅 FM 模式、startIndex 合法、未越界）
+4. 复用已有 pubsub 体系，与决策 15 风格一致
+
+**关键设计**：
+- `playFmNewBatch` **只在 FM 模式**生效，模式切换不会误触发
+- 严格的越界检查（`startIndex >= currentPlaylist.length` 直接 return）防止非预期状态
+- 单独的 `fmBatchId` 字段，与原 `pubId`（playAll）独立管理生命周期
+
+**影响范围**：仅修改 2 个文件
+- `src/components/PersonalFM.vue`（fetchMoreFM 中加 3 行）
+- `src/components/musicPlayer/PlayerCore.vue`（加 1 方法 + 2 lifecycle 改动）
+
+**未来注意事项**：
+- 若未来 FM 接口每次返回的 batch 大小变化，需评估"curIndex 跳到 oldLength"是否会跳过未播歌曲（当前未播歌曲会被新批次顶到列表后部，体验可接受）
+- 若决定从"反应式续播"改为"预加载式"（决策 17 候选项），需重新评估本机制
+
+---
+
 # 未来可改进（非决策）
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。
