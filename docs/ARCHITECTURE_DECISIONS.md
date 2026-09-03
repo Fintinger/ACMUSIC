@@ -530,6 +530,49 @@ _autoNext() {
 
 ---
 
+## 决策 18：FM 预加载机制（Proactive Prefetch）
+
+**日期**：2026-09-03
+
+**背景**：
+决策 15-17 实现了 FM 续播，但仍是"反应式"——播完最后一首才触发 fetch：
+- `_autoNext` 在 `timeNow` 监听距结束 < 0.5s 时触发 → publish 'getPersonalFM' → fetch /personal_fm
+- fetch 期间（~200-500ms）**没有音乐播放**（听感上是一段空白）
+- fetch 返回后 REPLACE_PLAYLIST + curIndex = 0 才开始播新批次
+
+用户已实现"3 首循环 + 替换"模式，但仍有 ~0.5s 静音缝隙。
+
+**问题**：如何让"播完最后一首"和"新批次就绪"无缝衔接？
+
+**选择方案**：
+- A) 保持反应式不动，接受 ~0.5s 空白
+- B) 预加载：进入最后一首时就开始 fetch，让数据在歌曲结束前就绪
+- C) 提前 2 首预加载（更激进，API 调用翻倍）
+
+**最终方案**：B
+
+**原因**：
+1. 1 首歌的播放时间通常 ≥ 1 分钟，足够完成 fetch（~200ms）
+2. 复用现有 pubsub 事件链（'getPersonalFM'）+ fetchMoreFM 的 1.5s 去抖
+3. 反应式 trigger（_autoNext / nextSong）作为兜底
+4. 不增加 API 调用次数（1 次预加载 = 1 次反应式）
+
+**关键设计**：
+- 新增 computed `fmShouldPrefetch`：`isPersonalFM === true && curIndex === currentPlaylist.length - 1`
+- 新增 watcher `fmShouldPrefetch(needed)`：`true` 时 publish 'getPersonalFM'
+- Vue 2 computed 自动追踪 `isPersonalFM` / `curIndex` / `currentPlaylist.length` 变化
+- 预加载的 fetch 在歌曲结束前完成（`fmLastFetchAt` 记录），`_autoNext` 的反应式 publish 会因 in-flight 检查被跳过
+
+**影响范围**：仅修改 1 个文件
+- `src/components/musicPlayer/PlayerCore.vue`（+1 computed +1 watcher 共 ~10 行）
+
+**未来注意事项**：
+- 若未来 FM 批次大小可变（如改为 5 首），`curIndex === length - 1` 仍正确（无需改）
+- 若决定从"单曲预加载"改为"提前 N 首预加载"，需引入时间窗口判断
+- 反应式 trigger 仍保留在 nextSong / _autoNext 中，作为网络失败后的兜底
+
+---
+
 # 未来可改进（非决策）
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。

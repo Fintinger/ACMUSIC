@@ -35,6 +35,48 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-FM-fix3 FM 预加载 + 3 首循环模式
+
+### 修改内容
+实现 FM "3 首循环 + 替换 + 预加载"模式，移除累积追加和反应式空白。
+
+### 修改文件
+- 修改 `src/pages/HomePage.vue`（playPersonalFM 取前 3 首）
+- 修改 `src/components/PersonalFM.vue`（fetchMoreFM 改为 REPLACE_PLAYLIST 替换 + 同步 currentList）
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（nextSong/_autoNext 智能切歌 + fmShouldPrefetch computed + watcher）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增第 18 条决策记录）
+
+### 修改原因
+- 用户实测反馈：当前 3 首 + 点 next 应切下一首，而不是跳到新加载的歌曲
+- 用户期望：列表始终显示 3 首，循环播放
+- 反应式 fetch 有 ~0.5s 静音缝隙，改预加载消除
+
+### 关键设计
+- **3 首循环**：HomePage 启动时 slice(0, 3)，fetchMoreFM REPLACE_PLAYLIST 替换
+- **智能切歌**：FM 模式下 nextSong / _autoNext 在 curIndex < length-1 时 curIndex++，仅在末尾才 publish
+- **预加载**：PlayerCore fmShouldPrefetch computed 监听 curIndex === length-1，提前一首歌触发 fetch
+- **兜底机制**：_autoNext / nextSong 在末尾的反应式 publish 保留，作为网络失败的 retry 路径
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- fmShouldPrefetch 在非 FM 模式永远 false，watcher 不会误触发
+- 预加载与反应式可能同时触发，但 fetchMoreFM 的 1.5s 去抖 + in-flight 检查保证只有一次 fetch
+
+### Git 建议
+- **Commit 类型**：`feat`
+- **Commit message**：`feat: FM 3-song cycle + proactive prefetch`
+- **包含**：
+  - `src/pages/HomePage.vue`
+  - `src/components/PersonalFM.vue`
+  - `src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-fix2 修复 next 失效 + isPersonalFM 状态污染
 
 ### 修改内容
