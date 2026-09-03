@@ -123,6 +123,8 @@ import playTracksBtn from "@/components/playTracksBtn";
 
 import {normalizeTrack, normalizePlaylist, normalizeArtist} from "@/utils/normalize";
 import coverLight from "@/mixins/coverLight";
+import * as tracksApi from "@/api/Tracks";
+import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "HomePage",
@@ -173,23 +175,23 @@ export default {
     },
     //请求推荐歌单
     getRecPlaylist() {
-      return this.$axios('/personalized?limit=10')
+      return tracksApi.personalized(10)
     },
     //请求网友精选碟
     getTopPlaylist() {
-      return this.$axios('/top/playlist?limit=10')
+      return playlistApi.top({ limit: 10 })
     },
     //请求本周最新专辑
     getNewAlbum() {
-      return this.$axios('/album/newest')
+      return playlistApi.newest()
     },
     //请求热门歌手
     getTopAt() {
-      return this.$axios('/top/artists?limit=10')
+      return playlistApi.topArtists(10)
     },
     //获取榜单
     getTopList() {
-      return this.$axios('/toplist/detail')
+      return playlistApi.toplistDetail()
     },
     //限制数据量
     limitNum(arr, num, callback) {
@@ -200,13 +202,13 @@ export default {
       })
     },
     getPersonalPlaylist() {
-      return this.$axios('/recommend/resource')
+      return tracksApi.recommendResource()
     },
     getPersonalFM() {
-      return this.$axios('/personal_fm', {params: {t: new Date().getTime()}})
+      return tracksApi.personalFM(new Date().getTime())
     },
     getDailySongs() {
-      return this.$axios('/recommend/songs')
+      return tracksApi.recommendSongs()
     },
     revealAfterImages(selector, readyKey) {
       const el = this.$el.querySelector(selector)

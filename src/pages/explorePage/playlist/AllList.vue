@@ -65,6 +65,7 @@
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
+import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "AllList",
@@ -105,10 +106,10 @@ export default {
   },
   methods: {
     getCategories() {
-      return this.$axios('/playlist/catlist')
+      return playlistApi.catlist()
     },
     getListByClass(cat) {
-      return this.$axios('/top/playlist?', {params: {...this.params, cat, offset: this.offset}})
+      return playlistApi.top({...this.params, cat, offset: this.offset})
     },
     handleCategoricalData(cat) {
       //将得到的对象类型的分类数据变成数组类型

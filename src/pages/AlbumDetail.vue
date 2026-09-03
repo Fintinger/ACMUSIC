@@ -41,6 +41,7 @@
 import TracksLayout from "@/components/layout/TracksLayout";
 import CommentLayout from "@/components/layout/CommentLayout";
 import CoverImage from "@/components/common/CoverImage";
+import * as albumApi from "@/api/Album";
 
 export default {
   name: "AlbumDetail",
@@ -58,7 +59,7 @@ export default {
     loadAlbum() {
       if (!this.id) { console.warn('[AlbumDetail] no id, skip'); return }
       this.albumInfo = {}; this.songs = []; this.loading = true
-      this.$axios.get('album', {params: {id: this.id}}).then(res => {
+      albumApi.getDetail(this.id).then(res => {
         this.albumInfo = res.data.album; this.songs = res.data.songs
         console.log('[AlbumDetail] loaded, name:', this.albumInfo.name, 'songs:', this.songs.length)
       }).catch(err => {

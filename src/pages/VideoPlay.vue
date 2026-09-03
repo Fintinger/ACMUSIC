@@ -8,6 +8,7 @@
 
 <script>
 import VideoPlayerLayout from "@/components/layout/VideoPlayerLayout";
+import * as videoApi from "@/api/Video";
 
 export default {
   name: "VideoPlay",
@@ -39,16 +40,16 @@ export default {
   },
   methods: {
     getVidDetail(id) {
-      return this.$axios('/video/detail?id=' + id)
+      return videoApi.detail(id)
     },
     getUrl(id) {
-      return this.$axios('/video/url?id=' + id)
+      return videoApi.url(id)
     },
     getSimiVid(id) {
-      return this.$axios('/related/allvideo?id=' + id)
+      return videoApi.related(id)
     },
     mlog2video(id) {
-      return this.$axios('/mlog/to/video?id=' + id)
+      return videoApi.mlogToVideo(id)
     },
     vClk(id) {
       this.$bus.$emit('vClk', id)

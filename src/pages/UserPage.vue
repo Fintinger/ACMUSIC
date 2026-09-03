@@ -35,6 +35,7 @@ import UserDetailLayout from "@/components/layout/UserDetailLayout";
 import { formatMs } from "@/utils/filters";
 import { getIpLocation } from "@/utils/ipLocation";
 import Cookies from "js-cookie"
+import * as authApi from "@/api/auth";
 
 export default {
   data() {
@@ -77,7 +78,7 @@ export default {
     },
     //获取登陆状态
     getLoginStatus() {
-      this.$axios('/login/status').then(res => {
+      authApi.loginStatus().then(res => {
         if (res.data.data.code === 200) {
           if (res.data.data.profile) {
             this.uid = res.data.data.profile.userId

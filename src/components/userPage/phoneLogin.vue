@@ -22,6 +22,7 @@
 
 <script>
 import {setLogin} from "@/utils/auth";
+import * as authApi from "@/api/auth";
 
 export default {
   name: "phoneLogin",
@@ -97,7 +98,7 @@ export default {
         callback(new Error('验证码不能为空！'));
       } else {
         // console.log("验证验证码")
-        this.$axios.get('/captcha/verify', {params: {phone: this.ruleForm.phoneNumber, captcha: value}})
+        authApi.captchaVerify(this.ruleForm.phoneNumber, value)
             .then(res => {
               if (res.data.data) {
                 // console.log(res.data);
@@ -114,7 +115,7 @@ export default {
         this.$refs.ruleForm.validateField('phoneNumber')
       } else {
         //发送验证码
-        this.$axios.get('/captcha/sent', {params: {phone}})
+        authApi.captchaSent(phone)
             .then(res => {
               this.isSending = true
               if (this.isSending) {
@@ -128,7 +129,7 @@ export default {
       }
     },
     login(phone, captcha) {
-      this.$axios.post('/login/cellphone', {phone, captcha, timestamp: new Date().getTime()})
+      authApi.cellphoneLogin(phone, '', captcha)
           .then(res => {
             // 统一写入登录态
             setLogin(res.data.cookie)

@@ -42,6 +42,7 @@
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
+import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "BoutiquePlaylist",
@@ -100,11 +101,11 @@ export default {
     },
     //getTags
     getTags() {
-      return this.$axios('/playlist/highquality/tags')
+      return playlistApi.highqualityTags()
     },
     //获取列表
     getList(cat = "", before = "") {
-      return this.$axios(`/top/playlist/highquality?limit=12&cat=${cat}&before=${before}`)
+      return playlistApi.highquality(cat, before)
     },
     // 箭头滚动
     updateArrows() {

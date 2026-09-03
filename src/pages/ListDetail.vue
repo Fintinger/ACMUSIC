@@ -51,6 +51,7 @@ import TrackListSkeleton from "@/components/Skeleton/TrackListSkeleton";
 
 import scoText from "@/components/scoText";
 import CoverImage from "@/components/common/CoverImage";
+import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "listDetail",
@@ -92,12 +93,9 @@ export default {
   },
   methods: {
     loadSongs(id, limit) {
-      this.$axios.get('/playlist/track/all', {
-        params: {
-          id,
-          limit: limit || this.params.limit,
-          offset: this.params.offset
-        }
+      playlistApi.getAllTrack(id, {
+        limit: limit || this.params.limit,
+        offset: this.params.offset
       }).then(res => {
         res.data.songs.forEach(val => {
           if (this.songs.findIndex(item => item.id === val.id) === -1) {
@@ -128,7 +126,7 @@ export default {
     this.initialLoading = true
     this.params.limit = this.LIMIT
     this.params.offset = this.OFFSET
-    this.$axios.get('/playlist/detail', {params: {id: this.id}}).then(res => {
+    playlistApi.detail(this.id).then(res => {
       this.listInfo = res.data.playlist
       this.creator = res.data.playlist.creator
     }).finally(() => { this.infoLoading = false })

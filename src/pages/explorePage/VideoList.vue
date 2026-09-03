@@ -31,6 +31,7 @@
 import VideoLayout from "@/components/layout/VideoLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
+import * as videoApi from "@/api/Video";
 
 export default {
   name: "VideoList",
@@ -66,10 +67,10 @@ export default {
   },
   methods: {
     getVideoTags() {
-      return this.$axios('/video/group/list')
+      return videoApi.groupList()
     },
     getVideoByTagId(id) {
-      return this.$axios('/video/group', {params: {id, offset: this.offset}})
+      return videoApi.group(id, this.offset)
     },
     // 匿名登录 cookie 可能尚未就绪, HTTP 301 或业务 code 301(需要登录) 时延时重试, 最多 4 次
     retryOnce(promiseFactory, attempts = 4, delay = 800) {
@@ -126,7 +127,7 @@ export default {
       })
     },
     getRecommendedVideos() {
-      return this.$axios('/video/timeline/recommend', {params: {offset: this.offset}})
+      return videoApi.timelineRecommend(this.offset)
     },
     concurrentRequests() {
       this.loading = true

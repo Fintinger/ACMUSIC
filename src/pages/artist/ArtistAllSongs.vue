@@ -25,6 +25,7 @@
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
 import CoverImage from "@/components/common/CoverImage";
+import * as artistApi from "@/api/Artist";
 
 export default {
   name: "ArtistAllSongs",
@@ -60,13 +61,7 @@ export default {
   },
   methods: {
     loadSongs(id) {
-      this.$axios.get('/artist/songs', {
-        params: {
-          id,
-          limit: this.params.limit,
-          offset: this.offset
-        }
-      }).then(res => {
+      artistApi.songs(id, this.params.limit, this.offset).then(res => {
         //歌曲数量
         this.total = res.data.total
 
@@ -97,7 +92,7 @@ export default {
 
 
     //获取歌手信息
-    this.$axios.get('/artists', {params: {id: this.id}}).then(res => {
+    artistApi.detail(this.id).then(res => {
       this.arBasicInfo = res.data.artist
     })
     this.loadSongs(this.id)

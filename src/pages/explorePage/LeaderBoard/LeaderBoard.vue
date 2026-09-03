@@ -22,6 +22,7 @@
 <script>
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
+import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "LeaderBoard",
@@ -44,7 +45,7 @@ export default {
   },
   beforeMount() {
     this.loading = true
-    this.$axios.get('/toplist/detail').then(res => {
+    playlistApi.toplistDetail().then(res => {
       this.topArtists = res.data.artistToplist
       this.topList = res.data.list
     }).finally(() => { this.loading = false })

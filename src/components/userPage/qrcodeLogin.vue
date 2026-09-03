@@ -17,6 +17,7 @@
 
 <script>
 import {setLogin} from "@/utils/auth";
+import * as authApi from "@/api/auth";
 
 export default {
   name: "qrcodeLogin",
@@ -61,14 +62,12 @@ export default {
   },
   methods: {
     generateQRCode() {
-      this.$axios.get('/login/qr/key', {params: {t: new Date().getTime()}}).then(res => {
+      authApi.qrKey().then(res => {
         if (res.data.code === 200) {
           //存储key
           this.unikey = res.data.data.unikey
 
-          this.$axios.get('/login/qr/create', {
-            params: {key: this.unikey, qrimg: new Date().getTime()}
-          }).then(res => {
+          authApi.qrCreate(this.unikey).then(res => {
             this.qrImg = res.data.data.qrimg
             //修改已经creat
             this.created = true;
@@ -82,10 +81,7 @@ export default {
       this.generateQRCode()
     },
     checkQR(key) {
-      this.$axios.get('/login/qr/check', {
-        params:
-            {key, t: new Date().getTime()}
-      }).then(res => {
+      authApi.qrCheck(key).then(res => {
         this.qrStatus = res.data.message
         this.qrStatusCode = res.data.code
         if (res.data.code === 803) {

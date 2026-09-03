@@ -53,6 +53,7 @@
 
 <script>
 import pubsub from 'pubsub-js'
+import * as tracksApi from "@/api/Tracks"
 
 export default {
   name: "PersonalFM",
@@ -262,7 +263,7 @@ export default {
       if (now - this.fmLastFetchAt < 1500) return Promise.resolve(null)
 
       this.fmFetching = true
-      return this.$axios('/personal_fm', { params: { t: now } })
+      return tracksApi.personalFM(now)
         .then(res => {
           const songs = res.data && res.data.data
           if (!Array.isArray(songs) || !songs.length) return null

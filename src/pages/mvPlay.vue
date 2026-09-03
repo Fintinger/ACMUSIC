@@ -6,6 +6,7 @@
 
 <script>
 import VideoPlayerLayout from "@/components/layout/VideoPlayerLayout";
+import * as mvApi from "@/api/Mv";
 
 export default {
   name: "mvPlay",
@@ -21,13 +22,13 @@ export default {
   },
   methods: {
     getDetail(id) {
-      return this.$axios('/mv/detail?mvid=' + id)
+      return mvApi.detail(id)
     },
     getUrl(id, r = 1080) {
-      return this.$axios('/mv/url', {params: {id, r}})
+      return mvApi.url(id, r)
     },
     getSimiMv(id) {
-      return this.$axios('/simi/mv?mvid=' + id)
+      return mvApi.simi(id)
     },
     mvClk(id) {
       this.$bus.$emit('mvClk', id)

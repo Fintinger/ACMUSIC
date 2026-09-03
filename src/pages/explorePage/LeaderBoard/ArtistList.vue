@@ -20,6 +20,7 @@
 
 <script>
 import ArtistLayout from "@/components/layout/ArtistLayout";
+import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "ArtistList",
@@ -50,7 +51,7 @@ export default {
   },
   methods: {
     getArtistList(type) {
-      this.$axios('/toplist/artist', {params: {type}}).then(res => {
+      playlistApi.toplistArtist(type).then(res => {
         this.artistList = res.data.list.artists
       })
     }

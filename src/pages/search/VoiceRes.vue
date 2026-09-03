@@ -15,6 +15,7 @@
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
 import {searchMixin} from "@/mixins/searchMixin";
+import * as searchApi from "@/api/Search";
 
 export default {
   name: "VoiceRes",
@@ -30,7 +31,7 @@ export default {
       data.al = data.album; data.ar = data.artists; delete data.album; delete data.artists; data.isVoice = true
     },
     getList(params) {
-      return this.$axios.get('/search', { params: { keywords: this.keyword, limit: this.limit, offset: this.offset, type: this.type, ...params } })
+      return searchApi.search({ keywords: this.keyword, limit: this.limit, offset: this.offset, type: this.type, ...params })
     },
     initLoad() {
       this.getList().then(res => {

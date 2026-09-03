@@ -95,6 +95,7 @@ import ArtistLayout from "@/components/layout/ArtistLayout";
 import MvLayout from "@/components/layout/MvLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
 import CoverImage from "@/components/common/CoverImage";
+import * as artistApi from "@/api/Artist";
 
 export default {
   name: "ArtistDetail",
@@ -116,12 +117,12 @@ export default {
     arAsClk(id) { this.$bus.$emit('arAsClk', id) },
     songClk(song) { this.$bus.$emit('songClk', song) },
     mvClick(id) { this.$bus.$emit('mvClk', id) },
-    getAtDetail() { return this.$axios.get('/artists', {params: {id: this.id}}) },
-    getTop50() { return this.$axios.get('/artist/top/song', {params: {id: this.id}}) },
-    getAlbum() { return this.$axios.get('/artist/album', {params: {id: this.id}}) },
-    getMVs() { return this.$axios.get('/artist/mv', {params: {id: this.id}}) },
-    getSimiAt() { return this.$axios.get('/simi/artist', {params: {id: this.id}}) },
-    getVid() { return this.$axios('/artist/video', {params: {...this.vidParams}}) },
+    getAtDetail() { return artistApi.detail(this.id) },
+    getTop50() { return artistApi.topSongs(this.id) },
+    getAlbum() { return artistApi.albums(this.id) },
+    getMVs() { return artistApi.mvs(this.id) },
+    getSimiAt() { return artistApi.simi(this.id) },
+    getVid() { return artistApi.videos(this.vidParams) },
     loadMoreVid() {
       this.getVid().then(res => {
         if (res.data.data.page.more) {

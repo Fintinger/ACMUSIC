@@ -1,3 +1,5 @@
+import { searchV2 } from "@/api/Search"
+
 export const searchMixin = {
     data() {
         return {
@@ -23,10 +25,7 @@ export const searchMixin = {
     methods: {
         getList(params) {
             const config = {keywords: this.keyword, limit: this.limit, offset: this.offset, type: this.type}
-            console.log(config);
-            return this.$axios.get('/cloudsearch', {
-                params: {...config, ...params}
-            })
+            return searchV2({...config, ...params})
         },
         initLoad() {
             this.getList().then(res => {
@@ -34,8 +33,6 @@ export const searchMixin = {
                 this.list = res.data.result[this.resultIn] || []
                 //统计歌曲数量
                 this.totalCount = res.data.result[this.countIn]
-                console.log(res.data);
-
             })
         },
         load() {

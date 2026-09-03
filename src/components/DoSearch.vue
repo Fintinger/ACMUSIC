@@ -94,6 +94,8 @@
 <script>
 import {toggleScrollY} from "@/utils/tools";
 import scoText from "@/components/scoText";
+import * as searchApi from "@/api/Search";
+import * as tracksApi from "@/api/Tracks";
 
 export default {
   name: "DoSearch",
@@ -137,13 +139,13 @@ export default {
       this.keyword = ""
     },
     getDefaultKeyword() {
-      return this.$axios('/search/default')
+      return searchApi.defaultKeyword()
     },
     getHotSearch() {
-      return this.$axios('/search/hot/detail')
+      return searchApi.hotDetail()
     },
     getSearchSuggest(keywords) {
-      return this.$axios('/search/suggest', {params: {keywords}})
+      return searchApi.suggest(keywords)
     },
     concurrentRequests() {
       this.$axios.all([this.getDefaultKeyword(), this.getHotSearch()])
@@ -155,7 +157,7 @@ export default {
           }))
     },
     getCoverUrl(ids) {
-      return this.$axios('/song/detail', {params: {ids}})
+      return tracksApi.detail(ids)
     },
     songClk(song) {
       console.log('[DoSearchClick]', song && song.id, song && song.name)

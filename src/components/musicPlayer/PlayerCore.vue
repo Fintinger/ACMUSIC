@@ -441,7 +441,7 @@ export default {
             return
           }
           // 所有 fallback 均失败 → 查询 song detail 判断原因，然后自动切下一首
-          self.$axios.get('/song/detail?ids=' + id).then(detailRes => {
+          tracks.detail(id).then(detailRes => {
             if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
             const fee = detailRes.data && detailRes.data.songs && detailRes.data.songs[0] && detailRes.data.songs[0].fee
             if (fee === 1) self.$message.warning("VIP歌曲，尝试解锁失败")
@@ -489,7 +489,7 @@ export default {
             return
           }
           // 所有 fallback 均失败 → 查询 song detail 判断原因，然后自动切下一首
-          self.$axios.get('/song/detail?ids=' + id).then(detailRes => {
+          tracks.detail(id).then(detailRes => {
             if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
             const fee = detailRes.data && detailRes.data.songs && detailRes.data.songs[0] && detailRes.data.songs[0].fee
             if (fee === 1) self.$message.warning("VIP歌曲，尝试解锁失败")
@@ -583,7 +583,7 @@ export default {
       if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
       const ck = id + '_fallback'
       console.log('%c▶ 旧接口兜底 %c/song/url?id=%s&br=%s', 'background:#ea580c;color:#fff;padding:2px 6px', '', id, br)
-      return this.$axios('/song/url', { params: { id, br } }).then(r => {
+      return tracks.songUrl(id, br).then(r => {
         if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
         const fbUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
         console.log('%c  %s %s', '', fbUrl ? '✅成功' : '❌失败', fbUrl ? '' : '→尝试match')
@@ -603,7 +603,7 @@ export default {
       if (cached && Date.now() < cached.expire) {
         return Promise.resolve({ data: { data: [{ url: cached.url }] }, source: 'match' })
       }
-      return this.$axios('/song/url/match', { params: { id } }).then(r => {
+      return tracks.songUrlMatch(id).then(r => {
         if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
         const matchUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
         if (!matchUrl) return Promise.reject(new Error('NO_RESOURCE'))

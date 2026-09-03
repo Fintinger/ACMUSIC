@@ -100,6 +100,7 @@
 import PlayCore from "@/components/musicPlayer/PlayerCore";
 import CommentLayout from "@/components/layout/CommentLayout";
 import { buildBackground } from "@/utils/colorExtractor";
+import * as tracksApi from "@/api/Tracks";
 
 export default {
   name: "MusicPlayer",
@@ -294,7 +295,7 @@ export default {
     },
     getLyric(id) {
       this.lyric = []; this.lastActiveIdx = -1
-      this.$axios.get('/lyric', { params: { id } }).then(res => {
+      tracksApi.lyric(id).then(res => {
         this.lyric = this.parseLyric(res.data.lrc.lyric)
       })
     },
@@ -334,8 +335,8 @@ export default {
         })
       }
     },
-    getSimiTracks(id) { return this.$axios('/simi/song', { params: { id } }) },
-    getSimiPlaylist(id) { return this.$axios('/simi/playlist', { params: { id } }) },
+    getSimiTracks(id) { return tracksApi.simiTracks(id) },
+    getSimiPlaylist(id) { return tracksApi.simiPlaylist(id) },
     concurrentRequestsGetSimi(id) {
       this.$axios.all([this.getSimiTracks(id), this.getSimiPlaylist(id)])
         .then(this.$axios.spread((tracks, list) => {

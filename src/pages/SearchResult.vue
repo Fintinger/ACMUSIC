@@ -29,6 +29,7 @@
 
 <script>
 import MultimatchLayout from "@/components/layout/MultimatchLayout";
+import * as searchApi from "@/api/Search";
 
 export default {
   name: "SearchResult",
@@ -61,7 +62,7 @@ export default {
   methods: {
     getMultimatch(keywords) {
       this.multiRes = []
-      this.$axios('/search/multimatch', {params: {keywords}})
+      searchApi.multimatch(keywords)
           .then(res => {
             res.data.result.orders.map(val => {
               if (val === "new_mlog") {

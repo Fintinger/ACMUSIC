@@ -70,6 +70,7 @@
 <script>
 import MvLayout from "@/components/layout/MvLayout";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
+import * as mvApi from "@/api/Mv";
 
 export default {
   name: "mvList",
@@ -141,9 +142,7 @@ export default {
       this.loading = true
       this.renderedList = []
       this.fadeKey++
-      this.$axios.get('/mv/all', {
-        params: { area: this.params.area, order: this.params.order, type: this.params.type, limit: this.params.limit }
-      }).then(res => {
+      mvApi.all({ area: this.params.area, order: this.params.order, type: this.params.type, limit: this.params.limit }).then(res => {
         this.hasMore = res.data.hasMore
         this.renderedList = res.data.data
       }).finally(() => { this.loading = false })
@@ -152,14 +151,12 @@ export default {
       this.loading = true
       this.page++
 
-      this.$axios.get('/mv/all', {
-        params: {
-          area: this.params.area,
-          order: this.params.order,
-          type: this.params.type,
-          limit: this.params.limit,
-          offset: this.params.limit * this.page
-        }
+      mvApi.all({
+        area: this.params.area,
+        order: this.params.order,
+        type: this.params.type,
+        limit: this.params.limit,
+        offset: this.params.limit * this.page
       }).then(res => {
         this.hasMore = res.data.hasMore
         this.renderedList.push(...res.data.data)
@@ -201,7 +198,7 @@ export default {
   },
   beforeMount() {
     this.loading = true
-    this.$axios.get('/mv/first', {params: {limit: 100}}).then(res => {
+    mvApi.first(100).then(res => {
       this.renderedList = res.data.data
     }).finally(() => { this.loading = false })
   }

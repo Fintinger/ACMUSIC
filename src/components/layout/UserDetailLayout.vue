@@ -56,6 +56,8 @@ import ArtistLayout from "@/components/layout/ArtistLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
 import CoverImage from "@/components/common/CoverImage";
 import * as User from "@/api/User";
+import * as userDetailApi from "@/api/UserDetail";
+import * as authApi from "@/api/auth";
 import { getAreaName, getCityName } from "@/utils/areaCode";
 import { formatMs } from "@/utils/filters";
 import { getIpLocation, maskIP } from "@/utils/ipLocation";
@@ -94,7 +96,7 @@ export default {
   },
   methods: {
     getUserInfo(uid) {
-      return this.$axios('/user/detail', {params: {uid}}).then(res => {
+      return userDetailApi.detail(uid).then(res => {
         this.userInfo = res.data
         if (res.data.profile) {
           const p = res.data.profile
@@ -104,8 +106,8 @@ export default {
         }
       })
     },
-    getPlaylist(uid) { return this.$axios('/user/playlist', {params: {uid, limit: 2000}}) },
-    getRecentTracks(uid, type = 1) { return this.$axios('/user/record', {params: {uid, type}}) },
+    getPlaylist(uid) { return userDetailApi.playlists(uid, 2000) },
+    getRecentTracks(uid, type = 1) { return userDetailApi.record(uid, type) },
     handleThisTracksData(tracks, target) {
       tracks.forEach(l => { l.song.recordPlayCount = l.playCount; target.push(l.song) })
     },
@@ -122,7 +124,7 @@ export default {
       const isSelf = uid === this.loginInfo.userId
       // 本人: 补充最近登录信息(IP→位置, 时间戳→日期)
       const p5 = isSelf
-        ? this.$axios('/login/status').then(res => {
+        ? authApi.loginStatus().then(res => {
             const pf = res.data.data && res.data.data.profile
             if (pf && pf.lastLoginIP) {
               this.lastLoginInfo.IP = pf.lastLoginIP
