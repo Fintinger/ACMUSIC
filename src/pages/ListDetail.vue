@@ -5,7 +5,7 @@
       <el-row v-else>
         <el-col :span="6">
           <div class="imgContainer">
-            <cover-image :alt="listInfo.name + '的封面'" :src="listInfo.coverImgUrl">
+            <cover-image :alt="listInfo.name + '的封面'" :src="listInfo.coverImgUrl" />
           </div>
         </el-col>
         <el-col class="info" :span="12">
