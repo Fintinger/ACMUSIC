@@ -35,6 +35,41 @@
 
 ## 历史记录
 
+### 2026-09-03 — FIX-clear-persisted-playlist 清空播放列表时同步删除 localStorage
+
+### 修改内容
+`PlayerCore.clearPlaylist` 成功回调中显式 `localStorage.removeItem('acmusic_player_state')`，避免清空后刷新页面被 `_restoreState` "复活"。
+
+### 修改文件
+- 修改 `src/components/musicPlayer/PlayerCore.vue`（`clearPlaylist` 内增加 1 行 `try { localStorage.removeItem(...) } catch {}`）
+- 修改 `docs/CHANGELOG_AI.md`（本条目）
+
+### 修改原因
+- BUG 链路：
+  1. `PlayerCore.clearPlaylist` 弹窗 → `$bus('clearPlaylist')` → `App.clearAll` 直接 `state.currentPlaylist = []`
+  2. `_saveState` 守卫 `if (!s || !s.id) return`（song.id 空时不写）
+  3. **旧 localStorage 残留** → 下次刷新 → `_restoreState` (L1113) 读出旧 playlist → 列表"复活"
+
+### 关键设计
+- 显式 removeItem（不能依赖 _saveState 自动清，因为守卫原因）
+- try-catch 包裹（避免 localStorage 异常导致整个清空失败）
+- 放在 `$bus.emit('clearPlaylist')` 之后，确保 UI 状态先更新
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 验证路径：听几首歌（让 _saveState 存了 localStorage）→ 点清空列表 → 刷新页面 → 列表应为空
+- 如有其他清空入口（如 logout），也需要同步清 localStorage
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: clear localStorage when clearing playlist`
+- **包含**：`src/components/musicPlayer/PlayerCore.vue`
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — REFACTOR-fm-state isPersonalFM 从 Vuex 下沉到 PlayerCore
 
 ### 修改内容
