@@ -61,3 +61,73 @@ export function open(id) {
 export function getAllTrack(id,params={}){
     return request('/playlist/track/all',{params:{id,...params}})
 }
+
+/**
+ * 歌单详情
+ * @param id 歌单 id
+ */
+export function detail(id) {
+    return request('/playlist/detail', { params: { id } })
+}
+
+/**
+ * 歌单分类（全部分类）
+ */
+export function catlist() {
+    return request('/playlist/catlist')
+}
+
+/**
+ * 精品歌单标签
+ */
+export function highqualityTags() {
+    return request('/playlist/highquality/tags')
+}
+
+/**
+ * 精品歌单
+ * @param cat 分类
+ * @param limit
+ * @param before 分页游标
+ */
+export function highquality(cat, before) {
+    return request('/top/playlist/highquality', { params: { limit: 12, cat, before } })
+}
+
+/**
+ * 歌单（分类筛选）
+ * @param params cat/order/limit/offset 等
+ */
+export function top(params) {
+    return request('/top/playlist', { params })
+}
+
+/**
+ * 所有榜单详情
+ */
+export function toplistDetail() {
+    return request('/toplist/detail')
+}
+
+/**
+ * 歌手榜
+ * @param type 榜单类型
+ */
+export function toplistArtist(type) {
+    return request('/toplist/artist', { params: { type } })
+}
+
+/**
+ * 新专辑速递
+ */
+export function newest() {
+    return request('/album/newest')
+}
+
+/**
+ * 热门歌手
+ * @param limit
+ */
+export function topArtists(limit = 10) {
+    return request('/top/artists', { params: { limit } })
+}

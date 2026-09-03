@@ -70,3 +70,76 @@ export function fmTrash(id) {
 export function updateListenedRanks(id,sourceid,time) {
     return request('/scrobble',{params:{id,sourceid,time}})
 }
+
+/**
+ * 私人 FM（拉取下一批推荐）
+ * @param t 时间戳，用于避免缓存
+ */
+export function personalFM(t = Date.now()) {
+    return request('/personal_fm', { params: { t } })
+}
+
+/**
+ * 歌曲 URL（v1，可指定码率）
+ * @param id 歌曲 id
+ * @param br 码率（如 999000 = 无损）
+ */
+export function songUrlV1(id, br) {
+    return request('/song/url/v1', { params: { id, br } })
+}
+
+/**
+ * 歌曲 URL（标准接口，按等级）
+ * @param id 歌曲 id
+ * @param br 码率（默认 999000）
+ */
+export function songUrl(id, br = 999000) {
+    return request('/song/url', { params: { id, br } })
+}
+
+/**
+ * 歌曲 URL match 接口（fallback）
+ * @param id 歌曲 id
+ */
+export function songUrlMatch(id) {
+    return request('/song/url/match', { params: { id } })
+}
+
+/**
+ * 歌曲详情（单个或多个，逗号分隔）
+ * @param ids 歌曲 id 字符串（逗号分隔）
+ */
+export function detail(ids) {
+    return request('/song/detail', { params: { ids } })
+}
+
+/**
+ * 每日推荐歌曲
+ */
+export function recommendSongs() {
+    return request('/recommend/songs')
+}
+
+/**
+ * 私人推荐歌单（每日推荐）
+ * @param limit
+ */
+export function personalized(limit = 10) {
+    return request('/personalized', { params: { limit } })
+}
+
+/**
+ * 网友推荐歌单
+ * @param limit
+ */
+export function recommendResource(limit = 10) {
+    return request('/recommend/resource', { params: { limit } })
+}
+
+/**
+ * 相似歌单
+ * @param id 歌单 id
+ */
+export function simiPlaylist(id) {
+    return request('/simi/playlist', { params: { id } })
+}
