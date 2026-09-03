@@ -957,9 +957,12 @@ export default {
         type: 'warning'
       }).then(() => {
         const prevLen = this.currentPlaylist.length
-        console.log('[PlaylistEmpty]', { action: 'clear', previousLength: prevLen })
         this.pauseSong()
         this.$bus.$emit("clearPlaylist")
+        // 同步清除 localStorage 持久化数据
+        // （_saveState 的守卫 if (!s || !s.id) return 会跳过 song 为空时的保存，
+        //   但旧数据仍残留会导致刷新后 _restoreState 把列表"复活"）
+        try { localStorage.removeItem('acmusic_player_state') } catch (e) { /* ignore */ }
         this.$message.success('播放列表已清空')
       }).catch(() => {})
     },
