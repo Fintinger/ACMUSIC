@@ -46,7 +46,7 @@
             <span class="modeBtn mode-spacer"></span>
           </div>
           <div class="actionsRow">
-            <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>{{ likedCount | Div1w }}</span></button>
+            <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/></button>
             <button class="actionBtn" @click="shareSong"><BaseIcon name="share"/><span>分享</span></button>
           </div>
         </div>
@@ -114,8 +114,9 @@ export default {
       currentSong: {},
       simiTracks: [],
       simiPlaylist: [],
-      isLiked: false,
-      likedCount: 0,
+      // 大播放器的红心状态：由 PlayerCore emit('likeChange') 同步
+      // 不在本地另存数据，避免双份状态不一致
+      likeMirror: false,
       rightTab: 'lyric',
       lastActiveIdx: -1,
       bgStyle: 'linear-gradient(170deg, #1a1a2e 0%, #0f0f23 100%)',
@@ -150,6 +151,8 @@ export default {
     playMode() { return this.$refs.pgPanel ? this.$refs.pgPanel.playMode : 'order' },
     progressPercent() { return this.duration ? (this.timeNow / this.duration) * 100 : 0 },
     bufferPercent() { return this.duration ? (this.bufferedTime / this.duration) * 100 : 0 },
+    // 红心状态来自 PlayerCore（单一数据源），这里镜像同步
+    isLiked() { return this.likeMirror },
   },
   watch: {
     isExpand(val) { val ? this.expanded() : this.minified() },
@@ -344,7 +347,10 @@ export default {
     prevTrack() { if (this.$refs.pgPanel) this.$refs.pgPanel.preSong() },
     nextTrack() { if (this.$refs.pgPanel) this.$refs.pgPanel.nextSong() },
     togglePlayMode() { if (this.$refs.pgPanel) this.$refs.pgPanel.togglePlayMode() },
-    toggleLike() { this.isLiked = !this.isLiked; this.isLiked ? this.likedCount++ : this.likedCount-- },
+    toggleLike() {
+      // 委托给 PlayerCore（单一数据源，含 likePending 锁 + API 调用 + 失败回滚）
+      if (this.$refs.pgPanel) this.$refs.pgPanel.toggleLike()
+    },
     shareSong() {},
     formatTime(s) { s = s * 1; if (!s || isNaN(s)) return '00:00'; const m = Math.floor(s / 60); return String(m).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0') },
     trackAlbumPic(t) { return (t.album && t.album.picUrl) || (t.al && t.al.picUrl) || '' },
@@ -371,6 +377,12 @@ export default {
     this.$refs.pgPanel.$on('songChange', (s) => { this.currentSong = s; this.lastActiveIdx = -1; this.colorSongId = null })
     this.$refs.pgPanel.$on('getLyric', this.getLyric)
     this.$refs.pgPanel.$on('getSimi', this.concurrentRequestsGetSimi)
+    // 同步 PlayerCore 的红心状态（用户点击会触发 PlayerCore.toggleLike()）
+    this.$refs.pgPanel.$on('likeChange', ({ liked }) => { this.likeMirror = liked })
+    // 初始化镜像状态（已加载歌曲）
+    if (this.$refs.pgPanel.currentSong && this.$refs.pgPanel.currentSong.id) {
+      this.likeMirror = !!this.$refs.pgPanel.isLiked
+    }
   },
   beforeDestroy() {
     if (this.scrollObserver) this.scrollObserver.disconnect()

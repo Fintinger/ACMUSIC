@@ -124,6 +124,7 @@ import { buildBackground } from "@/utils/colorExtractor"
 import QualityMenu from "@/components/musicPlayer/QualityMenu"
 import { setAudioCache, getAudioCache, getAudioUrl } from "@/utils/audioCache"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
+import * as tracks from "@/api/Tracks";
 
 const FALLBACK_BG = '#1a1a2e'
 
@@ -177,6 +178,11 @@ export default {
       // （音频暂停前 timeupdate 事件持续触发，会让 _autoNext 被多次调用）
       // 第一次 _autoNext 触发过渡后，$nextTick 期间锁住，避免后续误触发 curIndex++
       autoNextLocked: false,
+      // 用户的喜欢歌曲 ID 集合（登录后通过 /likelist 填充）
+      // 用于歌曲切换时同步 isLiked 初始状态，避免每次切换都查接口
+      likedSongIds: new Set(),
+      // 当前歌曲的喜欢请求锁定，防止快速连点
+      likePending: false,
     }
   },
   computed: {
@@ -214,6 +220,11 @@ export default {
     },
   },
   watch: {
+    isLogin(val) {
+      // 登录后拉取一次 /likelist，填充 likedSongIds Set
+      // 之后所有歌曲切换都从 Set 判断 liked 状态，免调接口
+      if (val) this._initLikedSet()
+    },
     song(val) {
       console.trace('[CurrentSongSet] song_watch', val && val.id)
       console.log('[SongState]', { action: 'song_watch', currentSongId: this.currentSong.id || null, playlistFirstId: this.currentPlaylist[0] && this.currentPlaylist[0].id || null, requestId: this.playRequestId })
@@ -231,6 +242,8 @@ export default {
         console.log('[PlayContext]', { songId: val.id, source: this.currentSongSource, contextId: this.playContextId, playlistContextId: this.playlistContextId, requestId: this.playRequestId })
         normalizeTrack(val)
         this.updateMiniBackground()
+        // 歌曲切换 → 同步服务端真实 liked 状态（从 /likelist 缓存读取）
+        this.isLiked = this.likedSongIds.has(String(val.id))
         if (this.isRestoring) {
           this.isRestoring = false
           this.isPlay = false
@@ -750,7 +763,78 @@ export default {
       try { localStorage.setItem('acmusic_play_mode', this.playMode) } catch (e) { /* ignore */ }
       console.log('[PlayMode]', { mode: this.playMode })
     },
-    toggleLike() { this.onInteract(); this.isLiked = !this.isLiked },
+    /**
+     * 喜欢 / 取消喜欢当前歌曲
+     * 流程：
+     *   1. 登录检查 → 未登录不调 API
+     *   2. 并发保护：likePending 锁
+     *   3. 乐观更新：立即翻转 isLiked（UI 立刻响应）
+     *   4. 调 /like API
+     *   5. 服务端成功 → 同步 likedSongIds Set + emit likeChange
+     *   6. 失败 /网络错误 → 回滚 isLiked + 错误提示
+     */
+    toggleLike() {
+      if (!this.isLogin) {
+        this.$message.warning('请先登录')
+        return
+      }
+      const songId = this.currentSong && this.currentSong.id
+      if (!songId) return
+      if (this.likePending) return
+
+      const wasLiked = !!this.isLiked
+      const newLiked = !wasLiked
+
+      this.onInteract()
+      this.likePending = true
+      // 乐观更新：UI 立即翻转
+      this.isLiked = newLiked
+
+      tracks.like(songId, newLiked)
+        .then(res => {
+          if (res && res.data && res.data.code === 200) {
+            // 服务端成功 → 同步 likedSongIds Set（保持持久一致）
+            if (newLiked) this.likedSongIds.add(String(songId))
+            else this.likedSongIds.delete(String(songId))
+            this.$bus.$emit('likeChange', { id: songId, liked: newLiked })
+            this.$message.success(newLiked ? '已添加到我的喜欢' : '已取消喜欢')
+          } else {
+            // 业务失败 → 回滚
+            this.isLiked = wasLiked
+            this.$message.error('操作失败，请稍后重试')
+          }
+        })
+        .catch(err => {
+          console.error('[SongLike] failed', err)
+          this.isLiked = wasLiked
+          this.$message.error('网络错误，点赞失败')
+        })
+        .finally(() => {
+          this.likePending = false
+        })
+    },
+    /**
+     * 拉取用户喜欢歌曲 ID 列表填充 Set
+     * 调用 /likelist（需要登录）
+     * Set 中以 string 形式存储 songId（兼容 Number/String 类型）
+     */
+    _initLikedSet() {
+      if (!this.isLogin) return
+      tracks.likelist()
+        .then(res => {
+          if (res && res.data && Array.isArray(res.data.ids)) {
+            this.likedSongIds = new Set(res.data.ids.map(id => String(id)))
+            // 同步当前歌曲的 liked 状态
+            if (this.currentSong && this.currentSong.id) {
+              this.isLiked = this.likedSongIds.has(String(this.currentSong.id))
+            }
+            console.log('[SongLike] init liked set:', this.likedSongIds.size)
+          }
+        })
+        .catch(err => {
+          console.error('[SongLike] init liked set failed', err)
+        })
+    },
     showSongDetail() { if (!this.currentSong.isVoice) this.$emit('SDClk', this.currentSong) },
     onMouseEnter() { this.clearHideTimer(); this.showBar = true },
     onMouseLeave() { this.scheduleHide() },
@@ -1095,7 +1179,7 @@ export default {
     },
   },
   beforeMount() { this.sel = new Audio() },
-  mounted() {
+mounted() {
     this._restoreState()
     try {
       const savedMode = localStorage.getItem('acmusic_play_mode')
@@ -1106,6 +1190,8 @@ export default {
     this.fmBatchId = pubsub.subscribe('fmNewBatch', this.playFmNewBatch)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
+    // 登录态启动后拉取一次 /likelist 填充 likedSongIds
+    if (this.isLogin) this._initLikedSet()
   },
   beforeDestroy() {
     window.removeEventListener('beforeunload', this._onBeforeUnload)

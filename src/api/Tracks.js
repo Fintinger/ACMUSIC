@@ -42,6 +42,16 @@ export function like(id, like = true) {
 }
 
 /**
+ * 获取喜欢的歌曲 id 列表（我的喜欢歌单）
+ * 说明 返回 ids 数组，为当前用户所有喜欢歌曲 id
+ * 需要登录
+ * @returns {AxiosPromise<{ ids: (string|number)[] }>}
+ */
+export function likelist() {
+    return request('/likelist')
+}
+
+/**
  * 私人 FM 移除至垃圾桶
  * @param id 歌曲 id
  * @returns {AxiosPromise}
