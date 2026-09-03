@@ -179,6 +179,16 @@ export default {
     ...mapState('TracksAbout', ['currentPlaylist', 'isPersonalFM']),
     isLogin() { return this.$store.getters["UserAbout/isLogin"] },
     progress() { return (this.timeNow / this.timeDuration) * 100 || 0 },
+    /**
+     * FM 模式预加载信号：在 FM 模式下进入最后一首时变 true
+     * watcher 监听到此变化会主动 publish 'getPersonalFM' 触发预加载
+     * 这样歌曲结束前新批次已就绪，避免听感上的"静音空白"
+     */
+    fmShouldPrefetch() {
+      if (!this.isPersonalFM) return false
+      const len = this.currentPlaylist.length
+      return len > 0 && this.curIndex === len - 1
+    },
     coverUrl() {
       const s = this.currentSong
       return (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || ''
@@ -314,6 +324,14 @@ export default {
     volume(val) { this.sel.volume = val / 100 },
     isPersonalFM(val) {
       if (!val) this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [this.currentSong])
+    },
+    /**
+     * FM 预加载：进入最后一首时主动 publish 'getPersonalFM'
+     * PersonalFM.fetchMoreFM 的 1.5s 去抖 + in-flight 检查保证不会重复触发
+     * _autoNext / nextSong 的反应式 trigger 作为兜底
+     */
+    fmShouldPrefetch(needed) {
+      if (needed) pubsub.publish('getPersonalFM', Date.now())
     },
     'currentSong.id'() {
       this._syncTitle()
@@ -615,7 +633,15 @@ export default {
     },
     nextSong() {
       this.onInteract()
-      if (this.isPersonalFM) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
+      if (this.isPersonalFM) {
+        // FM 模式：未到末尾时顺序切，到末尾才拉新批次
+        if (this.curIndex < this.currentPlaylist.length - 1) {
+          this.curIndex = this.curIndex + 1
+        } else {
+          pubsub.publish('getPersonalFM', new Date().getTime())
+        }
+        return
+      }
       if (!this._inPlaylist()) return
       this.curIndex = this.getNextIndex()
     },
@@ -627,7 +653,15 @@ export default {
     // 自动播放到结尾触发：loop 模式重播当前曲
     _autoNext() {
       if (this.playMode === 'loop') { this._restartCurrent(); return }
-      if (this.isPersonalFM) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
+      if (this.isPersonalFM) {
+        // FM 模式：未到末尾时顺序切，到末尾才拉新批次
+        if (this.curIndex < this.currentPlaylist.length - 1) {
+          this.curIndex = this.curIndex + 1
+        } else {
+          pubsub.publish('getPersonalFM', new Date().getTime())
+        }
+        return
+      }
       if (!this._inPlaylist()) return
       this.curIndex = this.getNextIndex()
     },
@@ -783,11 +817,14 @@ export default {
      * FM 续播：PersonalFM 拉取新批次成功后，publish 'fmNewBatch' 并附带 startIndex
      * 这里把 curIndex 推进到 startIndex，让 watch 链路自动加载并播放新曲
      */
+    /**
+     * FM 续播：PersonalFM 拉取新批次成功后，publish 'fmNewBatch' 并附带 startIndex
+     * 这里把 curIndex 推进到 startIndex（替换模式下永远传 0），让 watch 链路自动加载并播放新曲
+     */
     playFmNewBatch(msgName, startIndex) {
       if (!this.isPersonalFM) return
       if (typeof startIndex !== 'number' || startIndex < 0) return
       if (startIndex >= this.currentPlaylist.length) return
-      console.log('[FMRefresh] advance curIndex', { from: this.curIndex, to: startIndex, total: this.currentPlaylist.length })
       this.curIndex = startIndex
     },
     clearPlaylist() {

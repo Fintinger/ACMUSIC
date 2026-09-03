@@ -211,11 +211,12 @@ export default {
       this.$store.state.TracksAbout.isPersonalFM = true
     },
     /**
-     * FM 自动续播
-     * 订阅 'getPersonalFM' 事件（PlayerCore 在 FM 模式切歌时 publish）
-     * 拉取新一批 FM 歌曲，追加到 currentPlaylist
+     * FM 自动续播（替换模式）
+     * 订阅 'getPersonalFM' 事件（PlayerCore 在 FM 模式切到末尾时 publish）
+     * 拉取新一批 FM 歌曲，**替换** currentPlaylist（保持 3 首循环）
      * - 1.5 秒去抖 + in-flight 检查，避免快速连点 next 触发重复请求
      * - 网络失败仅 console.error，不影响当前播放
+     * - 替换后同步 PersonalFM 的 currentList（UI 始终显示 3 张卡片）
      */
     fetchMoreFM() {
       const now = Date.now()
@@ -227,12 +228,16 @@ export default {
         .then(res => {
           const songs = res.data && res.data.data
           if (!Array.isArray(songs) || !songs.length) return
-          // 记录追加前的长度，PlayerCore 据此把 curIndex 推进到新批次的首曲
-          const oldLength = this.$store.state.TracksAbout.currentPlaylist.length
-          this.$store.commit('TracksAbout/PUSH_PLAYLIST', songs)
+          // 替换为新 3 首（不追加）
+          const next = songs.slice(0, 3)
+          this.$store.commit('TracksAbout/REPLACE_PLAYLIST', next)
           this.fmLastFetchAt = Date.now()
-          // 通知 PlayerCore：列表已扩展，请在 oldLength 位置开始播
-          pubsub.publish('fmNewBatch', oldLength)
+          // 通知 PlayerCore：从第 0 首开始播（curIndex = 0）
+          pubsub.publish('fmNewBatch', 0)
+          // 同步 PersonalFM 组件自己的 currentList（UI 始终显示 3 张卡片）
+          this.currentList = next
+          this.activeIndex = 0
+          this.$nextTick(() => this.startCarousel())
         })
         .catch(err => {
           console.error('[FMRefresh] failed', err)
