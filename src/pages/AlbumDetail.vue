@@ -1,17 +1,9 @@
 <template>
   <div class="albumDetail">
-    <div v-if="loading" class="album-skel">
-      <div class="skel-hero">
-        <div class="skel-cover skeleton-item"></div>
-        <div class="skel-info">
-          <div class="skel-line skel-line--lg skeleton-item"></div>
-          <div class="skel-line skel-line--md skeleton-item"></div>
-          <div class="skel-line skel-line--sm skeleton-item"></div>
-          <div class="skel-line skel-line--sm skeleton-item"></div>
-        </div>
-      </div>
-      <div class="skel-tracks"><div v-for="n in 8" :key="n" class="skel-row"><div class="skel-bar skeleton-item"></div></div></div>
-    </div>
+    <template v-if="loading">
+      <PlaylistInfoSkeleton/>
+      <TrackListSkeleton :count="8"/>
+    </template>
     <template v-else>
     <div class="album-hero">
       <div class="album-cover"> <cover-image :src="albumInfo.picUrl" :alt="albumInfo.name + '的封面'"/> </div>
@@ -40,12 +32,20 @@
 <script>
 import TracksLayout from "@/components/layout/TracksLayout";
 import CommentLayout from "@/components/layout/CommentLayout";
+import PlaylistInfoSkeleton from "@/components/Skeleton/PlaylistInfoSkeleton";
+import TrackListSkeleton from "@/components/Skeleton/TrackListSkeleton";
 import CoverImage from "@/components/common/CoverImage";
 import * as albumApi from "@/api/Album";
 
 export default {
   name: "AlbumDetail",
-  components:{TracksLayout,CommentLayout, CoverImage},
+  components:{
+    TracksLayout,
+    CommentLayout,
+    PlaylistInfoSkeleton,
+    TrackListSkeleton,
+    CoverImage
+  },
   data() {
     return {
       albumInfo: {}, songs: [],
@@ -130,19 +130,6 @@ export default {
     .comment-delete .el-button { color: $font-black-2 !important; }
   }
 }
-
-/* skeleton */
-.album-skel { padding-top: 40px; }
-.skel-hero { display: flex; gap: 40px; margin-bottom: 40px; }
-.skel-cover { width: 260px; height: 260px; border-radius: 16px; flex-shrink: 0; }
-.skel-info { flex: 1; padding-top: 16px; }
-.skel-line { height: 14px; border-radius: 6px; margin-bottom: 14px; }
-.skel-line--lg { width: 60%; height: 28px; }
-.skel-line--md { width: 40%; }
-.skel-line--sm { width: 30%; height: 12px; }
-.skel-tracks { margin-top: 20px; }
-.skel-row { padding: 12px 0; }
-.skel-bar { height: 14px; border-radius: 6px; width: 70%; }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 </style>
