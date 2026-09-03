@@ -35,6 +35,56 @@
 
 ## 历史记录
 
+### 2026-09-03 — OPT-mixin mixin 路径统一
+
+### 修改内容
+合并 `src/assets/mixin/` 与 `src/mixins/` 到 `src/mixins/`。
+
+### 修改文件
+- 新增 `src/mixins/searchMixin.js`（从 `src/assets/mixin/index.js` 移过来）
+- 删除 `src/assets/mixin/index.js` 和 `src/assets/mixin/` 目录
+- 修改 9 个 search 结果组件 import 路径：`@/assets/mixin` → `@/mixins/searchMixin`
+  - `src/pages/search/AlbumRes.vue`
+  - `src/pages/search/ArtistRes.vue`
+  - `src/pages/search/LyricRes.vue`
+  - `src/pages/search/MvRes.vue`
+  - `src/pages/search/PlaylistRes.vue`
+  - `src/pages/search/TrackRes.vue`
+  - `src/pages/search/UserRes.vue`
+  - `src/pages/search/VideoRes.vue`
+  - `src/pages/search/VoiceRes.vue`
+- 修改 `docs/PROJECT_CONTEXT.md`（从中优先级清单移除已修复项）
+- 修改 `docs/ARCHITECTURE_DECISIONS.md`（新增第 21 条）
+- 修改 `docs/CHANGELOG_AI.md`（本条目）
+
+### 修改原因
+- 项目内有两处 mixin 目录，新代码不知道该往哪加
+- 路径分裂影响可维护性
+
+### 关键设计
+- 沿用 `src/mixins/` 命名（与 `coverLight.js` 一致）
+- SCSS mixin 保持原位（不同语境，不受影响）
+
+### 测试结果
+- `yarn lint` ✅ 7 个错误全部为预存在
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 第一次尝试用 PowerShell `Set-Content` 批量替换时，因 LF→CRLF 转换导致 build 失败
+- 第二次改用逐文件 `edit` 工具成功（保持原 LF 行尾）
+
+### Git 建议
+- **Commit 类型**：`refactor`
+- **Commit message**：`refactor: consolidate mixins into src/mixins/`
+- **包含**：
+  - `src/mixins/searchMixin.js`（新增）
+  - `src/assets/mixin/index.js`（删除）
+  - 9 个 search 结果组件的 import 路径
+- **不包含**：
+  - `docs/`（独立 docs commit）
+
+---
+
 ### 2026-09-03 — OPT-FM-random FM 模式下禁用随机播放
 
 ### 修改内容

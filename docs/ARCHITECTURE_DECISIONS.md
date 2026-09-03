@@ -751,6 +751,35 @@ getNextIndex() {
 
 ---
 
+## 决策 21：mixin 路径统一到 `src/mixins/`
+
+**日期**：2026-09-03
+
+**背景**：
+项目内存在两处 mixin 目录，路径分裂：
+- `src/assets/mixin/index.js`（老路径，9 个 search 结果组件使用）
+- `src/mixins/coverLight.js`（新路径，HomePage / UserDetailLayout 使用）
+
+新代码不知道该往哪加，import 路径混乱。
+
+**最终方案**：
+合并到 `src/mixins/`：
+- 移动 `src/assets/mixin/index.js` → `src/mixins/searchMixin.js`
+- 更新 9 个 search 结果组件的 import 路径
+- 删除空的 `src/assets/mixin/` 目录
+
+**影响范围**：10 个文件
+- 1 个新文件：`src/mixins/searchMixin.js`
+- 1 个删除：`src/assets/mixin/index.js` + 目录
+- 9 个 import 路径更新：`src/pages/search/*Res.vue`
+
+**未来注意事项**：
+- 新增 mixin 一律放 `src/mixins/`
+- 不要再次出现路径分裂
+- SCSS 的 mixin（`@mixin scroll-bar`）保持原位，与 JS mixin 不同
+
+---
+
 # 未来可改进（非决策）
 
 > 以下不是已落地的决策，是分析时识别出的潜在改进点。AI **不得擅自** 进行这些修改，需用户明确指示。

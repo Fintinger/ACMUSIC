@@ -550,8 +550,7 @@ App.vue
 
 ## 中优先级
 
-1. **`mixin` 路径分裂**：`src/assets/mixin/index.js` 存在但 `src/mixins/coverLight.js` 也存在—容易混淆，新代码应统一到 `src/mixins/`
-2. **`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期
+1. **`commentContentLayout.toggleLike` 用 DOM 操作**（`evt.target.classList.replace`）而非响应式状态 — 点赞切换不可预期
 
 > 以下已通过 OPT-FM 修复（2026-09-02 commit `feat: implement FM auto-refresh`）：
 > - ~~`pubsub.publish('getPersonalFM', ...)` 无订阅者~~ ✅ PersonalFM.vue 已订阅 + 实现 fetchMoreFM（5s 去抖 + 错误处理）
