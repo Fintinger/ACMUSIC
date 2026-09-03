@@ -173,6 +173,10 @@ export default {
       playMode: 'order',
       shuffleOrder: [],
       shufflePos: -1,
+      // _autoNext 锁：防止 song end 期间 timeNow watcher 多次触发 _autoNext
+      // （音频暂停前 timeupdate 事件持续触发，会让 _autoNext 被多次调用）
+      // 第一次 _autoNext 触发过渡后，$nextTick 期间锁住，避免后续误触发 curIndex++
+      autoNextLocked: false,
     }
   },
   computed: {
@@ -654,6 +658,13 @@ export default {
     },
     // 自动播放到结尾触发：loop 模式重播当前曲
     _autoNext() {
+      // 防止 song end 触发多次：timeNow watcher 在音频暂停前会持续触发 _autoNext
+      // 第一次触发后加锁，$nextTick 后释放（覆盖同步过渡 + 残留 timeupdate 事件）
+      if (this.autoNextLocked) return
+      this.autoNextLocked = true
+      this.$nextTick(() => {
+        this.autoNextLocked = false
+      })
       if (this.playMode === 'loop') { this._restartCurrent(); return }
       if (this.isPersonalFM) {
         // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
