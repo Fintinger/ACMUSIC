@@ -35,6 +35,52 @@
 
 ## 历史记录
 
+### 2026-09-04 — FIX-video-aspect-ratio 视频播放非标准尺寸 BUG
+
+### 修改内容
+视频播放器非标准尺寸（如 9:16 竖屏）下：
+- 视频被**裁切上半部分**（fitVideoSize:'auto' 选 'fix-width' 导致垂直超出容器）
+- 控制条不可见
+
+### 修改文件
+- 修改 `src/components/vidPlayer.vue`：
+  - `fitVideoSize: 'auto'` → `'contain'`（强制视频完整显示在容器内）
+  - 去掉 `width: 100% !important; height: 100% !important` 的强制拉伸
+- 修改 `src/components/layout/VideoPlayerLayout.vue`：
+  - `.video-player-section` 加 `max-width: 1100px; margin: 0 auto`（保持 16:9 容器尺寸不变，水平居中）
+
+### 修改原因
+- **用户要求**：保持播放器窗口大小（16:9 容器）不变，只让视频内容按窗口缩放
+- 原 `fitVideoSize: 'auto'` 在 9:16 视频时会自适应选 `'fix-width'` → 视频按宽度铺满容器 → 高度按 9:16 计算超出容器 → **被 `overflow: hidden` 裁切上半**
+- 原 `width: 100% !important; height: 100% !important` 强制 video 拉伸成 16:9，破坏视频原始比例
+- 容器固定 `aspect-ratio: 16/9` + xgplayer 默认 fit 模式 = 任何非 16:9 视频都显示异常
+
+### 关键设计
+- **`fitVideoSize: 'contain'`**（xgplayer 模式）：强制视频完整显示在容器内，**不裁切**
+- **配合容器 `aspect-ratio: 16/9`**：横屏视频完美填满，竖屏视频按高度 fit、左右留黑边（黑边区域显示控制条，不被裁切）
+- **去掉 `!important` 强制拉伸**：让 xgplayer 自然占满容器，video 用 `object-fit: contain` 保持原始比例
+- **容器尺寸不变**：维持 `aspect-ratio: 16/9`（用户明确要求"窗口大小不变"），视频内容自适应
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+- `yarn lint` ✅ 错误数不变（7 个预存在）
+
+### 注意事项
+- **未来非 16:9 视频**（如 4:3、21:9、9:16）会按高度 fit 在 16:9 容器内，可能两侧留黑边
+- **控制条 z-index 100** 已确保在黑边/视频上仍可点击
+- **如未来需要"完全自适应容器"**（去掉 16:9 aspect-ratio），需要权衡播放器窗口大小
+- 这次修复**不动 MV 视频**（mvPlay.vue 用 VideoPlayerLayout 共用同一组件，**MV 视频也受益**）
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: video player handles non-standard aspect ratios (9:16 etc.) without cropping`
+- **包含**：
+  - `src/components/vidPlayer.vue`
+  - `src/components/layout/VideoPlayerLayout.vue`
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — REFACTOR-router-mode Vue Router 切到 history 模式
 
 ### 修改内容
