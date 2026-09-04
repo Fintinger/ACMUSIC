@@ -37,6 +37,9 @@ VueRouter.prototype.push = function push(location) {
 }
 
 const router = new VueRouter({
+    // 切到 history 模式：URL 从 /#/path 变成 /path（更干净、SEO 友好）
+    // Vercel 默认对 SPA 项目支持 fallback，无需额外配置
+    mode: 'history',
     routes: [
         {path: '/', component: HomePage, meta: {level: 1}},
         {
