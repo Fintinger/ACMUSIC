@@ -35,6 +35,49 @@
 
 ## 历史记录
 
+### 2026-09-04 — REFACTOR-video-side-color 视频左右黑边改为封面主色
+
+### 修改内容
+视频 9:16 竖屏时左右"黑边"改为**封面主色渐变**（视觉上更和谐），复用 `utils/colorExtractor.extractColors`。
+
+### 修改文件
+- 修改 `src/components/layout/VideoPlayerLayout.vue`：
+  - import `extractColors` from `@/utils/colorExtractor`
+  - data 加 `playerBgStyle`
+  - methods 加 `onCoverLoad(img)`：调 `extractColors` → 取主色 → 构 `linear-gradient(to right, ${main} 0%, #000 35%, #000 65%, ${main} 100%)`
+  - 模板 hidden `<img :src="dt_cover" @load="onCoverLoad">`（1px×1px 绝对定位，opacity:0）
+  - `.video-player-section` 加 `:style="playerBgStyle"`
+  - CSS 加 `.cover-color-source` 隐藏 img 样式
+
+### 修改原因
+- 用户反馈：修复非标准尺寸视频（9:16）后，左右黑边刺眼
+- 改进方向：参考 MusicPlayer 已用的 `colorExtractor.js`（提取封面主色），让左右填充色跟封面协调
+
+### 关键设计
+- **复用现有工具**：`colorExtractor.extractColors` 已 public export（`MusicPlayer.vue:102` 在用同模块的 `buildBackground`）
+- **零新增工具**：用现成的 extractColors 拿主色，**不调用** `buildBackground`（那是给整页背景用的多层 radial-gradient，容器级别不适用）
+- **隐藏 img 触发**：在 `.video-player-section` 内放 1px×1px 隐藏 img，`@load` 时提取主色
+- **video 容器 `object-fit: contain`**（之前修复保留）：主色在黑边区显示，视频居中覆盖主色
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+- `yarn lint` ✅ 错误数不变（7 个预存在）
+
+### 注意事项
+- **横屏视频（16:9）**：视频铺满容器，**主色不可见**（视频遮挡），无副作用
+- **竖屏视频（9:16）**：左右黑边显示主色渐变，与封面协调
+- **首次加载**有 0.x 秒主色提取时间（canvas 像素扫描），提取完成后渐变生效
+- `colorExtractor.extractColors` 不是从 video 元素提取，是从 img 元素提取——所以**走封面图**而不是 video 元素（封面图永远先于 video 加载完成）
+- 失败 fallback：extractColors 内部 try/catch，失败返回 `[]`，`onCoverLoad` 不设 playerBgStyle（默认 #000 容器底色）
+
+### Git 建议
+- **Commit 类型**：`refactor`
+- **Commit message**：`refactor: video page side bars use cover-derived main color (not black)`
+- **包含**：`src/components/layout/VideoPlayerLayout.vue`
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-04 — FIX-video-aspect-ratio 视频播放非标准尺寸 BUG
 
 ### 修改内容
