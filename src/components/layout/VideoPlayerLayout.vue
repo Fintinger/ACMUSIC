@@ -99,13 +99,24 @@ export default {
      * 9:16 视频居中后，左右黑边会显示主色
      * 16:9 视频居中后，video 覆盖全容器，颜色不可见（无副作用）
      * 复用 utils/colorExtractor.extractColors（MusicPlayer 在用 buildBackground）
+     *
+     * ⚠️ 注意：NetEase 封面图（p*.music.126.net）不返回 CORS 头，
+     *    canvas.drawImage 会抛 SecurityError 被 try/catch 吞掉，extractColors 返回 []
+     *    所以必须加 fallback：失败时用 MusicPlayer 同款 FALLBACK 色 #1a1a2e
+     *    否则背景保持 CSS 默认 #000（纯黑），看起来跟没改一样
      */
     onCoverLoad(img) {
-      if (!img || !img.complete) return
+      if (!img || !img.complete) {
+        this.playerBgStyle = 'background: #1a1a2e'
+        return
+      }
       const colors = extractColors(img)
-      if (!colors.length) return
-      // 取第一个合格暗色（已经过 findDarkColors 过滤的会更好，但 export 只暴露 extractColors）
-      // 这里简单取前 2 个不同色调，颜色稍暗以避免抢夺 video 注意力
+      if (!colors.length) {
+        // 跨域污染 fallback：跟 MusicPlayer 的 FALLBACK 保持一致
+        this.playerBgStyle = 'background: #1a1a2e'
+        return
+      }
+      // 取第一个主色（已经过 extractColors 排序），颜色稍暗以避免抢夺 video 注意力
       const [r, g, b] = colors[0]
       const main = `rgb(${r},${g},${b})`
       this.playerBgStyle = `background: linear-gradient(to right, ${main} 0%, #000 35%, #000 65%, ${main} 100%)`
