@@ -35,6 +35,42 @@
 
 ## 历史记录
 
+### 2026-09-04 — FIX-video-side-color-fallback 修复主色提取 CORS 跨域失败导致纯黑
+
+### 修改内容
+之前的"视频左右黑边改封面主色"实际**没生效**——NetEase 封面图不返回 CORS 头，`extractColors` 内部 `canvas.drawImage` 抛 SecurityError，被 try/catch 吞掉返回 `[]`。本应在 `colors.length === 0` 时回退到背景色，但代码里没 fallback 路径，导致 `playerBgStyle` 保持初始 `''`，背景仍是 CSS 默认 `#000`（纯黑）。
+
+### 修改文件
+- 修改 `src/components/layout/VideoPlayerLayout.vue` `onCoverLoad(img)`：
+  - 加 `if (!img || !img.complete)` fallback → `'background: #1a1a2e'`
+  - 加 `if (!colors.length)` fallback → `'background: #1a1a2e'`（与 MusicPlayer FALLBACK 同款）
+
+### 修改原因
+- 用户实测：背景仍是纯黑
+- 根因：NetEase 封面图（`p*.music.126.net`）**没有** `Access-Control-Allow-Origin` 响应头，浏览器 canvas 跨域污染抛 `SecurityError`
+- `extractColors` 内部 try/catch 吞异常 → 返回 `[]` → `onCoverLoad` early return → `playerBgStyle` 保持 `''` → 背景默认 `#000`
+
+### 关键设计
+- **fallback 用 MusicPlayer 同款 `#1a1a2e`**（深紫黑，比纯黑柔和）
+- 不动 `/api/audio-proxy`（那是大改动，超出本任务范围）
+- 跨域问题**客户端无解**（要解决必须服务端代理 + 加 CORS 头），但 fallback 至少让背景**不再是纯黑**
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+
+### 注意事项
+- 真正要拿到封面主色，**需服务端代理图片**并加 CORS 头（如扩展 `/api/audio-proxy` 加 image 类型支持）
+- 这次 fix 只解决"不再是纯黑"，主色仍然提取不到
+- 后续可考虑：扩展 serverless 端点支持图片代理 + CORS
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: video side bar falls back to non-black on CORS failure (cover color extraction is blocked)`
+- **包含**：`src/components/layout/VideoPlayerLayout.vue`
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-04 — REFACTOR-video-side-color 视频左右黑边改为封面主色
 
 ### 修改内容
