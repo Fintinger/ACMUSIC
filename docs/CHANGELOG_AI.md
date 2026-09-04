@@ -35,6 +35,49 @@
 
 ## 历史记录
 
+### 2026-09-03 — REFACTOR-router-mode Vue Router 切到 history 模式
+
+### 修改内容
+`src/router/index.js` 加 `mode: 'history'`，URL 从 `/#/path` 变成 `/path`。
+
+### 修改文件
+- 修改 `src/router/index.js`（+3 行：`mode: 'history'` + 2 行注释）
+
+### 修改原因
+- 项目原本用默认 hash 模式（URL `https://acmusic.vercel.app/#/path`），是项目初始化时最简单选择
+- 用户要求切到 history 模式：
+  - URL 更干净（`/playlist/123` vs `/#/playlist/123`）
+  - SEO 友好（搜索引擎可索引子路由）
+  - HTML5 history API 原生支持
+- Vercel 对 SPA 项目**默认支持** fallback → index.html，无需额外配置
+- `PageBack` 组件的 `this.$router.back()` 行为**与 mode 无关**（都是浏览器 history API）
+
+### 关键设计
+- **1 行配置改动**——最小影响
+- **返回上一页功能不变**：`$router.back()` 内部走浏览器 history API，两种 mode 都支持
+- **无业务代码改动**——所有 `<router-link>` / `$router.push` / `$router.go` 行为等价
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+- `yarn lint` ✅ 错误数不变（7 个预存在）
+
+### 注意事项
+- **Vercel 自动部署**会立即生效（无需配置 fallback）
+- 验证步骤：
+  1. push 后访问 `https://acmusic.vercel.app/`（无 `#`）
+  2. 点歌单详情 → URL 变 `https://acmusic.vercel.app/listDetail?id=xxx`
+  3. **刷新子路由**确认 Vercel fallback 正常（应返回 index.html）
+  4. 返回上一页按钮仍正常
+- 如果 Vercel fallback 失败（理论上不会），改回 `mode: 'hash'` 即可回滚
+
+### Git 建议
+- **Commit 类型**：`refactor`
+- **Commit message**：`refactor: switch Vue Router to history mode (clean URLs)`
+- **包含**：`src/router/index.js`
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — FIX-mixed-content 网易云 CDN http→https 协议升级
 
 ### 修改内容
