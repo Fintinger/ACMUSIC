@@ -64,14 +64,19 @@ export function fromNow(ms) {
 /**
  * 网易云图片缩略: 附加 ?param=宽y高, 减小体积提升加载速度
  * 例: imgParam('https://p1.music.126.net/xxx.jpg', '300y300')
- * 非网易 CDN 或已带参数的原样返回
+ * 非网易 CDN 原样返回
+ * 同步把 http 升级为 https（避免页面部署在 https 时控制台 Mixed Content 警告）
  * @param {String} url
  * @param {String} size 如 '300y300'
  * @returns {String}
  */
 export function imgParam(url, size = '300y300') {
-    if (!url || url.indexOf('?') > -1) return url
-    // 仅对网易云 CDN 域名生效
+    if (!url) return url
+    // 仅对网易云 CDN 域名生效（其他域名可能不支持 https，盲目升级会坏图）
     if (!/music\.126\.net|\.netease\.com/.test(url)) return url
-    return url + `?param=${size}`
+    // 先升级协议（http → https）
+    const httpsUrl = url.replace(/^http:\/\//, 'https://')
+    // 已带参数不再加（避免重复）
+    if (httpsUrl.indexOf('?') > -1) return httpsUrl
+    return httpsUrl + `?param=${size}`
 }

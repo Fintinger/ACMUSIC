@@ -25,14 +25,14 @@
             :key="item.id"
             class="fm-card-wrapper"
             :class="['fm-' + cardPos(i), { 'light-cover': isLightCover(item) }]"
-            :style="[cardStyle(i), item && item.album ? { '--fm-cover-url': `url('${item.album.picUrl}')` } : null]"
+            :style="[cardStyle(i), item && item.album ? { '--fm-cover-url': `url('${coverUrl(item)}')` } : null]"
             @click="playCard(item, $event)"
             @mouseenter="onCardEnter(i)"
             @mouseleave="onCardLeave"
             @mousemove="i === 1 ? onStageMove($event) : null"
         >
           <div class="fm-card">
-            <img :src="item.album ? item.album.picUrl : ''" class="fm-cover" alt="">
+            <img :src="(item.album ? item.album.picUrl : '') | imgParam('300y300')" class="fm-cover" alt="">
             <!-- 歌曲信息 (绑定每张卡片, 随卡片轮播/旋转) -->
             <div class="fm-track-info">
               <div class="fm-title">{{ item.name }}</div>
@@ -42,7 +42,7 @@
           <!-- 每张卡独立镜面倒影平面 -->
           <div class="fm-reflection-plane">
             <div class="fm-reflection">
-              <img :src="item.album ? item.album.picUrl : ''" alt=""/>
+              <img :src="(item.album ? item.album.picUrl : '') | imgParam('300y300')" alt=""/>
             </div>
           </div>
         </div>
@@ -54,6 +54,7 @@
 <script>
 import pubsub from 'pubsub-js'
 import * as tracksApi from "@/api/Tracks"
+import { imgParam } from "@/utils/filters"
 
 export default {
   name: "PersonalFM",
@@ -127,6 +128,11 @@ export default {
       if (this.coverLight[url] !== undefined) return this.coverLight[url]
       this.detectLightness(url)
       return false
+    },
+    // 封面 URL（走 imgParam：加 ?param= 和 http→https 升级）
+    coverUrl(item) {
+      if (!item || !item.album || !item.album.picUrl) return ''
+      return imgParam(item.album.picUrl, '300y300')
     },
     // 加载封面并计算平均亮度
     detectLightness(url) {
