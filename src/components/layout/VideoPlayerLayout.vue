@@ -94,10 +94,13 @@ export default {
 }
 
 .video-player-section {
-  width: 100%; aspect-ratio: 16 / 9;
+  width: 100%; aspect-ratio: 16 / 9;          /* 容器保持 16:9（用户要求窗口大小不变） */
+  max-width: 1100px; margin: 0 auto;           /* 限制最大宽度，水平居中 */
   background: #000; border-radius: 16px; overflow: hidden;
   position: relative;
 
+  /* 控制条 z-index 必须高于 xgplayer 内部 overlay，
+     避免被 overflow:hidden + 9:16 视频的 contain 黑边遮挡 */
   ::v-deep .xgplayer-controls,
   ::v-deep .xgplayer-bottom-bar,
   ::v-deep .xgplayer-start { z-index: 100; }
