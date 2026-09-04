@@ -2,6 +2,9 @@
 node_modules
 /dist
 
+# 本地分析草稿（不进 git history）
+analysis/
+
 
 # local env files
 .env.local
