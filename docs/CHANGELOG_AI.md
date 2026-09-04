@@ -35,6 +35,48 @@
 
 ## 历史记录
 
+### 2026-09-03 — FIX-mixed-content 网易云 CDN http→https 协议升级
+
+### 修改内容
+`utils/filters.js` 的 `imgParam` 函数加 http→https 协议升级（仅对网易云 CDN 域名生效），并把 `PersonalFM.vue` 3 处直接绑 `picUrl` 的位置改为走 `imgParam` 过滤器或 `coverUrl()` method。
+
+### 修改文件
+- 修改 `src/utils/filters.js`：`imgParam` 加 http→https 升级逻辑（只对 `music.126.net` / `netease.com` 域名升级，避免影响其他 CDN）
+- 修改 `src/components/PersonalFM.vue`：
+  - 顶部加 `import { imgParam } from "@/utils/filters"`
+  - L35 `<img :src="...picUrl...">` → `:src="... | imgParam('300y300')"`
+  - L45 同上（reflection 镜像）
+  - L28 CSS 变量 `--fm-cover-url` → 改用 `coverUrl(item)` method（inline style 不能用 `|` 过滤器）
+  - 加 `coverUrl(item)` method 走 `imgParam` 升级
+
+### 修改原因
+- 线上 `https://acmusic.vercel.app/` 控制台报 **Mixed Content** 警告：
+  > "The page at 'https://acmusic.vercel.app/#/' was loaded over HTTPS, but requested an insecure element 'http://p3.music.126.net/...'"
+- 根因：NetEase API 返回的图片 URL 是 `http://p3.music.126.net/...`（HTTP），虽然浏览器自动升级到 HTTPS，但产生控制台警告噪音
+- 网易云 CDN 同时支持 HTTPS（`https://p3.music.126.net/...`），升级不会破坏功能
+
+### 关键设计
+- **只升级网易云 CDN 域名**（`music.126.net` / `netease.com`），不盲目升级所有 URL——其他 CDN 可能不支持 HTTPS，升级会坏图
+- 在 `imgParam` 函数内升级（**单点修复**），所有用 `| imgParam` 过滤器的位置自动受益
+- `PersonalFM` 3 处全部走 `imgParam`（2 处模板用 `| imgParam`，1 处 CSS 变量用 method 包装）
+
+### 测试结果
+- `yarn build` ✅ DONE Build complete
+- 视觉效果：无变化（HTTPS 资源与 HTTP 资源完全一致，CDN 同时支持）
+
+### 注意事项
+- **推荐所有新代码使用 `| imgParam` 过滤器**——这样未来 CDN 协议调整（罕见）只需改 `imgParam` 一处
+- **不要绕过 `imgParam` 直接绑 `picUrl`**——否则 mixed content 警告会重现
+- 升级到 https 后，图片加载速度可能略有不同（取决于 CDN），通常无感
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: upgrade netease CDN http to https to silence Mixed Content warnings`
+- **包含**：`src/utils/filters.js` + `src/components/PersonalFM.vue`
+- **不包含**：docs（独立 docs commit）
+
+---
+
 ### 2026-09-03 — REFACTOR-skeleton-shimmer 7 文件去重 + AlbumDetail 复用公共组件 + 删 3 项低优先级
 
 ### 修改内容
