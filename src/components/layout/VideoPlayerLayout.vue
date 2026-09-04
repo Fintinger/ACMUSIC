@@ -1,8 +1,10 @@
 <template>
   <div class="video-page">
     <div v-if="url && dt_cover">
-      <section class="video-player-section">
+      <section class="video-player-section" :style="playerBgStyle">
         <vidPlayer :poster="dt_cover" :url="url"/>
+        <!-- 隐藏 img：触发封面主色提取，@load 在封面加载完时触发 onCoverLoad -->
+        <img :src="dt_cover" alt="" crossorigin="anonymous" @load="onCoverLoad" class="cover-color-source">
       </section>
 
       <section class="video-info-section">
@@ -52,6 +54,7 @@
 import vidPlayer from "@/components/vidPlayer";
 import CommentLayout from "@/components/layout/CommentLayout";
 import CoverImage from "@/components/common/CoverImage";
+import { extractColors } from "@/utils/colorExtractor";
 
 export default {
   name: "VideoPlayerLayout",
@@ -82,6 +85,31 @@ export default {
     si_name() { return this.nameConfig.si.name },
     si_arName() { return this.nameConfig.si.artistName },
     si_playCt() { return this.nameConfig.si.playCount }
+  },
+  data() {
+    return {
+      // 视频容器左右两侧背景色（从封面主色动态提取）
+      // 用于 9:16 竖屏视频的"黑边"区域，让视觉上不刺眼
+      playerBgStyle: ''
+    }
+  },
+  methods: {
+    /**
+     * 从视频封面提取主色，构建播放器容器左右两侧的渐变
+     * 9:16 视频居中后，左右黑边会显示主色
+     * 16:9 视频居中后，video 覆盖全容器，颜色不可见（无副作用）
+     * 复用 utils/colorExtractor.extractColors（MusicPlayer 在用 buildBackground）
+     */
+    onCoverLoad(img) {
+      if (!img || !img.complete) return
+      const colors = extractColors(img)
+      if (!colors.length) return
+      // 取第一个合格暗色（已经过 findDarkColors 过滤的会更好，但 export 只暴露 extractColors）
+      // 这里简单取前 2 个不同色调，颜色稍暗以避免抢夺 video 注意力
+      const [r, g, b] = colors[0]
+      const main = `rgb(${r},${g},${b})`
+      this.playerBgStyle = `background: linear-gradient(to right, ${main} 0%, #000 35%, #000 65%, ${main} 100%)`
+    }
   }
 }
 </script>
@@ -104,6 +132,12 @@ export default {
   ::v-deep .xgplayer-controls,
   ::v-deep .xgplayer-bottom-bar,
   ::v-deep .xgplayer-start { z-index: 100; }
+
+  /* 用于提取主色：完全隐藏 img，但保持加载触发 @load */
+  .cover-color-source {
+    position: absolute; width: 1px; height: 1px;
+    opacity: 0; pointer-events: none; left: -9999px;
+  }
 }
 
 .video-info-section {
