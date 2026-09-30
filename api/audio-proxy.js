@@ -1,6 +1,6 @@
 // Vercel Serverless 音频代理
 // 浏览器请求本函数, 由 Vercel 服务器代为访问网易云 CDN 并流式转发
-// 绕过公司/本地网络对 m*.music.126.net 的屏蔽
+// 绕过本地网络对 m*.music.126.net 的屏蔽
 export default async function handler(req, res) {
   const { url } = req.query
   if (!url) {
