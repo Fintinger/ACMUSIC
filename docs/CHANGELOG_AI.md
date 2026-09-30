@@ -35,6 +35,61 @@
 
 ## 历史记录
 
+### 2026-09-30 — HARDEN-audio-proxy + LINT-zero 音频代理加固、lint 归零、深链接回退核实
+
+### 修改内容
+1. **`api/audio-proxy.js` 加固**（原实现是完全开放的代理 + 不转发 Range）：
+   - 新增 `validateTarget()` 域名白名单（`*.music.126.net` / `*.163.com`），非白名单一律 403；协议仅允许 http/https
+   - 新增 `buildUpstreamHeaders()`：**转发客户端 `Range`**（原来完全丢弃 → 代理播放无法 seek），并补 `Origin`/`Referer`
+   - 新增 `collectResponseHeaders()`：只透传白名单响应头（content-type/length/range、accept-ranges、cache-control、etag、last-modified），其余（含 set-cookie）不回传
+   - 保持上游状态码语义：**206 原样回给浏览器**
+   - 新增 30s 上游超时（`AbortController`，超时返回 504）与 64MB 体积上限：已声明 `Content-Length` 超限直接 502；未声明时用 `makeSizeGuard()` 变换流截断并中断上游
+   - 流式转发改用 `Readable.fromWeb(upstream.body).pipe(res)`（原手写 `pipeTo(WritableStream)` 忽略背压）
+2. **lint 归零（10 → 0）**：
+   - `src/api/User.js`：`subAlbumList(limit, offset)` 原来**收了参数却不传给接口**（`/album/sublist` 丢失分页）→ 补 `{params:{limit, offset}}`
+   - `src/pages/Playlist.vue`：组件名 `Playlist` → `PlaylistPage`（多词命名）
+   - `SendComment.vue` / `CommentContentLayout.vue`：移除未使用的 `res` 形参
+   - `MusicPlayer.vue`：`onEsc(e)` 去掉未使用形参；删除未使用的 `containerTop`
+   - `PlayerCore.vue`：删除未使用的 `FALLBACK_BG` 常量与 `const prevLen`
+   - `src/assets/ac-font/iconfont.js`：文件级 `eslint-disable no-self-assign` + 说明注释（生成器产物，见下）
+3. **history 模式深链接：核实已完成，不新增 `vercel.json`**（见修改原因）
+4. 更新 `docs/PROJECT_CONTEXT.md` 中与本轮相关的过期描述（待办：见注意事项）
+
+### 修改文件
+- `api/audio-proxy.js`（重写为白名单 + Range + 超时 + 体积上限）
+- `src/api/User.js`、`src/pages/Playlist.vue`、`src/components/SendComment.vue`、`src/components/layout/CommentContentLayout.vue`、`src/components/musicPlayer/MusicPlayer.vue`、`src/components/musicPlayer/PlayerCore.vue`、`src/assets/ac-font/iconfont.js`
+
+### 修改原因
+- **代理为什么必须加白名单**：实测代理对任意外站返回 200（`example.com` 713 字节、Cloudflare 大文件 200000 字节全部转发成功），任何知道地址的人都能拿它当跳板访问内网/绕过网络限制（SSRF）。白名单是唯一防线。
+- **为什么必须转发 Range**：源站（实测 raw.githubusercontent / jsdelivr）对 `Range: bytes=0-99` 返回 `206 + Content-Range`，而原实现既不发 Range、也不回传 `Content-Range`，浏览器无法 seek → 代理模式下拖动进度条会失效/整段重下。
+- **为什么不新增 `vercel.json`**：实测线上 `https://acmusic.vercel.app/listDetail?id=24381616` 与 `/explore/mvList` 均返回 **200 + SPA HTML**（962 字节，`<div id="app">`），说明 Vercel 平台侧已存在 fallback；仓库内无 rewrite 配置属于「平台配置而非代码缺失」。新增 catch-all rewrite 反而有覆盖现有 `/api/audio-proxy` 路由的风险，且本会话无法在部署前验证，故**不改代码，只把事实写进文档**。
+- **`subAlbumList` 是真 Bug 而非仅 lint 噪音**：同文件的 `subTopicList(limit, offset)` 正确传参，只有专辑收藏漏传，导致「我的 → 收藏专辑」使用上游默认分页。
+- **`iconfont.js` 为何不删**：grep 确认无任何模块 import 它（图标体系已改为 `BaseIcon` + `src/config/icon.js`：8 个字体 class + 21 个内联 SVG path），属死文件；但守则禁止 AI 自行删除未知代码，故用文件级 eslint 禁用清零告警，删除留待用户决策。
+
+### 测试结果
+- `yarn lint` ✅ **No lint errors found**（10 → 0）
+- `yarn build` ✅ DONE Build complete
+- **代理逻辑 Node 实测** ✅（离线 mock，`node -` 直接执行源码）：
+  - 白名单 **15/15** 通过：`m801/m701/p1.music.126.net`、`music.163.com`、`interface.music.126.net` 放行；`evil-music.126.net`、`music.126.net.evil.com`、`example.com`、`169.254.169.254`、`127.0.0.1`、`file://`、`ftp://`、非法串全部拒绝
+  - handler 端到端：缺参 → 400；`example.com` / 元数据 IP → 403（且未发起 fetch）；上游 404 → 404；上游 abort → 504；正常 Range → **206** 且 `Content-Range`/`Accept-Ranges`/`Content-Length` 正确回传、`set-cookie` 被过滤
+  - Range 转发：`range`/`Range` 两种大小写都注入上游请求头；无 Range 时不伪造
+  - 体积上限：无声明超大响应在 **60MB 截断**（上限 64MB）且 `onLimit` 触发一次；声明 200MB → 502
+- 浏览器手动核查：❌ 未做（本次改动对 UI 无影响；代理需部署后验证）
+
+### 注意事项
+- **部署后必须验证代理**（本会话未能对生产端点完成验证，中途 `acmusic.vercel.app` 连接超时）：带 `Range` 请求一首歌的代理地址，确认返回 **206** 且能拖动 seek。
+- **白名单可能误伤**：若某首歌的 `song/url` 返回非 `music.126.net`/`163.com` 的 CDN，代理会返回 403（此时播放会退回直连）。遇到时把该 host 加进 `ALLOWED_HOST_PATTERNS`。
+- **redirect: 'follow' 的残余风险**：白名单在发起前校验，上游若 302 到非白名单域仍会被跟随。当前网易 CDN 不发外部跳转，若要加强可改为手动跟随并逐跳校验。
+- **`iconfont.js` 待决**：如确认无用可直接 `git rm src/assets/ac-font/iconfont.js`（连带去掉那两行注释），本文件其余字体资源（css/ttf/woff）仍在使用，不可删。
+- **`docs/PROJECT_CONTEXT.md` / `AGENTS.md` 的过期描述已在本轮一并更正**：node-sass→dart-sass（构建已实测可在 Node 24 通过）、Vuex 3 模块→2 个、hash→history 模式、API 地址来源→`.env` + `src/config.js`、`searchMixin` 路径→`src/mixins/searchMixin.js`、图标体系说明、并补充音频代理与构建 `spawn EPERM` 的提示。
+
+### Git 建议
+- **Commit 类型**：`fix`（代理加固 + lint 归零）；`docs` 单独提交
+- **Commit message**：`fix: harden audio proxy (allowlist, Range passthrough, timeout, size cap) and clear all lint errors`
+- **包含**：`api/audio-proxy.js`、`src/api/User.js`、`src/pages/Playlist.vue`、`src/components/SendComment.vue`、`src/components/layout/CommentContentLayout.vue`、`src/components/musicPlayer/MusicPlayer.vue`、`src/components/musicPlayer/PlayerCore.vue`、`src/assets/ac-font/iconfont.js`
+
+---
+
 ### 2026-09-30 — FIX-tier2 第二档：keep-alive 缓存泄漏、搜索防抖/竞态、load-more 卡死、二维码刷新失效
 
 ### 修改内容

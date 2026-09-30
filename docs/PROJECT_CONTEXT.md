@@ -29,8 +29,8 @@
 | 语言 | **JavaScript ES6+**，未上 TypeScript |
 | UI 库 | **Element UI 2.15**（全局注册 `Vue.use(ElementUI)`） |
 | 样式 | **SCSS**（sass-loader 7.3.1 + sass 1.77），`scoped` 为主，少量全局 |
-| 状态管理 | **Vuex 3**，3 个命名空间模块 |
-| 路由 | **Vue Router 3**（**hash 模式**） |
+| 状态管理 | **Vuex 3**，2 个命名空间模块（`UserAbout` / `TracksAbout`） |
+| 路由 | **Vue Router 3**（**history 模式**） |
 | 网络 | **axios 0.26**（自定义 `request` 实例统一拦截） |
 | 工具库 | `dayjs`（含 relativeTime、duration、zh-cn）、`pubsub-js`、`js-cookie`、`animate.css` |
 | 视频播放 | **xgplayer**（MV / 视频） |
@@ -523,7 +523,7 @@ App.vue
 │  │ $bus (Vue.prototype)                                         │ │
 │  │ pubsub (pubsub-js)                                           │ │
 │  │ Vuex (3 modules)                                             │ │
-│  │ Vue Router (hash mode)                                       │ │
+│  │ Vue Router (history mode)                                    │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 └──────┬──────────────────────────────┬──────────────────────────────┘
        │                              │
