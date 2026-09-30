@@ -126,8 +126,6 @@ import { setAudioCache, getAudioCache, getAudioUrl } from "@/utils/audioCache"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 
-const FALLBACK_BG = '#1a1a2e'
-
 export default {
   name: "PlayCore",
   props: ["song", "isExpand"],
@@ -956,7 +954,6 @@ export default {
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
-        const prevLen = this.currentPlaylist.length
         this.pauseSong()
         this.$bus.$emit("clearPlaylist")
         // 同步清除 localStorage 持久化数据

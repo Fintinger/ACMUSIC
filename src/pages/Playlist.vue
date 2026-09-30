@@ -6,7 +6,7 @@
 
 <script>
 export default {
-  name: "Playlist"
+  name: "PlaylistPage"
 }
 </script>
 

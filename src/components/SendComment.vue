@@ -61,7 +61,7 @@ export default {
   methods: {
     sendComment() {
       if (this.commentContent) {
-        send(...this.params).then(res => {
+        send(...this.params).then(() => {
           //是回复评论
           if (this.type * 1 === 2) {
             this.$emit('reply')

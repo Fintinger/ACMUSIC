@@ -148,7 +148,7 @@ export default {
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
-        comment.del(this.type, this.id, cm.commentId).then(res => {
+        comment.del(this.type, this.id, cm.commentId).then(() => {
           //更新最新评论数据
           this.$emit('updateNewestComment')
           this.$message({

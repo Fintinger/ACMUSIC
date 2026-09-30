@@ -188,7 +188,7 @@ export default {
       }
       this.isExpand = false
     },
-    onEsc(e) {
+    onEsc() {
       if (this.isModalOpen) {
         this.isModalOpen = false
         return
@@ -328,7 +328,6 @@ export default {
           if (!container) return
           const active = container.querySelector('p.active')
           if (active) {
-            const containerTop = container.scrollTop
             const targetTop = active.offsetTop - container.clientHeight / 2 + active.clientHeight / 2
             container.scrollTo({ top: targetTop, behavior: 'smooth' })
           }

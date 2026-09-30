@@ -7,8 +7,15 @@ import request from "./request";
 export function subArtistList() {
     return request('/artist/sublist')
 }
+/**
+ * 收藏的专辑列表
+ * 说明: 接口参数为 limit/offset, 不传时上游默认只返回第一页
+ * @param limit 返回数量, 默认 2000
+ * @param offset 偏移数量
+ * @returns {AxiosPromise}
+ */
 export function subAlbumList(limit = 2000, offset = 0) {
-    return request('/album/sublist')
+    return request('/album/sublist', {params: {limit, offset}})
 }
 /**
  * 收藏的专栏
