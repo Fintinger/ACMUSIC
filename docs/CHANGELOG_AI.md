@@ -35,6 +35,105 @@
 
 ## 历史记录
 
+### 2026-09-30 — FIX-tier2 第二档：keep-alive 缓存泄漏、搜索防抖/竞态、load-more 卡死、二维码刷新失效
+
+### 修改内容
+修复第二档（长期使用或特定操作才发作）的 8 类问题：
+1. **keep-alive 缓存无上限**（`App.vue`）：`<keep-alive>` 未设 max，且以 `$route.fullPath` 为 key，导致每个不同 `?id=` / 搜索词都常驻一份页面实例与 DOM。
+2. **`SearchResult.vue:25` key 拼写错误**：`:key="$route.fullpath"`（小写 p）实际恒为 `undefined`。
+3. **搜索建议无防抖/无竞态控制**（`DoSearch.vue`）：每按键一次请求，慢的旧响应会覆盖新结果。
+4. **load-more 失败后永久卡死**（`searchMixin.js`、`ListDetail.vue`、`AllList.vue`、`VideoList.vue`、`BoutiqueList.vue`、`ArtistAllSongs.vue`、`VoiceRes.vue`）：请求失败无 `.catch`，loading 标志永不恢复，按钮一直显示「加载中...」。
+5. **`VideoList.vue` 清错标志位**：按钮读 `loadingMore`，代码却清 `loading`。
+6. **搜索分页未重置**：`searchMixin.load()` 只重置过一次的 `page` 会跨关键词沿用；`VoiceRes` 自带 `initLoad`/`load` 覆盖 mixin，绕过修复。
+7. **`VoiceRes` 去重逻辑恒为 false**：`item.id === val.baseInfo.mainSong.id === -1` 是链式比较，`findIndex` 结果从未被使用，导致声音搜索重复项。
+8. **二维码刷新后不再轮询**（`qrcodeLogin.vue`）：轮询只由 `watch: created` 启动，`refresh()` 时 `created` 已为 `true`，watcher 不再触发 → 二维码失效后点刷新永远扫不上。
+9. **MV 列表加载更多重复/跳数据/整表重挂**（`MvList.vue`）：
+   - 首屏用 `/mv/first` 取 100 条，而「加载更多」用 `/mv/all`——实测两接口**返回数据零重叠**（`/mv/first` 首批 14689667…，`/mv/all` offset=0 首批 10929613…），翻页必然跳到另一批 MV；
+   - 原 offset 取 `limit * page`（page=2 → 24），与首屏区间重叠又跳过中间条目；
+   - `load()` 复用了 `loading`，而列表 `<transition v-if="!loading && renderedList.length">` 绑在该标志上，翻页时整个列表被卸载重挂 → 用户看到的「点加载更多后全部重新加载」。
+   - 修正：首屏与翻页统一走 `/mv/all`（`limit:12`），offset 取「已渲染条数」，vid 去重；新增独立的 `loadingMore` 标志，翻页期间列表保持挂载。
+
+### 修改文件
+- `src/App.vue`：keep-alive 加 `:max="pageCacheMax"(10)`；保留 `$route.fullPath` key（页面刷新机制，见下）；新增 `watch: '$route.fullPath'` + `reapEvictedPages()`
+- `src/pages/SearchResult.vue`：移除拼错的 `:key="$route.fullpath"`
+- `src/components/DoSearch.vue`：`keyword` watcher 加 300ms 防抖 + 请求序号丢弃过期响应；`concurrentRequests` 加 `.catch`；`beforeDestroy` 清理防抖定时器
+- `src/mixins/searchMixin.js`：`initLoad()` 重置 `page` 并容错空数组；`load()` 加 `loading/noMore` 守卫、Set 去重、失败回退 `page`、`.finally` 恢复 `loading`
+- `src/pages/ListDetail.vue`、`src/pages/artist/ArtistAllSongs.vue`、`src/pages/explorePage/playlist/AllList.vue`、`src/pages/explorePage/playlist/BoutiqueList.vue`、`src/pages/explorePage/VideoList.vue`：load-more 加守卫 + `.catch`/`.finally`
+- `src/pages/search/VoiceRes.vue`：`initLoad` 重置 `page`、`load` 修去重 + 恢复 loading
+- `src/pages/explorePage/MvList.vue`：首屏改用 `/mv/all`（不再用 `/mv/first`）、`fetchPage(offset)` 统一取数、offset 按已渲染条数推进、vid 去重、新增 `loadingMore` 与 `loading` 分离、`.catch`/`.finally`
+- `src/components/userPage/qrcodeLogin.vue`：新增 `startPolling()`/`stopPolling()`，生成成功与刷新时显式启停；`beforeDestroy` 走 `stopPolling`
+
+### 修改原因
+- **为什么保留 `$route.fullPath` key**（而非直接去掉）：6 个详情页与 9 个搜索子视图**只在 `activated()` 里取数**且无 id/keyword watcher（`ListDetail:127`、`AlbumDetail:69`、`ArtistDetail:135`、`ArtistAllSongs:91`、`mvPlay:37`、`VideoPlay:93`）。`activated` 仅在 keep-alive 且元素被重新插入时派发（`vue.runtime.esm.js:3160-3171`），去掉 key 后同组件复用不会重新插入 → 「URL 是 B、渲染的是 A」。移除 keep-alive 则 18 个页面完全不取数。故本批保留 key，改用 `:max` 限制上限。
+- **为什么需要 `reapEvictedPages()`**：Vue 2 `pruneCacheEntry` 在「同组件、不同 key」时会因 `entry.tag !== current.tag` 跳过 `$destroy`（`vue.runtime.esm.js:5307`），被 max 驱逐的实例仍挂在 `App.$children` 上。该方法在每次路由变化后销毁「已不在缓存 keys 中且不在前台」的页面实例。
+- 其余各项均为「失败无 catch → UI 永久卡死」与「重复请求/重复渲染」的确定性缺陷，属既有 bug 修复。
+
+### 测试结果
+- `yarn lint` ✅ 10 errors（= 基线，全部为既有未使用变量/组件名，本次改动文件零 error）
+- `yarn build` ✅ DONE Build complete
+- dev server 编译 ✅ 全部改动 HMR `Compiled successfully`
+- **接口实测** ✅（本次沙箱可出网）：网关 `/mv/all?limit=12&offset=0|12|24` 三页各 12 条、两两零重叠，且 `offset=0&limit=24` 的前 24 条与逐页拼接结果**完全一致** → 新翻页逻辑成立；`/mv/first?limit=100` 与 `/mv/all?limit=100&offset=0` 交集为 **0**，证实原实现必然跳变。
+- 浏览器手动核查：❌ 未做（本会话无浏览器工具链）
+
+### 注意事项
+- **回滚策略**：App.vue 的缓存改动独立于其他项，若出现页面串数据，可先把 `:max` 与 `reapEvictedPages` 一并回滚。
+- **依赖 Vue 2 内部字段**：`reapEvictedPages` 读取 `keepAlive.keys`、`$vnode.data.keepAlive`、`_inactive`、`_isDestroyed`。升级 Vue 3 时必须删除（Vue 3 keep-alive 已正确销毁）。
+- **下一批架构项（未做）**：更正统的做法是「去掉 `:key` + 6 个详情页加 id watcher + searchMixin 加 keyword watcher」（约 7 文件 40 行），可让缓存按组件复用、回溯不重复取数；但它会改变页面回来时的刷新行为，需在有手测条件时单独做。
+- **遗留问题（未处理）**：`ExplorePage.vue:44` 与 `UserPage.vue:140` 的 `$bus.$on` 无配对 `$off`，总线会长期持有组件实例引用——即使实例被 `$destroy`，内存仍被总线引用。
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: bound keep-alive page cache, debounce search suggest, recover load-more from failures, fix qrcode refresh polling`
+- **包含**：`src/App.vue`、`src/pages/SearchResult.vue`、`src/components/DoSearch.vue`、`src/mixins/searchMixin.js`、`src/pages/ListDetail.vue`、`src/pages/artist/ArtistAllSongs.vue`、`src/pages/explorePage/playlist/AllList.vue`、`src/pages/explorePage/playlist/BoutiqueList.vue`、`src/pages/explorePage/VideoList.vue`、`src/pages/explorePage/MvList.vue`、`src/pages/search/VoiceRes.vue`、`src/components/userPage/qrcodeLogin.vue`
+- **不含**：`docs/CHANGELOG_AI.md`（单独 `docs` 提交）
+
+---
+
+### 2026-09-30 — FIX-tier1-3-bugs 修复日常使用必现的 3 个缺陷（第一档）
+
+### 修改内容
+修复三个「日常使用几乎必然踩到」的缺陷：
+1. 手机验证码登录的倒计时死循环（`tips` watcher 自我重排，数字卡在 0，定时器无限循环且组件卸载后不清理）
+2. `/daily-songs` 刷新即崩（歌单靠非 path 路由参数传递，刷新后参数丢失 → `JSON.parse(undefined)` 抛错）
+3. 歌曲列表「时长」列渲染两次（两个并列 `v-if`，而 normalize 会把 `dt`/`duration` 互相补齐）
+
+### 修改文件
+- 修改 `src/components/userPage/phoneLogin.vue`：
+  - 删除 `watch.tips`（造成死循环的根因）
+  - 新增 `startCountdown()`：单一 `setInterval` 驱动 `tips` 60→1，结束恢复 `TIP` 文案与 `isSending=false`
+  - `sendCode()` 成功分支改为调用 `startCountdown()`，并先 `clearInterval` 保证幂等
+  - 新增 `beforeDestroy()` 清理 `tipsTimer`
+- 修改 `src/pages/DailySongs.vue`：
+  - `props` 增加 `default: ''`，data 增加 `list: []`、`loading: true`
+  - 新增 `created()`：有路由参数则解析（带 try/catch 容错），无参数（刷新/直开）则回退到 `tracksApi.recommendSongs()` 重新拉取
+  - 模板改用本地 `list`，不再在渲染期 `JSON.parse`；补加载中/加载失败状态
+- 修改 `src/components/layout/TracksLayout.vue`：
+  - 时长列第二个 `v-if="t.duration"` 改为 `v-else-if`，避免同一行渲染两列时长
+
+### 修改原因
+- 倒计时：`n === 0` 分支把 `tips` 重置为 `TIP`，但 `Number.isInteger(0)` 仍成立，于是又排一个 `setTimeout(n-- <= 0 ? 0 : n--)`，`tips` 恒被置回 0 → 每秒自我重触发，永不停止；且文件无 `beforeDestroy`，定时器随组件残留。
+- 每日推荐：`HomePage.goDailySongs()` 用 `params: {dailySongs: JSON.stringify(...)}` 传列表，非 path 参数刷新即丢；`DailySongs.vue` 模板直接 `JSON.parse(dailySongs)`，undefined 在渲染期抛 TypeError。
+- 时长列：`utils/normalize.js:90-91` 把 `dt` 与 `duration` 双向补齐，故 `t.dt` 与 `t.duration` 同时为真，两个并列 `v-if` 各渲染一列。
+
+### 测试结果
+- `yarn lint` ✅（无新增 error，修复文件均无告警）
+- `yarn build` ✅ DONE Build complete（本机 Node 24 + dart-sass）
+- 浏览器手动核查：待用户确认（需真实 API 网络环境：验证码发送倒计时、刷新 `/daily-songs`、歌单/专辑单曲列表时长列）
+
+### 注意事项
+- 影响范围仅限三个文件，未触碰 PlayerCore / 播放状态机 / 路由配置 / Vuex。
+- `phoneLogin` 的对外行为不变：仍用 `isSending` 控制按钮禁用，`tips` 仍是按钮文案。
+- `DailySongs` 新增的 `/recommend/songs` 回退请求**需要登录态**；游客刷新该页会拿到 301，显示「加载失败」提示而非白屏崩溃（比原行为安全，且 `request.js` 已统一派发 `api:unauthorized`）。
+- 未评审：是否需要给 `DailySongs` 增加未登录时的引导文案（超出本次范围）。
+
+### Git 建议
+- **Commit 类型**：`fix`
+- **Commit message**：`fix: 3 daily-use bugs (sms countdown loop, daily-songs refresh crash, duplicate duration column)`
+- **包含**：`src/components/userPage/phoneLogin.vue`、`src/pages/DailySongs.vue`、`src/components/layout/TracksLayout.vue`
+- **不含**：`docs/CHANGELOG_AI.md`（单独 `docs` 提交）
+
+---
+
 ### 2026-09-04 — FIX-video-side-color-fallback 修复主色提取 CORS 跨域失败导致纯黑
 
 ### 修改内容
