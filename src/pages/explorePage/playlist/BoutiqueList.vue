@@ -75,8 +75,11 @@ export default {
     load() {
       if (this.loading || this.noMore) return
       this.loading = true
-      this.getList(this.currentTag, this.lastTime).then(res => {
+      return this.getList(this.currentTag, this.lastTime).then(res => {
         this.loadCallback(res.data)
+      }).catch(() => {
+        // 失败恢复 loading, 否则"加载中..."永久卡死
+        this.loading = false
       })
     },
     //获取当前标签的歌单

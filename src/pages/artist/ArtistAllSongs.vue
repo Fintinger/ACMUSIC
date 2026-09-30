@@ -61,20 +61,26 @@ export default {
   },
   methods: {
     loadSongs(id) {
-      artistApi.songs(id, this.params.limit, this.offset).then(res => {
+      return artistApi.songs(id, this.params.limit, this.offset).then(res => {
         //歌曲数量
         this.total = res.data.total
 
-        res.data.songs.forEach(val => {
+        const songs = (res.data && res.data.songs) || []
+        songs.forEach(val => {
           if (this.songs.findIndex(item => item.id === val.id) === -1) {
             this.songs.push(val)
           }
         })
-        this.loading = false
         this.PAGE++
+      }).catch(() => {
+        // 失败不推进页码, 允许重试
+      }).finally(() => {
+        // 失败也必须恢复, 否则"加载中..."永久卡死
+        this.loading = false
       })
     },
     load() {
+      if (this.loading || this.noMore) return
       this.loading = true
       this.loadSongs(this.id)
     },

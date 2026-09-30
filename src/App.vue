@@ -58,7 +58,11 @@
       </el-header>
       <el-main>
         <transition name="page-fade">
-          <keep-alive>
+          <!-- :key="$route.fullPath" 必须保留：详情页与 9 个搜索子视图只在 activated() 里取数
+               （见 docs/ARCHITECTURE_DECISIONS.md 决策 4：query → props），靠 URL 变化重建实例来刷新。
+               :max 限制缓存条目数，被驱逐实例的销毁由 reapEvictedPages() 兜底（Vue 2 的 pruneCacheEntry
+               在同名组件下不会调用 $destroy）。 -->
+          <keep-alive ref="pageCache" :max="pageCacheMax">
             <router-view :key="$route.fullPath"/>
           </keep-alive>
         </transition>
@@ -88,6 +92,8 @@ export default {
     return {
       song: {},
       showSearch: false,
+      //keep-alive 缓存页面实例上限（模板中 :max 绑定）
+      pageCacheMax: 10,
     }
   },
   computed: {
@@ -105,7 +111,32 @@ export default {
       return config.imgUrl.logo
     }
   },
+  watch: {
+    //路由变化（含 query 变化）后清理 keep-alive 漏掉的实例，见 reapEvictedPages
+    '$route.fullPath'() {
+      this.$nextTick(() => this.reapEvictedPages())
+    }
+  },
   methods: {
+    //兜底释放 keep-alive 未能销毁的页面实例
+    //背景：Vue 2 的 keep-alive 在 max 溢出时调用 pruneCacheEntry，其中
+    //`entry.tag !== current.tag` 判断会让「同一组件、不同 key」（如 /listDetail?id=A → B）
+    //的被驱逐实例跳过 $destroy()，实例连同 DOM 仍挂在 App.$children 上 → 内存只增不减。
+    //（见 node_modules/vue/dist/vue.runtime.esm.js pruneCacheEntry）
+    //这里在每次路由变化后，销毁「已不在 keep-alive 缓存里、且不在前台显示」的页面实例。
+    reapEvictedPages() {
+      const keepAlive = this.$refs.pageCache
+      if (!keepAlive || !keepAlive.keys) return
+      const cachedKeys = new Set(keepAlive.keys)
+      this.$children.forEach(page => {
+        const vnode = page.$vnode
+        //只处理被 keep-alive 缓存过的页面组件（页面是 App 的直接子实例）
+        if (!vnode || !vnode.data || !vnode.data.keepAlive) return
+        //仍在缓存里的、以及当前正在显示的实例不能销毁
+        if (cachedKeys.has(vnode.key) || page._inactive === false) return
+        if (!page._isDestroyed) page.$destroy()
+      })
+    },
     playlistClick(id) {
       this.$router.push({
         name: "listDetail",

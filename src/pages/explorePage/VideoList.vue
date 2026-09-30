@@ -100,29 +100,41 @@ export default {
       this.curId = id
     },
     loadRec() {
+      if (this.loadingMore || !this.more) return
       this.offset++;
       this.loadingMore = true
-      this.getRecommendedVideos().then(res => {
-        res.data.datas.forEach(val => {
+      return this.getRecommendedVideos().then(res => {
+        const datas = (res.data && res.data.datas) || []
+        datas.forEach(val => {
           if (this.renderList.findIndex(item => item.vid === val.vid) === -1) {
             this.renderList.push(val.data)
           }
         })
         this.more = res.data.hasmore
+      }).catch(() => {
+        // 失败回退 offset, 允许重试
+        this.offset--
+      }).finally(() => {
         this.loadingMore = false
       })
     },
     load() {
+      if (this.loadingMore || !this.more) return
       this.offset++;
       this.loadingMore = true
-      this.getVideoByTagId(this.curId).then(res => {
-        res.data.datas.forEach(val => {
+      return this.getVideoByTagId(this.curId).then(res => {
+        const datas = (res.data && res.data.datas) || []
+        datas.forEach(val => {
           if (this.renderList.findIndex(item => item.vid === val.vid) === -1) {
             this.renderList.push(val.data)
           }
         })
         this.more = res.data.hasmore
-        this.loading = false
+      }).catch(() => {
+        this.offset--
+      }).finally(() => {
+        // 修正: 之前清的是 loading(首屏标志), 而按钮读的是 loadingMore, 导致永久"加载中"
+        this.loadingMore = false
       })
     },
     getRecommendedVideos() {

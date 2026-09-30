@@ -45,25 +45,26 @@ export default {
       tips: "发送",
     };
   },
-  watch: {
-    tips(n) {
-      //清除定时器
-      if (n === this.TIP) {
-        clearInterval(this.tipsTimer)
-      }
-      if (n === 0) {
-        this.tips = this.TIP
-        this.isSending = false
-      }
-      if (Number.isInteger(n)) {
-        clearInterval(this.tipsTimer)
-        this.tipsTimer = setTimeout(() => {
-          this.tips = n-- <= 0 ? 0 : n--
-        }, 1000)
-      }
-    }
-  },
   methods: {
+    /**
+     * 验证码倒计时: 单一 interval 驱动 tips 60 -> 1
+     * tip: 勿再改回 watch(tips) 联动, 旧实现会自我重排导致死循环
+     */
+    startCountdown(seconds = 60) {
+      clearInterval(this.tipsTimer)
+      this.isSending = true
+      this.tips = seconds
+      this.tipsTimer = setInterval(() => {
+        if (typeof this.tips !== 'number' || this.tips <= 1) {
+          clearInterval(this.tipsTimer)
+          this.tipsTimer = null
+          this.tips = this.TIP
+          this.isSending = false
+          return
+        }
+        this.tips = this.tips - 1
+      }, 1000)
+    },
     submitForm(formName) {
       this.$refs[formName].validate((valid) => {
         if (valid) {
@@ -115,12 +116,9 @@ export default {
       } else {
         //发送验证码
         authApi.captchaSent(phone)
-            .then(res => {
-              this.isSending = true
-              if (this.isSending) {
-                clearInterval(this.tipsTimer)
-                this.tips = 60
-              }
+            .then(() => {
+              // 发送成功 -> 启动 60s 倒计时(内部自行管理 isSending)
+              this.startCountdown(60)
             }, err => {
               console.error(err.message);
             })
@@ -141,6 +139,11 @@ export default {
   },
   mounted() {
     // this.$bus.$emit('loggedIn', ' res.data')
+  },
+  beforeDestroy() {
+    // 组件卸载后定时器必须清理, 否则倒计时会继续跑
+    clearInterval(this.tipsTimer)
+    this.tipsTimer = null
   }
 }
 </script>

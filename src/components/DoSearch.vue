@@ -111,13 +111,30 @@ export default {
         playlists: []
       },
       hotSearch: [],
+      suggestTimer: null,
+      suggestSeq: 0,
     }
   },
   watch: {
     keyword(n) {
-      this.getSearchSuggest(n).then(res => {
-        this.suggest = {...this.suggest, ...res.data.result}
-      })
+      // 防抖 300ms: 避免每个按键都打一次 /search/suggest
+      clearTimeout(this.suggestTimer)
+      // 请求序号: 丢弃过期响应, 防止慢的旧请求覆盖新结果
+      const seq = ++this.suggestSeq
+      if (!n) {
+        this.suggest = {songs: [], artists: [], albums: [], playlists: []}
+        return
+      }
+      this.suggestTimer = setTimeout(() => {
+        this.getSearchSuggest(n)
+            .then(res => {
+              if (seq !== this.suggestSeq) return
+              this.suggest = {...this.suggest, ...((res.data && res.data.result) || {})}
+            })
+            .catch(() => {
+              // 建议接口失败不应影响搜索框输入, 静默处理
+            })
+      }, 300)
     }
   },
   methods: {
@@ -151,10 +168,13 @@ export default {
       this.$axios.all([this.getDefaultKeyword(), this.getHotSearch()])
           .then(this.$axios.spread((defaultKeyword, hotSearch) => {
             //默认搜索关键词
-            this.placeholder = defaultKeyword.data.data.showKeyword
+            this.placeholder = (defaultKeyword.data && defaultKeyword.data.data && defaultKeyword.data.data.showKeyword) || ''
             //热搜榜（详细）
-            this.hotSearch = hotSearch.data.data
+            this.hotSearch = (hotSearch.data && hotSearch.data.data) || []
           }))
+          .catch(() => {
+            // 默认词/热搜失败不阻塞搜索输入, 保持静默
+          })
     },
     getCoverUrl(ids) {
       return tracksApi.detail(ids)
@@ -184,6 +204,7 @@ export default {
     window.addEventListener('keydown', this.onKeydown)
   },
   beforeDestroy() {
+    clearTimeout(this.suggestTimer)
     toggleScrollY(true)
     window.removeEventListener('keydown', this.onKeydown)
   }

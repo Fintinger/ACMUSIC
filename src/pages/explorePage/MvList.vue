@@ -60,8 +60,8 @@
     </el-row>
 
     <div class="mv-load-more">
-      <button v-if="!loading&&hasMore" @click="load()">加载更多</button>
-      <p v-if="loading">加载中...</p>
+      <button v-if="!loading && !loadingMore && hasMore" @click="load()">加载更多</button>
+      <p v-if="loading || loadingMore">加载中...</p>
       <p v-if="!hasMore">没有更多了</p>
     </div>
   </div>
@@ -79,6 +79,8 @@ export default {
     return {
       renderedList: [],
       loading: false,
+      //翻页专用标志: 与首屏 loading 分离, 避免翻页时列表整体卸载重挂
+      loadingMore: false,
       title: "",
       item: '',
       curCat: null,
@@ -137,30 +139,47 @@ export default {
       this.page = 1
       this.refreshTheRenderList()
     },
-    //GET请求数据触发页面更新
+    //GET请求数据触发页面更新（切换筛选条件时调用，重置为第一页）
     refreshTheRenderList() {
       this.loading = true
       this.renderedList = []
       this.fadeKey++
-      mvApi.all({ area: this.params.area, order: this.params.order, type: this.params.type, limit: this.params.limit }).then(res => {
-        this.hasMore = res.data.hasMore
-        this.renderedList = res.data.data
+      return this.fetchPage(0).then(res => {
+        this.hasMore = typeof res.data.hasMore === 'undefined' ? true : res.data.hasMore
+        this.renderedList = (res.data && res.data.data) || []
+      }).catch(() => {
+        this.renderedList = []
+        this.hasMore = false
       }).finally(() => { this.loading = false })
     },
-    load() {
-      this.loading = true
-      this.page++
-
-      mvApi.all({
+    fetchPage(offset) {
+      return mvApi.all({
         area: this.params.area,
         order: this.params.order,
         type: this.params.type,
         limit: this.params.limit,
-        offset: this.params.limit * this.page
-      }).then(res => {
-        this.hasMore = res.data.hasMore
-        this.renderedList.push(...res.data.data)
-        this.loading = false
+        offset
+      })
+    },
+    load() {
+      if (this.loading || this.loadingMore || !this.hasMore) return
+      // 关键: 翻页不能复用 loading。模板里列表的 <transition v-if="!loading && renderedList.length">
+      // 绑在 loading 上, 复用会导致每次"加载更多"都把整个列表卸载重挂 → 视觉上"全部重新加载"。
+      this.loadingMore = true
+      return this.fetchPage(this.renderedList.length).then(res => {
+        const data = (res.data && res.data.data) || []
+        const exists = new Set(this.renderedList.map(mv => mv.id))
+        const fresh = data.filter(mv => !exists.has(mv.id))
+        this.renderedList.push(...fresh)
+        // 服务端给了 hasMore 就用它; 没给则用"本页是否有新数据"推断
+        this.hasMore = typeof res.data.hasMore === 'undefined' ? fresh.length > 0 : res.data.hasMore
+        if (!data.length) {
+          this.hasMore = false
+        }
+      }).catch(() => {
+        // 失败不动列表, 允许用户重新点"加载更多"
+      }).finally(() => {
+        this.loadingMore = false
       })
     },
     mvClk(id) {
@@ -197,10 +216,12 @@ export default {
     }
   },
   beforeMount() {
-    this.loading = true
-    mvApi.first(100).then(res => {
-      this.renderedList = res.data.data
-    }).finally(() => { this.loading = false })
+    //首屏与翻页统一走 /mv/all, 保证列表口径一致。
+    //原实现首屏用 /mv/first(100): 实测两个接口返回的数据零重叠, 点"加载更多"会从一批
+    //MV 直接跳到另一批, 观感上就是"重新加载"。
+    this.renderedList = []
+    this.hasMore = true
+    this.refreshTheRenderList()
   }
 }
 </script>

@@ -93,21 +93,27 @@ export default {
   },
   methods: {
     loadSongs(id, limit) {
-      playlistApi.getAllTrack(id, {
+      return playlistApi.getAllTrack(id, {
         limit: limit || this.params.limit,
         offset: this.params.offset
       }).then(res => {
-        res.data.songs.forEach(val => {
+        const songs = (res.data && res.data.songs) || []
+        songs.forEach(val => {
           if (this.songs.findIndex(item => item.id === val.id) === -1) {
             this.songs.push(val)
           }
         })
-      this.loading = false
-      this.initialLoading = false
-      this.params.offset++
+        this.params.offset++
+      }).catch(() => {
+        // 失败不推进 offset, 允许重试同一页
+      }).finally(() => {
+        // 请求失败也必须恢复, 否则"加载中..."永久卡死
+        this.loading = false
+        this.initialLoading = false
       })
     },
     load() {
+      if (this.loading || this.noMore) return
       this.loading = true
       this.loadSongs(this.id)
     },

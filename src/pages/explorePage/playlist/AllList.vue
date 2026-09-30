@@ -149,16 +149,23 @@ export default {
       this.curCat = this.curCat === c ? null : c
     },
     load() {
+      if (this.loading || this.noMore) return
       this.page++
       this.loading = true
-      this.getListByClass(this.curTag).then(res => {
-        res.data.playlists.forEach(val => {
+      return this.getListByClass(this.curTag).then(res => {
+        const playlists = (res.data && res.data.playlists) || []
+        playlists.forEach(val => {
           if (this.renderList.findIndex(item => item.id === val.id) === -1) {
             this.renderList.push(val)
           }
         })
         //记录是否还有更多数据的量
         this.more = res.data.more
+      }).catch(() => {
+        // 失败回退页码, 允许重新点击加载更多
+        this.page--
+      }).finally(() => {
+        // 无论成功失败都要恢复, 否则按钮永久转圈
         this.loading = false
       })
     }

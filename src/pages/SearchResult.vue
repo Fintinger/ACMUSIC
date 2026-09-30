@@ -22,7 +22,12 @@
     </section>
 
     <section class="search-content">
-      <router-view :key="$route.fullpath"></router-view>
+      <!-- 这里曾经是 :key="$route.fullpath"（大小写拼错，实际值恒为 undefined）。
+           外层 App.vue 的 router-view 已用 $route.fullPath 作 key，URL（含 keyword）变化时
+           整个 SearchResult 会被 keep-alive 重建 → 9 个搜索子视图的 activated() 必然重新取数，
+           所以本层 key 既冗余、又只会在「SearchResult 被复用」时制造出拿不到 activated() 的
+           新子实例，故直接移除，不再补 :key。 -->
+      <router-view/>
     </section>
   </div>
 </template>

@@ -44,7 +44,7 @@
         </template>
         <template duration>
           <el-col v-if="t.dt" :span="7" class="duration">{{ t.dt | formatS }}</el-col>
-          <el-col v-if="t.duration" :span="7" class="duration">{{ t.duration | formatS }}</el-col>
+          <el-col v-else-if="t.duration" :span="7" class="duration">{{ t.duration | formatS }}</el-col>
         </template>
         <!--      <template v-if="needBtn">
                 <el-col v-if="t.mv" :span="2" class="mv">

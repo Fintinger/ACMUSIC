@@ -34,19 +34,37 @@ export default {
       return searchApi.search({ keywords: this.keyword, limit: this.limit, offset: this.offset, type: this.type, ...params })
     },
     initLoad() {
-      this.getList().then(res => {
+      // 重置分页, 否则切换关键词后会沿用上一次的 offset
+      this.page = 0
+      return this.getList().then(res => {
         this.list = []
-        res.data.data.resources.forEach(val => { this.dataProcessing(val.baseInfo.mainSong); this.list.push(val.baseInfo.mainSong) })
+        const resources = (res.data && res.data.data && res.data.data.resources) || []
+        resources.forEach(val => { this.dataProcessing(val.baseInfo.mainSong); this.list.push(val.baseInfo.mainSong) })
         this.totalCount = res.data.data.totalCount
+      }).catch(() => {
+        this.list = []
+        this.totalCount = 0
       })
     },
     load() {
+      if (this.loading || this.noMore) return
       this.page++; this.loading = true;
-      this.getList().then(res => {
-        res.data.data.resources.forEach(val => {
+      return this.getList().then(res => {
+        const resources = (res.data && res.data.data && res.data.data.resources) || []
+        const exists = new Set(this.list.map(item => item.id))
+        resources.forEach(val => {
           this.dataProcessing(val.baseInfo.mainSong)
-          if (this.list.findIndex(item => item.id === val.baseInfo.mainSong.id === -1)) { this.list.push(val.baseInfo.mainSong); this.loading = false }
+          const song = val.baseInfo.mainSong
+          // 修正: 原写法 `item.id === x.id === -1` 恒为 false, 去重从未生效
+          if (!exists.has(song.id)) {
+            exists.add(song.id)
+            this.list.push(song)
+          }
         })
+      }).catch(() => {
+        this.page--
+      }).finally(() => {
+        this.loading = false
       })
     },
     mvClk(id) { this.$bus.$emit('mvClk', id) },

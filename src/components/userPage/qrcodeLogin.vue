@@ -47,36 +47,58 @@ export default {
     }
   },
   watch: {
-    created(n) {
-      if (n) {
-        this.qrTimer = setInterval(() => {
-          this.checkQR(this.unikey)
-        }, 1000)
-      }
-    },
     qrStatusCode(n) {
       if (n === 800) {
-        clearInterval(this.qrTimer)
+        // 二维码失效 -> 停止轮询, 等待用户点击刷新
+        this.stopPolling()
+      }
+      if (n === 803) {
+        // 登录成功 -> 停止轮询
+        this.stopPolling()
       }
     }
   },
   methods: {
+    /**
+     * 启动轮询。注意: 不能只靠 watch(created) 触发 ——
+     * refresh() 时 created 已经是 true, watcher 不会再次触发, 导致刷新后永远不再轮询。
+     */
+    startPolling() {
+      this.stopPolling()
+      if (!this.unikey) return
+      this.qrTimer = setInterval(() => {
+        this.checkQR(this.unikey)
+      }, 1000)
+    },
+    stopPolling() {
+      if (this.qrTimer) {
+        clearInterval(this.qrTimer)
+        this.qrTimer = null
+      }
+    },
     generateQRCode() {
+      this.stopPolling()
+      this.created = false
       authApi.qrKey().then(res => {
         if (res.data.code === 200) {
           //存储key
           this.unikey = res.data.data.unikey
 
-          authApi.qrCreate(this.unikey).then(res => {
+          return authApi.qrCreate(this.unikey).then(res => {
             this.qrImg = res.data.data.qrimg
             //修改已经creat
-            this.created = true;
+            this.created = true
+            // 生成成功后显式启动轮询(不依赖 watcher)
+            this.startPolling()
           })
         }
+      }).catch(() => {
+        this.created = false
       })
     },
     refresh() {
       this.qrStatusCode = 0
+      this.qrStatus = ""
       this.qrImg = ""
       this.generateQRCode()
     },
@@ -89,6 +111,8 @@ export default {
           setLogin(res.data.cookie)
           this.$bus.$emit('loggedIn', res.data.cookie)
         }
+      }).catch(() => {
+        // 轮询失败不改状态, 等下一轮
       })
     }
   },
@@ -96,7 +120,7 @@ export default {
     this.generateQRCode()
   },
   beforeDestroy() {
-    clearInterval(this.qrTimer)
+    this.stopPolling()
   }
 }
 </script>
