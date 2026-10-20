@@ -5,14 +5,17 @@ module.exports = defineConfig({
     lintOnSave: false,
     //配置全局代理
     devServer: {
+        // /api 转发到线上后端，与生产环境路由完全一致：
+        //   线上 nginx：/api/* → 本机 Node 服务（剥前缀）；/api/audio-proxy、/api/ip-location 精确匹配
+        //   开发 devServer：/api → https://music.archai.space（保留 /api 前缀，由线上 nginx 再分发）
+        // 这样开发时不必再单独处理 CORS，前后端行为一致
         proxy: {
-            'api': {
-                target: 'https://music.163.com',
+            '/api': {
+                target: 'https://music.archai.space',
                 changeOrigin: true,
                 ws: true,
-                secure: false,
-                logLevel: 'debug',
-                pathRewrite: {'^/api': ''}
+                secure: true,
+                logLevel: 'debug'
             }
         }
     },
