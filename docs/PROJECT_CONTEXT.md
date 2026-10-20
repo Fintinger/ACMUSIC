@@ -247,14 +247,14 @@ ACMUSIC/
 │   │   ├── audioCache.js       # 音频 URL 缓存 + pending 去重（TTL 30min）
 │   │   ├── colorExtractor.js   # 封面图片 → 主色调背景（HSL 调节）
 │   │   ├── filters.js          # 全局过滤器（formatCount/formatMs/formatS/fromNow/imgParam）
-│   │   ├── ipLocation.js       # IP → 地理位置（高德 + ipwho.is 兜底）
+│   │   ├── ipLocation.js       # IP → 地理位置（走服务端 /api/ip-location，无前端 Key）
 │   │   ├── areaCode.js         # ⭐ 6 位区划代码 → 省市名（内置 GB/T 2260 表）
 │   │   ├── normalize.js        # ⭐⭐ 数据适配层（coverOf/artistOf/normalizeTrack）
 │   │   ├── title.js            # document.title 管理（路由标题 + 播放标题）
 │   │   └── tools.js            # toggleScrollY（弹层期间锁定 body 滚动）
 │   ├── App.vue                 # 根组件（顶栏 + 路由出口 + 全局播放器 + 搜索弹层）
 │   └── main.js                 # ⭐ 入口：全局过滤器、Vue.use、$bus、登录初始化
-├── .env                        # VUE_APP_API_BASE_URL + 高德 Key
+├── .env                        # VUE_APP_API_BASE_URL（本地开发）；.env.production 指向 /api
 ├── .gitignore
 ├── .npmrc                      # legacy-peer-deps
 ├── AGENTS.md                   # 简要协作约定
