@@ -5,19 +5,26 @@
     </div>
     <div class="qr-box qr-box--loading" v-else>
       <div class="qr-skeleton skeleton-item"></div>
-      <span class="qr-loading-text">二维码加载中...</span>
+      <span class="qr-loading-text">{{ qrError ? '二维码未加载' : '二维码加载中...' }}</span>
     </div>
     <div class="qr-status" :class="'qr-status--' + qrStatusClass">
       <span class="dot"></span>
       {{ qrStatusText }}
     </div>
     <el-button v-if="qrStatusCode === 800" class="qr-refresh" @click="refresh">二维码已失效，点击刷新</el-button>
+    <el-button v-else-if="qrError" class="qr-refresh" @click="refresh">点击重试</el-button>
   </div>
 </template>
 
 <script>
 import {setLogin} from "@/utils/auth";
 import * as authApi from "@/api/auth";
+
+// 轮询间隔(ms)
+const POLL_INTERVAL = 1000
+// 连续失败上限：1s 一次轮询，连续失败满 3 次说明不是偶发抖动（如网关 502），
+// 必须停止轮询并给用户可见的重试入口，否则界面会永远停在"请扫码"，看起来像卡死。
+const MAX_POLL_FAILS = 3
 
 export default {
   name: "qrcodeLogin",
@@ -27,7 +34,11 @@ export default {
       created: false,
       qrStatus: "",
       qrStatusCode: "",
-      unikey: ""
+      unikey: "",
+      // 连续请求失败次数（任一成功即清零）
+      pollFails: 0,
+      // 网络/网关异常提示，非空时覆盖默认状态文案
+      qrError: ""
     }
   },
   computed: {
@@ -35,9 +46,11 @@ export default {
       if (this.qrStatusCode === 803) return 'success'
       if (this.qrStatusCode === 802) return 'scan'
       if (this.qrStatusCode === 800) return 'expired'
+      if (this.qrError) return 'error'
       return 'wait'
     },
     qrStatusText() {
+      if (this.qrError) return this.qrError
       switch (this.qrStatusCode) {
         case 803: return '登录成功'
         case 802: return '已扫描，请在手机上确认'
@@ -66,9 +79,10 @@ export default {
     startPolling() {
       this.stopPolling()
       if (!this.unikey) return
+      if (this.qrError) return
       this.qrTimer = setInterval(() => {
         this.checkQR(this.unikey)
-      }, 1000)
+      }, POLL_INTERVAL)
     },
     stopPolling() {
       if (this.qrTimer) {
@@ -76,9 +90,31 @@ export default {
         this.qrTimer = null
       }
     },
+    /**
+     * 把 axios 错误翻译成人话。
+     * 502 是网关级故障（后端正常但 nginx 上游响应异常），必须让用户看见而不是静默重试。
+     */
+    describeError(err) {
+      const status = err && err.response && err.response.status
+      if (status) return `服务异常（HTTP ${status}），点击重试`
+      if (err && (err.code === 'ECONNABORTED' || /timeout/i.test(err.message || ''))) {
+        return '请求超时，点击重试'
+      }
+      return '网络异常，点击重试'
+    },
+    /** 连续失败累计，达到上限就停轮询并暴露错误 */
+    markPollFail(err) {
+      this.pollFails += 1
+      if (this.pollFails >= MAX_POLL_FAILS) {
+        this.stopPolling()
+        this.qrError = this.describeError(err)
+      }
+    },
     generateQRCode() {
       this.stopPolling()
       this.created = false
+      this.qrError = ""
+      this.pollFails = 0
       authApi.qrKey().then(res => {
         if (res.data.code === 200) {
           //存储key
@@ -92,18 +128,26 @@ export default {
             this.startPolling()
           })
         }
-      }).catch(() => {
+        // 拿不到 key：不要停在"二维码加载中"的假加载态
         this.created = false
+        this.qrError = `二维码获取失败（code ${res.data.code}），点击重试`
+      }).catch(err => {
+        this.created = false
+        this.qrError = this.describeError(err)
       })
     },
     refresh() {
       this.qrStatusCode = 0
       this.qrStatus = ""
       this.qrImg = ""
+      this.pollFails = 0
+      this.qrError = ""
       this.generateQRCode()
     },
     checkQR(key) {
       authApi.qrCheck(key).then(res => {
+        // 一次成功就认为链路恢复，重置失败计数
+        this.pollFails = 0
         this.qrStatus = res.data.message
         this.qrStatusCode = res.data.code
         if (res.data.code === 803) {
@@ -111,13 +155,26 @@ export default {
           setLogin(res.data.cookie)
           this.$bus.$emit('loggedIn', res.data.cookie)
         }
-      }).catch(() => {
-        // 轮询失败不改状态, 等下一轮
+      }).catch(err => {
+        // 单个请求失败不改业务状态，但连续失败必须停轮询 + 提示，
+        // 否则 502 时界面会永远停在"请扫码"，用户只看到控制台报错
+        this.markPollFail(err)
       })
     }
   },
   mounted() {
     this.generateQRCode()
+  },
+  // UserPage 在 keep-alive 里，离开页面不会触发 beforeDestroy，
+  // 不显式停轮询就会以 1 次/秒 永久打接口
+  deactivated() {
+    this.stopPolling()
+  },
+  activated() {
+    // keep-alive 回显时恢复轮询（首次挂载时 unikey 还是空，这里自然跳过）
+    if (this.unikey && !this.qrError && this.qrStatusCode !== 800 && this.qrStatusCode !== 803) {
+      this.startPolling()
+    }
   },
   beforeDestroy() {
     this.stopPolling()
@@ -181,6 +238,7 @@ export default {
   &--success { color: $color-ornament; .dot { background: $color-ornament; animation: none; } }
   &--scan { color: $color-main; .dot { background: $color-main; } }
   &--expired { color: #e6a23c; .dot { background: #e6a23c; animation: none; } }
+  &--error { color: #f56c6c; .dot { background: #f56c6c; animation: none; } }
 }
 
 .qr-refresh {

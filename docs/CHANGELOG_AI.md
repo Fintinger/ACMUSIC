@@ -1379,3 +1379,41 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 （占位）
 
 ---
+
+### 2026-10-20 — 扫码登录 502 的真实成因（nginx 缓冲区）与轮询错误可见化
+
+### 修改内容
+上线后扫码登录轮询持续 502 的排查结论 + 前端把网关错误从"静默吞掉"改为"连续失败即提示可重试"，并补齐 keep-alive 页面的轮询泄漏。
+
+### 修改文件
+- `src/components/userPage/qrcodeLogin.vue`
+- `docs/CHANGELOG_AI.md`
+- 线上（不在本仓库）：`/etc/nginx/sites-available/music` 的 `location /api/` 增加 `proxy_buffer_size 16k` 等三行
+
+### 修改原因
+线上 `music.archai.space` 间歇性 502，`/var/log/nginx/music.error.log` 全部是
+`upstream sent too big header while reading response header from upstream`。
+直接打后端 3000 端口量响应头：`/register/anonimous` 常态 454 字节、峰值 **4164 字节**，
+内容是网易云 API 把 163 下发的整批设备 cookie（`MUSIC_A`、二十余条 `MUSIC_A_T`/`MUSIC_R_T`）原样透传，
+超过 nginx 默认 4k 的 `proxy_buffer_size` → nginx 直接回 502。当日 990 请求 / 31 个 502，
+分布 `register/anonimous` 26、`login/qr/check` 4、`login/cellphone` 1 —— 所以手机号登录、匿名登录同样会随机失败，
+并非二维码本身的问题。
+
+前端次生问题：`checkQR().catch(() => {})` 把错误全吞了，502 时界面永远停在"请使用 App 扫码"，
+用户只看到控制台报错、页面像卡死；且组件在 `keep-alive` 内，离开页面不触发 `beforeDestroy`，
+1s 一次的轮询会永久打接口。
+
+### 测试结果
+- `yarn lint`（单文件 ESLint）✅
+- `yarn build` ✅（Node 22.22.2，13s）
+- 线上验证 ✅
+  - nginx reload 后 `register/anonimous` 连打 200 次：200 × 200，0 个 502，error.log 新增 too-big-header 0 条
+  - 混合 300 次压测：255 × 200 + 30 × 406 + 15 × 509（406/509 是网易云侧对突发流量的限频，非本次问题）
+  - 真实节奏（1 次/秒）轮询 30 次：全部 200；扫码 `qr/create` + 轮询串起来正常
+  - 新产物已上线并核验：`/` 引用 `js/app.c9eabf8b.js`，产物内含"服务异常/点击重试""二维码未加载"文案，`/user` 路由 200
+
+### 注意事项
+- 回滚：nginx 配置备份在服务器 `/root/music.nginx.bak.20261020-183545`；静态站备份在 `/root/music.www.bak.20261020-183930`
+- 不建议用 `proxy_hide_header Set-Cookie` 一把剥掉了事：`NMTID` 是扫码会话的连续性凭据，剥掉后 qr/create 与 qr/check 不再同源，二维码会变成"不存在或已过期"
+- 若日后后端仍需下发大批 cookie，`proxy_buffer_size` 需同步调大，否则同样的 502 会以别的接口形式复现
+- 轮询连续失败 3 次即停并提示，属于有意的降级：宁可让用户看到"重试"按钮，也不要静默空转

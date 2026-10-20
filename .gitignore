@@ -8,6 +8,9 @@ analysis/
 # opencode 工具临时文件（不进 git history）
 .omo/
 
+# AI 助手工作区数据（本地记忆/临时探测，不进 git history）
+.workbuddy/
+
 
 # local env files
 .env.local
