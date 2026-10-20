@@ -1417,3 +1417,33 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - 不建议用 `proxy_hide_header Set-Cookie` 一把剥掉了事：`NMTID` 是扫码会话的连续性凭据，剥掉后 qr/create 与 qr/check 不再同源，二维码会变成"不存在或已过期"
 - 若日后后端仍需下发大批 cookie，`proxy_buffer_size` 需同步调大，否则同样的 502 会以别的接口形式复现
 - 轮询连续失败 3 次即停并提示，属于有意的降级：宁可让用户看到"重试"按钮，也不要静默空转
+
+### 2026-10-20 — API 端点索引生成器 + 能力缺口分析
+
+### 修改内容
+把"要不要把 433 个端点的官方文档读进记忆"这个问题，落成可维护的产物：自动生成的端点索引 + 人工判断的缺口/优先级清单，替代"背文档"。
+
+### 修改文件
+- `scripts/gen-api-index.mjs`（新增）
+- `docs/API_INDEX.md`（新增，自动生成，勿手改）
+- `docs/API_GAPS.md`（新增）
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+后续要持续加功能，需要能快速回答三件事：这个能力有没有对应接口、参数是什么、本项目是否已封装。
+官方文档站是 docsify + jsDelivr 拉 GitHub `main` 分支，正文随时变，且全文体量过大不适合常驻上下文；
+生产服务器跑的是 v4.39.0，`/opt/api-enhanced/module/*.js`（端点+中文注释）与 `interface.d.ts`（参数表）
+才是与实际行为一致的权威来源。因此改为"索引常驻 + 详情按需取"。
+
+索引数据来源：服务器 `/opt/api-enhanced` 的 `module/*.js` + `interface.d.ts` + 本仓库 `src/api/*.js`（判断是否已封装）。
+
+### 测试结果
+- `node scripts/gen-api-index.mjs --pkg /tmp/apipkg` ✅
+  - 识别 v4.39.0，端点 433，已封装 93（21%），有中文注释 372（86%），参数表缺失 0
+  - 18 个分组全部归类，无「其他」兜底残留（首版曾把 98 个端点漏进「其他」，已逐段核对补全映射）
+- `yarn lint` / `yarn build`：本次未改 `src/`，未重跑
+
+### 注意事项
+- `docs/API_INDEX.md` 是生成物，改分类逻辑请改 `scripts/gen-api-index.mjs` 的 `GROUP_OF` / `GROUP_ORDER`，不要手改 md
+- API 版本升级后需重新生成，索引表头会记录版本号，便于发现漂移
+- 官方 d.ts 把大量必填参数标成了 `?`（历史遗留），参数列只能作参考，写代码前以文档页或 `module/*.js` 为准
