@@ -22,7 +22,7 @@
       <div class="hero-bg" :style="{backgroundImage: `url(${arBasicInfo.img1v1Url||arBasicInfo.picUrl})`}"></div>
       <div class="hero-content">
         <div class="hero-avatar">
-          <cover-image :src="arBasicInfo.img1v1Url||arBasicInfo.picUrl" :alt="arBasicInfo.name + '的头像'"/>
+          <cover-image :src="arBasicInfo.img1v1Url||arBasicInfo.picUrl" :alt="arBasicInfo.name + '的头像'" eager/>
         </div>
         <div class="hero-info">
           <h1 class="hero-name">{{ arBasicInfo.name }}</h1>

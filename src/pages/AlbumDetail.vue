@@ -6,7 +6,7 @@
     </template>
     <template v-else>
     <div class="album-hero">
-      <div class="album-cover"> <cover-image :src="albumInfo.picUrl" :alt="albumInfo.name + '的封面'"/> </div>
+      <div class="album-cover"> <cover-image :src="albumInfo.picUrl" :alt="albumInfo.name + '的封面'" eager/> </div>
       <div class="album-info">
         <h1 class="album-name">{{ albumInfo.name }} <small v-if="albumInfo.subType">({{ albumInfo.subType }})</small></h1>
         <p class="album-artist" v-if="albumInfo.artist" @click="arClk(albumInfo.artist.id)">🎤 {{ albumInfo.artist.name }}</p>

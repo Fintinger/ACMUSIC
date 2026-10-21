@@ -20,7 +20,7 @@
             <p v-else-if="playlist.subscribedCount" class="bookCount">
               <BaseIcon name="like"/> {{ playlist.subscribedCount | Div1w(playlist.subscribedCount) }}</p>
           </template>
-          <img :src="playlist[picName] | imgParam('300y300')" class="image">
+          <img :src="playlist[picName] | imgParam('300y300')" class="image" loading="lazy" decoding="async">
           <div class="play-btn">
             <playTracksBtn :type="1" :val="playlist"/>
           </div>

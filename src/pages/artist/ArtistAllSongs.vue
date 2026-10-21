@@ -3,7 +3,7 @@
     <el-row class="ar-basic-info">
       <el-col :span="6">
         <div class="imgContainer"><cover-image :alt="arBasicInfo.name + '的头像'" :src="arBasicInfo.img1v1Url||arBasicInfo.picUrl"
-                                       custom-class="artist"/></div>
+                                       custom-class="artist" eager/></div>
       </el-col>
       <el-col :span="18">
         <el-row class="ar-name">
