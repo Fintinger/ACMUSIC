@@ -8,7 +8,8 @@
           @click="scrollTags(-1)"
       >‹</button>
       <el-row class="video-tags" ref="videoTags" @scroll.native="onTagsScroll">
-            <el-button v-for="t in tags" :key="t.id" class="video-tag-btn" size="small" @click="tagClick(t.id)">{{ t.name }}</el-button>
+            <el-button class="video-tag-btn" size="small" :class="{ 'is-active': !curId }" @click="selectAll">全部</el-button>
+            <el-button v-for="t in tags" :key="t.id" class="video-tag-btn" size="small" :class="{ 'is-active': curId === t.id }" @click="tagClick(t)">{{ t.name }}</el-button>
       </el-row>
       <button
           v-show="tags.length"
@@ -20,7 +21,13 @@
     <el-row class="video-result">
       <GridSkeleton v-if="loading && !renderList.length" type="video"/>
       <VideoLayout v-if="renderList.length" :list="renderList"/>
-      <div v-if="!loading && curId && !renderList.length" class="video-empty">该分类暂无视频</div>
+      <div v-if="!loading && tagError" class="video-empty">
+        <span>{{ tagError }}</span>
+        <el-button type="text" class="video-empty-retry" @click="reload">重试</el-button>
+      </div>
+      <div v-else-if="!loading && !renderList.length" class="video-empty">
+        {{ curId ? '该标签下暂无视频，换个标签看看' : '暂无推荐视频，稍后再试' }}
+      </div>
       <LoadMore v-if="renderList.length && !curId" :load="loadRec" :loading="loadingMore" :no-more="noMore"/>
       <LoadMore v-if="renderList.length && curId" :load="load" :loading="loadingMore" :no-more="noMore"/>
     </el-row>
@@ -32,6 +39,10 @@ import VideoLayout from "@/components/layout/VideoLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 import * as videoApi from "@/api/Video";
+import * as searchApi from "@/api/Search";
+
+// 视频搜索类型: 1014 = 视频(cloudsearch / search 通用)
+const VIDEO_SEARCH_TYPE = 1014
 
 export default {
   name: "VideoList",
@@ -40,11 +51,17 @@ export default {
     return {
       tags: [],
       curId: "",
+      curName: "",
+      // 标签模式下 offset 是"条数偏移"(cloudsearch 语义), 每页拉 limit 条
+      limit: 30,
       offset: 0,
       renderList: [],
       loading: false,
       loadingMore: false,
       more: true,
+      tagError: "",
+      // 请求序号: 快速切标签时丢弃过期响应
+      reqSeq: 0,
       canScrollLeft: false,
       canScrollRight: false,
     }
@@ -55,22 +72,64 @@ export default {
     }
   },
   watch: {
-    curId(id) {
-      this.offset = 0;
-      this.renderList = []
-      this.loading = true
-      this.retryOnce(() => this.getVideoByTagId(id)).then(res => {
-        const datas = res.data.datas || res.data.data || []
-        if (Array.isArray(datas)) datas.map(val => this.renderList.push(val.data))
-      }).finally(() => { this.loading = false })
+    curId() {
+      this.reload()
     }
   },
   methods: {
     getVideoTags() {
       return videoApi.groupList()
     },
-    getVideoByTagId(id) {
-      return videoApi.group(id, this.offset)
+    /**
+     * 标签下的视频列表
+     * 上游 /video/group (videotimeline/videogroup/otherclient/get) 已停止下发列表,
+     * 实测匿名与真实 MUSIC_U 均返回 { code: 200, datas: null }, 且多组参数变体都无效;
+     * 因此改用视频搜索 keywords=标签名&type=1014 (实测各标签均有结果, offset 为条数偏移)。
+     */
+    getVideosByTag() {
+      return searchApi.searchV2({
+        keywords: this.curName,
+        type: VIDEO_SEARCH_TYPE,
+        limit: this.limit,
+        offset: this.offset
+      })
+    },
+    /** 把响应按当前模式(标签/推荐)合并进 renderList, 按 vid 去重 */
+    applyResult(res) {
+      if (this.curId) {
+        const videos = (res.data && res.data.result && res.data.result.videos) || []
+        videos.forEach(v => this.pushUnique(v))
+        // 搜索接口不返回 hasmore: 本页拉满才认为还有下一页
+        this.more = videos.length >= this.limit
+      } else {
+        const datas = (res.data && res.data.datas) || []
+        datas.forEach(val => val && val.data && this.pushUnique(val.data))
+        this.more = !!res.data.hasmore
+      }
+    },
+    pushUnique(item) {
+      if (!item || !item.vid) return
+      if (this.renderList.findIndex(i => i.vid === item.vid) === -1) {
+        this.renderList.push(item)
+      }
+    },
+    /** 首屏/切换标签/重试的统一入口 */
+    reload() {
+      const seq = ++this.reqSeq
+      this.offset = 0
+      this.renderList = []
+      this.more = true
+      this.tagError = ""
+      this.loading = true
+      const fetcher = this.curId ? () => this.getVideosByTag() : () => this.getRecommendedVideos()
+      this.retryOnce(fetcher)
+          .then(res => {
+            // 期间又切了标签/回推荐流: 丢弃这次结果
+            if (seq !== this.reqSeq) return
+            this.applyResult(res)
+          })
+          .catch(() => { if (seq === this.reqSeq) this.tagError = "加载失败，请稍后重试" })
+          .finally(() => { if (seq === this.reqSeq) this.loading = false })
     },
     // 匿名登录 cookie 可能尚未就绪, HTTP 301 或业务 code 301(需要登录) 时延时重试, 最多 4 次
     retryOnce(promiseFactory, attempts = 4, delay = 800) {
@@ -96,21 +155,22 @@ export default {
           })
       return tryOne(attempts)
     },
-    tagClick(id) {
-      this.curId = id
+    tagClick(t) {
+      // 先存名字再改 curId(触发 watch), 保证 watch 里拿到的关键字是最新的
+      this.curName = t.name
+      this.curId = t.id
+    },
+    /** 回到推荐流 */
+    selectAll() {
+      this.curName = ""
+      this.curId = ""
     },
     loadRec() {
       if (this.loadingMore || !this.more) return
       this.offset++;
       this.loadingMore = true
       return this.getRecommendedVideos().then(res => {
-        const datas = (res.data && res.data.datas) || []
-        datas.forEach(val => {
-          if (this.renderList.findIndex(item => item.vid === val.vid) === -1) {
-            this.renderList.push(val.data)
-          }
-        })
-        this.more = res.data.hasmore
+        this.applyResult(res)
       }).catch(() => {
         // 失败回退 offset, 允许重试
         this.offset--
@@ -118,20 +178,15 @@ export default {
         this.loadingMore = false
       })
     },
+    /** 标签模式翻页: offset 按条数递增 */
     load() {
       if (this.loadingMore || !this.more) return
-      this.offset++;
+      this.offset += this.limit
       this.loadingMore = true
-      return this.getVideoByTagId(this.curId).then(res => {
-        const datas = (res.data && res.data.datas) || []
-        datas.forEach(val => {
-          if (this.renderList.findIndex(item => item.vid === val.vid) === -1) {
-            this.renderList.push(val.data)
-          }
-        })
-        this.more = res.data.hasmore
+      return this.getVideosByTag().then(res => {
+        this.applyResult(res)
       }).catch(() => {
-        this.offset--
+        this.offset -= this.limit
       }).finally(() => {
         // 修正: 之前清的是 loading(首屏标志), 而按钮读的是 loadingMore, 导致永久"加载中"
         this.loadingMore = false
@@ -142,19 +197,22 @@ export default {
     },
     concurrentRequests() {
       this.loading = true
-      this.renderList = []
-      this.$axios.all([
-        this.retryOnce(() => this.getVideoTags()),
-        this.retryOnce(() => this.getRecommendedVideos())
-      ])
+      this.tagError = ""
+      if (!this.curId) {
+        this.offset = 0
+        this.renderList = []
+        this.more = true
+      }
+      // 标签模式下只补标签, 不覆盖当前列表
+      const jobs = [this.retryOnce(() => this.getVideoTags())]
+      if (!this.curId) jobs.push(this.retryOnce(() => this.getRecommendedVideos()))
+      this.$axios.all(jobs)
           .then(this.$axios.spread((tags, recommend) => {
-            this.tags = tags.data.data
-            recommend.data.datas.map(val => {
-              this.renderList.push(val.data)
-            })
-            this.more = recommend.data.hasmore
+            this.tags = (tags.data && tags.data.data) || []
+            if (recommend) this.applyResult(recommend)
             this.$nextTick(() => this.updateArrows())
           }))
+          .catch(() => { if (!this.curId) this.tagError = "加载失败，请稍后重试" })
           .finally(() => { this.loading = false; this.$nextTick(() => this.updateArrows()) })
     },
     updateArrows() {
@@ -177,7 +235,9 @@ export default {
     this.updateArrows()
   },
   activated() {
-    this.concurrentRequests();
+    // 首次进入拉标签 + 推荐流; 已选标签时保留标签视图, 只重拉一次避免数据过期
+    if (!this.tags.length) this.concurrentRequests()
+    else if (this.curId) this.reload()
   }
 }
 </script>
@@ -242,11 +302,24 @@ export default {
 .video-list .scroll-arrow--left { margin-right: 10px; }
 .video-list .scroll-arrow--right { margin-left: 10px; }
 
+.video-list .video-tag-btn.is-active,
+.video-list .video-tag-btn.is-active:hover {
+  background: #8685EF;
+  border-color: #8685EF;
+  color: #fff;
+}
+
 .video-list .video-empty {
   width: 100%;
   padding: 60px 0;
   text-align: center;
   color: #999;
+  font-size: 14px;
+}
+
+.video-list .video-empty-retry {
+  margin-left: 8px;
+  padding: 0;
   font-size: 14px;
 }
 </style>

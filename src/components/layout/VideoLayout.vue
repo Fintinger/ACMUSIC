@@ -13,7 +13,7 @@
             <div class="meta-row">
               <span class="meta-item"><BaseIcon name="play"/>{{ v.playTime | Div1w(v.playTime) }}</span>
               <span class="meta-item"><i class="icon-time"></i>{{ v.durationms | formatDuration }}</span>
-              <span class="meta-item"><i class="icon-date"></i>{{ v.publishTime | formatMs("YYYY年MM月DD日") }}</span>
+              <span v-if="v.publishTime" class="meta-item"><i class="icon-date"></i>{{ v.publishTime | formatMs("YYYY年MM月DD日") }}</span>
             </div>
           </div>
         </el-card>
