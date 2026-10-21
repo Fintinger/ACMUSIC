@@ -8,7 +8,8 @@
       <!--      <el-button type="warning" @click="playAllTracks(list)">播放全部</el-button>-->
       <!--      <el-button type="warning" @click="pushAllTracks(list)">添加到播放列表</el-button>-->
     </el-row>
-    <el-row v-for="t in list" :key="t.id" class="tracks">
+    <el-row v-for="(t, index) in list" :key="t.id" class="tracks"
+            :class="{ 'has-actions': showActions }">
       <div class="tracks-wrap" @dblclick="songClk(t)">
         <template cover-img>
           <el-col v-if="t.al" :span="2" class="coverImg"><cover-image :src="t.al.picUrl" :alt="t.name + '的封面'" height="50"/></el-col>
@@ -65,6 +66,11 @@
         <!--文件大小-->
         <el-col v-if="t.fileSize" :span="2" class="fileSize">{{ (t.fileSize / 1024 / 1024).toFixed(2) }}MB</el-col>
       </div>
+      <!-- 行操作：由调用方通过作用域插槽提供（如歌单详情的删歌/排序）。
+           TracksLayout 是全站共用的展示组件，这里只留位置，不放业务逻辑。 -->
+      <div v-if="showActions" class="trackActions" @dblclick.stop @click.stop>
+        <slot name="actions" :track="t" :index="index"/>
+      </div>
     </el-row>
   </div>
 </template>
@@ -86,6 +92,11 @@ export default {
     needBtn: {
       type: Boolean,
       default: true
+    },
+    // 是否展示行操作插槽（由调用方决定，如歌单详情只在"管理歌曲"模式下开）
+    showActions: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -113,4 +124,37 @@ export default {
 
 <style lang="scss" scoped>
 @import "src/assets/scss/tracksLayout";
+
+// 行操作区（可选插槽）：hover 才出现，避免日常浏览时干扰
+.tracks {
+  position: relative;
+
+  &.has-actions {
+    // 给悬浮操作条留出空间，免得盖住时长列
+    padding-right: 9.5rem;
+  }
+}
+
+.trackActions {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .25rem .4rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+
+.tracks:hover .trackActions,
+.tracks:focus-within .trackActions {
+  opacity: 1;
+  pointer-events: auto;
+}
 </style>

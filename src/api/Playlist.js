@@ -43,6 +43,44 @@ export function addTracks(op = 'add', pid, tracks) {
 }
 
 /**
+ * 从歌单删除歌曲
+ * 说明 : 走 /playlist/tracks（op=del），和 addTracks 同一通道。
+ *   刻意不用 /playlist/track/delete：那个模块内部读的是 `query.id`（不是 pid）且没有重复删除的 512 兜底，
+ *   传 pid 会直接 400「请求参数错误」（已踩过）。
+ * @param pid 歌单 id
+ * @param ids 歌曲 id，多个用逗号隔开
+ */
+export function removeTracks(pid, ids) {
+    return request('/playlist/tracks', {params: {op: 'del', pid, tracks: ids}})
+}
+
+/**
+ * 编辑歌单信息
+ * @param id 歌单 id
+ * @param name 名称
+ * @param desc 描述(可选)
+ * @param tags 标签(可选，多个用分号隔开)
+ */
+export function updateInfo(id, name, desc, tags) {
+    const params = {id, name}
+    if (desc !== undefined) params.desc = desc
+    if (tags !== undefined) params.tags = tags
+    return request('/playlist/update', {params})
+}
+
+/**
+ * 调整歌单内歌曲顺序
+ * 说明 : 必须传**完整**的歌曲 id 序列，传一部分会把未传的歌挤到后面。
+ *   ids 必须序列化成 JSON 数组字符串（["1","2"]）—— 上游模块把 query.ids 原样当作 trackIds 透传，
+ *   传 "1,2,3" 会被判「传入的歌曲ID错误」（已踩过）。
+ * @param pid 歌单 id
+ * @param ids 歌曲 id 数组
+ */
+export function updateOrder(pid, ids) {
+    return request('/song/order/update', {params: {pid, ids: JSON.stringify((ids || []).map(String))}})
+}
+
+/**
  *将当前用户的隐私歌单公开
  * @param id 歌单 ID
  * @returns {AxiosPromise}
