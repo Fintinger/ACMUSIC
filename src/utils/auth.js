@@ -6,7 +6,12 @@ export function getCookie(key) {
 }
 
 export function setCookie(key, value) {
-    Cookies.set(key, value, {SameSite: 'None', Secure: true})
+    // SameSite=None 必须配 Secure，而 Secure cookie 在 **http 页面**（localhost 开发）根本写不进去。
+    // 结果就是 localStorage 备份还在 → isLoggedIn() 返回 true、UI 显示已登录，
+    // 但 document.cookie 里没有 MUSIC_U，XHR/代理请求自然也带不过去 → 网关按游客处理。
+    // 这里按协议二选一：https 保持 None+Secure；http 退化为默认（Lax），保证本地也能写入并随请求发出。
+    const secure = typeof window !== 'undefined' && window.location.protocol === 'https:'
+    Cookies.set(key, value, secure ? { SameSite: 'None', Secure: true } : {})
     // 备用持久化，避免 js-cookie 在某些情况下失效
     localStorage.setItem(`store-cookie-${key}`, value)
 }

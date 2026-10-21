@@ -126,6 +126,7 @@ import { setAudioCache, getAudioCache, getAudioUrl, removeAudioCache } from "@/u
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
+import * as authApi from "@/api/auth";
 import { toHttpsUrl } from "@/utils/filters";
 
 export default {
@@ -926,18 +927,55 @@ export default {
     /**
      * 拉取会员权益，用于音质门控。
      * associator = 黑胶VIP（vipCode>0 才有无损/臻音），musicPackage = 音乐包。
-     * 失败不阻塞播放，只是菜单不标记 VIP 门槛。
+     *
+     * ⚠️ /vip/info 有两个坑，只看 vipCode 一定会误伤会员（均已实测）：
+     *    a) 完全没带登录态 → 返回 code 200 且 vipCode 全 0，看起来就像"非会员"
+     *    b) 带了 MUSIC_U 但网易不认（过期/换设备）→ 返回 code 301 且**没有 data 字段**，
+     *       body.data 为 undefined → vipCode 读成 undefined → 同样被判成"非会员"
+     *    所以要先用 /login/status 确认网关侧认不认这份登录态，再校验 vipInfo 的响应结构；
+     *    任何不确定的情况都置 -1 放行，宁可让用户点了去降级，也不要把会员拦在无损、臻音之外。
      */
     _loadVipInfo() {
-      return userApi.vipInfo().then(res => {
-        const d = (res && res.data && res.data.data) || {}
-        const assoc = d.associator || {}
-        const pkg = d.musicPackage || {}
-        const hasRed = Number(assoc.vipCode) > 0
-        const hasPkg = Number(pkg.vipCode) > 0
-        this.vipType = hasRed ? 2 : (hasPkg ? 1 : 0)
-        this.vipChecked = true
-        console.log('[VipInfo]', { associatorCode: assoc.vipCode, packageCode: pkg.vipCode, vipType: this.vipType })
+      return authApi.loginStatus().then(statusRes => {
+        const sd = (statusRes && statusRes.data && statusRes.data.data) || {}
+        const profile = sd.profile || null
+        if (!profile && !sd.account) {
+          this.vipType = -1
+          this.vipChecked = true
+          console.warn('[VipInfo] 网关侧未识别登录态（透传失败或已掉登录），音质门控放行', sd.code)
+          return
+        }
+        return userApi.vipInfo().then(res => {
+          const body = (res && res.data) || {}
+          // ⚠️ 浏览器带了 MUSIC_U 但网易不认（过期/换设备）时，网关返回
+          //    {"message":"用户未登录","code":301} —— **没有 data 字段**（实测）。
+          //    此时 body.data 为 undefined，会被读成 vipCode=0 → 误判"确认非会员"把会员锁在外面。
+          //    这里显式识别：不是 200 或没有 data，一律按"未知"放行。
+          if (!body.data || (Number(body.code) !== 200 && body.code !== undefined)) {
+            this.vipType = -1
+            this.vipChecked = true
+            console.warn('[VipInfo] 网关返回未登录/异常，音质门控放行', body.code, body.message)
+            return
+          }
+          const d = body.data
+          const assoc = d.associator || {}
+          const pkg = d.musicPackage || {}
+          const redCode = Number(assoc.vipCode)
+          const pkgCode = Number(pkg.vipCode)
+          // vipCode 必须是明确数字才有资格判"非会员"，NaN/undefined 不该锁人
+          if (!isFinite(redCode) || !isFinite(pkgCode)) {
+            this.vipType = -1
+          } else {
+            this.vipType = redCode > 0 ? 2 : (pkgCode > 0 ? 1 : 0)
+          }
+          this.vipChecked = true
+          console.log('[VipInfo]', {
+            userId: (profile && profile.userId) || (sd.account && sd.account.id),
+            associatorCode: assoc.vipCode,
+            packageCode: pkg.vipCode,
+            vipType: this.vipType
+          })
+        })
       }).catch(err => {
         // 拉取失败 → 标记未知（-1），菜单不做门控，避免把真会员误拦
         this.vipType = -1

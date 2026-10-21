@@ -9,7 +9,7 @@ import router from './router'
 //Axios
 import request from "./api/request";
 //登录体系
-import {anonymousLogin, refreshLogin} from "./api/auth";
+import {anonymousLogin, refreshLogin, loginStatus} from "./api/auth";
 import {isLoggedIn, setLogin, doLogout} from "./utils/auth";
 //Vuex
 import store from './store'
@@ -46,12 +46,24 @@ Vue.filter('https', filters.toHttpsUrl)
 //全局图标组件
 Vue.component('BaseIcon', BaseIcon)
 
-// 全局登录失效处理 (api:unauthorized 事件由 request.js 拦截器发射)
+// 全局登录失效处理 (api:unauthorized 事件由 request.js 拦截器在 code 301 时发射)
+// ⚠️ 原来收到 301 就直接 doLogout：上游偶发 301（风控抖动、单接口异常、cookie 短暂失效）
+//    会把明明还在线的用户踢下线。这里先用 /login/status 二次确认，且加时间锁防 301 风暴递归。
+let unauthorizedLockUntil = 0
 window.addEventListener('api:unauthorized', () => {
-    if (isLoggedIn()) {
-        doLogout()
-        ElementUI.Message.warning('登录状态已失效，请重新登录')
-    }
+    if (!isLoggedIn()) return
+    const now = Date.now()
+    if (now < unauthorizedLockUntil) return
+    unauthorizedLockUntil = now + 5000
+    loginStatus()
+        .then(res => {
+            const d = (res && res.data && res.data.data) || {}
+            // 网关侧仍认这份登录态 → 只是个别接口炸了，不登出
+            if (d.profile || d.account) return
+            doLogout()
+            ElementUI.Message.warning('登录状态已失效，请重新登录')
+        })
+        .catch(() => { /* 网络异常不断定为登录失效，保持现状 */ })
 })
 
 new Vue({

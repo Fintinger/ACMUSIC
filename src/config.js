@@ -26,7 +26,15 @@ export default {
         // 随机国内 IP，默认关闭（会绕过 Gateway/服务端缓存导致高频请求 460）
         randomCNIP: false,
         // 手动指定国内 IP（优先于 randomCNIP），默认空
-        realIP: ''
+        realIP: '',
+        // 登录态显式透传：把本地保存的 MUSIC_U 拼到请求 query 的 cookie 参数上。
+        // 仅靠 withCredentials 是不够的 —— 它依赖浏览器自动携带「目标域」的 cookie：
+        //   1) http 页面（localhost 开发）写不进 Secure cookie → document.cookie 里没有 MUSIC_U
+        //   2) devServer 跨域代理时，浏览器也只发 localhost 域的 cookie
+        // 结果就是网关按游客处理：/vip/info 返回全 0 → 会员被误判成非会员；
+        // /song/url/v1 也拿不到无损地址。
+        // 实测网关认这个参数（/login/refresh 带 cookie 参数返回 301「需要登录」，不带返回 302）。
+        passthroughCookie: true
     },
     player: {
         // 音质等级: standard | higher | exhigh | lossless | hires | jyeffect
