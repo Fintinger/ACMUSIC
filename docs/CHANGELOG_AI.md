@@ -1571,3 +1571,47 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 ### 注意事项
 - 刷新后若控制台仍有 Mixed Content，说明该请求不是这两个入口发出的，需要看具体 URL 来源
 - 回滚：静态站备份 `/root/music.www.bak.20261021-113216`
+
+### 2026-10-21 — 音质选择真正生效：去掉 unblock、重排取流链、修好解灰兜底
+
+### 修改内容
+按 `docs/AUDIO_PIPELINE_PLAN.md`（决策：解灰走兜底 / 补齐 higher）重构取流链路，让音质切换真正起作用。
+
+### 修改文件
+- `src/components/musicPlayer/PlayerCore.vue`（取流链路、解灰解析、实际音质显示、切档清缓存、预加载）
+- `src/config.js`（`qualityOptions` 补 `higher`；新增 `legacyBrFallback` 开关，默认关）
+- `src/utils/audioCache.js`（缓存 key 改为 `id_level`，删除支持按档位/全档位）
+- `src/utils/filters.js`（`toHttpsUrl` 白名单加 `kuwo.cn`）
+- `docs/AUDIO_PIPELINE_PLAN.md`、`docs/CHANGELOG_AI.md`
+
+### 修改原因
+用户反馈"有音质切换，但请求的资源直接是最高质量 flac"。
+
+根因：主请求 `/song/url/v1` 恒带 `unblock=true`，上游 `module/song_url_v1.js` 注释写明
+"当 unblock 为 true 时…**同时音质设置不会生效**"，直接走 unblockmusic-utils 拿第三方 flac。
+实测同一首歌 `level=standard`：`unblock=false` → MP3 128k/481KB，`unblock=true` → flac/32.5MB，**差 68 倍**。
+
+一并修掉 4 个连带问题：
+1. `/song/url/match` 返回的 `data` 是**字符串 URL**，旧代码读 `data[0].url` → 解灰兜底从未生效
+2. `qualityOptions`(4档) 与 `qualityLevels`(含 higher) 不一致 → 菜单缺 192k 档
+3. `currentQualityShort` 显示用户所选而非实际档位 → 被压级时仍显示"无损"
+4. `audioCache` 按 `id` 存 → 切档后命中旧音质；切档也没清该缓存
+   （`_preloadNext` 里传 `playRequestId+1` 会被请求守卫直接判为 cancelled，预加载一直是死代码，一并修）
+
+新链路：`audioCache(id_level)` → `/song/url/v1?level=` 逐级降 → `/song/url/match` 解灰 →（可选）`/song/url?br=` → `/check/music` 解释原因。
+
+### 测试结果
+- `yarn lint`（4 个文件）✅ 0 错误
+- `yarn build` ✅（app.a7db7b51.js / app.2b7d609e.css）
+- 链路模拟（真实接口，逐档跑一遍）✅
+  - 2058263032：standard 128k/3.1MB、higher 192k/4.6MB、exhigh 320k/7.7MB；
+    非会员选 lossless/hires 被压到 exhigh，返回 `level=exhigh`
+  - 186016（VIP）：官方全档位 url=null → 走 match 解灰拿到可用地址
+- 线上产物核对 ✅：`unblock:` 参数已从 bundle 消失；产能内 `解灰` / `is-unblock` / `song/url/match` 均存在；首页 200
+
+### 注意事项
+- 解灰源（kuwo）音质与曲目版本不可控，播放器音质按钮会显示琥珀色「解灰」并在 title 说明
+- 解灰源实测 https 可用（Range 206），已加入 `toHttpsUrl` 白名单，避免重新引入混合内容
+- VIP 歌在非会员下，无论选哪档都只能走解灰（官方音源全空），这是网易云侧限制，不是 bug
+- `/song/url?br=` 实测 br 参数被忽略（恒 128k），已默认关闭（`config.player.legacyBrFallback`）
+- 回滚：静态站备份 `/root/music.www.bak.20261021-114945`

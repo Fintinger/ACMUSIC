@@ -23,11 +23,15 @@ export default {
         vipOnlyLevels: ['lossless', 'hires', 'jyeffect'],
         // 是否启用多级 fallback
         fallbackLevels: true,
-        // 音质选项
+        // 是否启用 /song/url?br= 老接口兜底。实测该接口的 br 参数被上游忽略（恒 128k），
+        // 多一次请求收益接近 0，默认关闭；解灰也失败时直接提示"无音源"
+        legacyBrFallback: false,
+        // 音质选项（顺序必须与 qualityLevels 一致：由高到低）
         qualityOptions: [
             { key: 'hires', label: '高清臻音', short: 'HD', desc: 'Spatial Audio', bitrate: '96kHz/24bit' },
             { key: 'lossless', label: '高解析度无损', short: 'SQ', desc: 'Hi-Res', bitrate: '192kHz/24bit' },
             { key: 'exhigh', label: '极高', short: 'HQ', desc: 'HQ', bitrate: '320kbps' },
+            { key: 'higher', label: '较高', short: '192', desc: 'HQ', bitrate: '192kbps' },
             { key: 'standard', label: '标准', short: '标', bitrate: '128kbps' },
         ]
     }

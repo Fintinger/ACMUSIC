@@ -73,7 +73,8 @@ export function fromNow(ms) {
 export function toHttpsUrl(url) {
     if (!url || typeof url !== 'string') return url
     if (url.indexOf('http://') !== 0) return url
-    if (!/music\.126\.net|\.netease\.com/.test(url)) return url
+    // kuwo.cn 是解灰兜底源（/song/url/match），实测 https 可用（Range 206）
+    if (!/music\.126\.net|\.netease\.com|kuwo\.cn/.test(url)) return url
     return 'https://' + url.slice('http://'.length)
 }
 

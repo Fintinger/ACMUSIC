@@ -77,7 +77,7 @@
           </transition>
         </div>
         <div class="barItem qualityWrap">
-          <button class="qualityBtn" @click.stop="showQualityMenu = !showQualityMenu">
+          <button class="qualityBtn" :class="{ 'is-unblock': currentQuality.isUnblock }" :title="qualityTitle" @click.stop="showQualityMenu = !showQualityMenu">
             {{ currentQualityShort }}
           </button>
           <QualityMenu :visible="showQualityMenu" :selected="config.player.level" :vip-type="vipType" @select="onQualitySelect" @need-vip="onNeedVip"/>
@@ -122,7 +122,7 @@ import { normalizeTrack } from "@/utils/normalize"
 import config from "@/config"
 import { buildBackground } from "@/utils/colorExtractor"
 import QualityMenu from "@/components/musicPlayer/QualityMenu"
-import { setAudioCache, getAudioCache, getAudioUrl } from "@/utils/audioCache"
+import { setAudioCache, getAudioCache, getAudioUrl, removeAudioCache } from "@/utils/audioCache"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
@@ -152,7 +152,8 @@ export default {
       playRequestId: 0,
       pendingUrlRequests: new Map(),
       urlCache: new Map(),
-      currentQuality: { requested: '', actual: '' },
+      // 实际播放音质：requested=用户所选, actual=真正拿到（可能是降级档或 match 解灰源）
+      currentQuality: { requested: '', actual: '', isUnblock: false },
       showQualityMenu: false,
       currentLevel: config.player.level,
       currentSongSource: 'unknown',
@@ -219,10 +220,30 @@ export default {
     },
     config() { return config },
     isVip() { return this.vipType !== 0 },
+    /**
+     * 显示"实际拿到的音质"，而不是用户选的档位。
+     * 上游会把超权限的请求压级（非会员选 lossless 实际给 exhigh），
+     * 解灰源则质量不可控，单独标'解灰'。
+     */
     currentQualityShort() {
+      const actual = this.currentQuality && this.currentQuality.actual
+      if (actual === 'match') return '解灰'
       const opts = config.player.qualityOptions || []
-      const f = opts.find(o => o.key === this.currentLevel)
+      const key = actual || this.currentLevel
+      const f = opts.find(o => o.key === key)
       return f ? f.short : '标'
+    },
+    qualityTitle() {
+      const q = this.currentQuality || {}
+      if (q.isUnblock) return '当前为解灰源（第三方音源，音质与版本不可控）'
+      const opts = config.player.qualityOptions || []
+      const f = opts.find(o => o.key === (q.actual || this.currentLevel))
+      if (!f) return '音质选择'
+      const reqLabel = (opts.find(o => o.key === q.requested) || {}).label
+      if (reqLabel && q.actual && q.actual !== q.requested) {
+        return `已选「${reqLabel}」，当前实际为「${f.label}」（${f.bitrate || ''}）`
+      }
+      return `当前音质：${f.label}`
     },
   },
   watch: {
@@ -467,9 +488,12 @@ export default {
           if (err && err.message === 'REQUEST_CANCELLED') { self.isLoading = false; resolve({ cancelled: true }); return }
           console.error('[PlayError]', { songId: id, stage: 'DNT_LOGIN_FAIL', error: err && err.message || String(err) })
           self.isLoading = false
-          if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
-          resolve("dnt_fail")
-          if (self._inPlaylist()) self.nextSong()
+          // 官方音源 + 解灰都拿不到 → 用 /check/music 给准确原因，而不是笼统的"暂无可用音源"
+          self._explainNoSource(id).then(msg => {
+            if (requestId === self.playRequestId) self.$message.warning(msg)
+            resolve("dnt_fail")
+            if (self._inPlaylist()) self.nextSong()
+          })
         })
       })
     },
@@ -506,30 +530,46 @@ export default {
           })
         }).catch(err => {
           if (err && err.message === 'REQUEST_CANCELLED') { self.isLoading = false; resolve({ cancelled: true }); return }
-          const isNoResource = err && err.message === 'NO_RESOURCE'
+          const isNoResource = err && err.message === 'NO_RESOURCE' || (err && err.message === 'NO_SOURCE')
           self.isLoading = false
           console.error('[PlayError]', { songId: id, stage: isNoResource ? 'NO_RESOURCE' : 'NETWORK_ERROR', requestId, error: err && err.message || String(err) })
-          if (requestId !== self.playRequestId) self.$message.warning(isNoResource ? "暂无可用音源" : "播放失败，请稍后重试")
+          // 注意这里是 ===：旧代码写成 !==，导致提示只在请求已过期时才弹（反了）
+          if (requestId === self.playRequestId) {
+            if (isNoResource) self._explainNoSource(id).then(msg => self.$message.warning(msg))
+            else self.$message.warning('播放失败，请稍后重试')
+          }
           resolve("url_fail")
         })
       })
     },
 
+    /**
+     * 取音源。顺序（见 docs/AUDIO_PIPELINE_PLAN.md）：
+     *   0. audioCache(id_level) 命中
+     *   1. /song/url/v1?level=<用户选择>，失败逐级下移（exhigh→higher→standard）
+     *   2. /song/url/match 解灰兜底（第三方源，音质不可控，UI 会标"解灰"）
+     *   3. /song/url?br= 老接口保底（实测 br 被忽略，默认关闭）
+     * 注意：**不再传 unblock=true**。上游注释写明 unblock 会让 level 完全失效，
+     * 直接把最高档 flac 塞回来（实测 128k 481KB vs flac 32.5MB）。
+     */
     getSongUrl(id, requestId, br = 0) {
       if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
 
-      const cachedUrl = getAudioCache(id)
+      const preferred = config.player.level
+      // 命中同档位缓存才复用，切档后天然不命中
+      const cachedUrl = getAudioCache(id, preferred)
       if (cachedUrl) {
         if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
+        this.currentQuality = { requested: preferred, actual: preferred, isUnblock: false }
         return Promise.resolve({ data: { data: [{ url: cachedUrl }] } })
       }
 
-      const preferred = config.player.level
+      const startIdx = config.player.qualityLevels.indexOf(preferred)
       const levels = config.player.fallbackLevels
-        ? config.player.qualityLevels.slice(config.player.qualityLevels.indexOf(preferred))
+        ? config.player.qualityLevels.slice(startIdx === -1 ? 0 : startIdx)
         : [preferred]
 
-      console.log('%c▶ 获取音源 %c/song/url/v1?id=%s&level=%s&unblock=true', 'background:#059669;color:#fff;padding:2px 6px', '', id, preferred)
+      console.log('%c▶ 获取音源 %c/song/url/v1?id=%s&level=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id, preferred)
 
       // fallback br 根据 level 映射 (仅 /song/url 兜底时使用)
       const BR_MAP = { hires: 999000, lossless: 999000, exhigh: 320000, higher: 192000, standard: 128000 }
@@ -541,8 +581,10 @@ export default {
       const tryLevel = (index) => {
         if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
         if (index >= levels.length) {
-          return self.requestFallbackUrl(id, fallbackBr, requestId).catch(() => {
-            return self.requestMatchSongUrl(id, requestId)
+          // 官方音源全档位都没货 → 解灰兜底；解灰也失败再看是否启用老接口
+          return self.requestMatchSongUrl(id, requestId).catch(() => {
+            if (!config.player.legacyBrFallback) throw new Error('NO_SOURCE')
+            return self.requestFallbackUrl(id, fallbackBr, requestId)
           })
         }
 
@@ -551,23 +593,24 @@ export default {
         const cached = self.urlCache.get(ck)
         if (cached && Date.now() < cached.expire) {
           if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
-          self.currentQuality = { requested: preferred, actual: lv }
+          self.currentQuality = { requested: preferred, actual: lv, isUnblock: false }
           return Promise.resolve({ data: { data: [{ url: cached.url }] } })
         }
 
         return self.$axios('/song/url/v1', {
-          params: { id, level: lv, unblock: true, timestamp: Date.now() }
+          params: { id, level: lv, timestamp: Date.now() }
         }).then(res => {
           if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
           const d = res.data && res.data.data && res.data.data[0]
           const url = d && d.url
           if (!url) {
-            console.log('%c↓ 降级 %s→%s', 'background:#d97706;color:#fff;padding:2px 6px', lv, levels[index + 1] || 'fallback')
+            console.log('%c↓ 降级 %s→%s', 'background:#d97706;color:#fff;padding:2px 6px', lv, levels[index + 1] || '解灰')
             return tryLevel(index + 1)
           }
           self.urlCache.set(ck, { url, level: lv, br: d && d.br, size: d && d.size, expire: Date.now() + CACHE_TTL })
-          setAudioCache(id, url)
-          self.currentQuality = { requested: preferred, actual: lv }
+          setAudioCache(id, url, lv)
+          // d.level 是上游如实返回的实际档位（非会员请求无损会被压成 exhigh）
+          self.currentQuality = { requested: preferred, actual: (d && d.level) || lv, isUnblock: false }
           return res
         }).catch(err => {
           if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
@@ -577,6 +620,7 @@ export default {
       }
 
       return tryLevel(0)
+
     },
     requestFallbackUrl(id, br, requestId) {
       if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
@@ -594,20 +638,33 @@ export default {
         throw err
       })
     },
+    /**
+     * 解灰兜底（第三方源：酷我/酷狗/QQ 等）。
+     * 该接口返回的是 { code, data: "<url 字符串>", proxyUrl }，
+     * data 不是数组 —— 历史实现按 data[0].url 取值，导致这层一直是死的。
+     * 解灰源音质/版本不可控，成功后把 isUnblock 置 true，播放器上会标"解灰"。
+     */
     requestMatchSongUrl(id, requestId) {
       if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
       const ck = id + '_match'
-      console.log('%c▶ 匹配解灰 %c/song/url/match?id=%s', 'background:#dc2626;color:#fff;padding:2px 6px', '', id)
+      console.log('%c▶ 解灰兜底 %c/song/url/match?id=%s', 'background:#dc2626;color:#fff;padding:2px 6px', '', id)
       const cached = this.urlCache.get(ck)
       if (cached && Date.now() < cached.expire) {
+        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true }
         return Promise.resolve({ data: { data: [{ url: cached.url }] }, source: 'match' })
       }
       return tracks.songUrlMatch(id).then(r => {
         if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
-        const matchUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
+        const payload = r.data || {}
+        const raw = typeof payload.data === 'string'
+          ? payload.data
+          : (payload.data && payload.data.url)
+        const matchUrl = toHttpsUrl(raw)
         if (!matchUrl) return Promise.reject(new Error('NO_RESOURCE'))
         this.urlCache.set(ck, { url: matchUrl, level: 'match', source: 'match', expire: Date.now() + 10 * 60 * 1000 })
-        return { data: r.data, source: 'match' }
+        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true }
+        console.log('%c  ✳ 解灰成功 %c%s', 'color:#dc2626', '', matchUrl.slice(0, 70))
+        return { data: { data: [{ url: matchUrl }] }, source: 'match' }
       }).catch(err => {
         console.error('[PlayError]', { songId: id, stage: 'MATCH_FAIL', reason: err && err.message || String(err) })
         throw err
@@ -908,13 +965,18 @@ export default {
       localStorage.setItem('acmusic_player_quality', JSON.stringify({ level: key }))
       this.showQualityMenu = false
       if (this.currentSong.id) {
+        const sid = this.currentSong.id
         this.pauseSong()
         this.sel.src = ''
         this.pendingUrlRequests.clear()
         for (const lv of config.player.qualityLevels) {
-          this.urlCache.delete(this.currentSong.id + '_' + lv)
+          this.urlCache.delete(sid + '_' + lv)
         }
-        this.urlCache.delete(this.currentSong.id + '_fallback')
+        this.urlCache.delete(sid + '_fallback')
+        this.urlCache.delete(sid + '_match')
+        // audioCache 也按档位缓存，切档必须清掉，否则会命中旧音质的地址
+        removeAudioCache(sid)
+        this.currentQuality = { requested: key, actual: '', isUnblock: false }
         this.playRequestId++
         this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
       }
@@ -1151,12 +1213,16 @@ export default {
       const nextSong = this.currentPlaylist[nextIdx]
       if (!nextSong || !nextSong.id) return
       console.log('[AudioPreload]', { action: 'start', songId: nextSong.id })
+      const level = config.player.level
+      // 直接请求，不调 getSongUrl：后者会写 currentQuality，预加载不该产生 UI 副作用。
+      // 结果按 id_level 缓存，下一首真正播放时 getSongUrl 直接命中。
       getAudioUrl(nextSong.id, () => {
-        return this.getSongUrl(nextSong.id, this.playRequestId + 1).then(res => {
-          const url = res && res.data && res.data.data && res.data.data[0] && res.data.data[0].url
-          return url || null
-        })
-      }).catch(() => { /* silent */ })
+        return this.$axios('/song/url/v1', { params: { id: nextSong.id, level, timestamp: Date.now() } })
+          .then(res => {
+            const d = res && res.data && res.data.data && res.data.data[0]
+            return d && d.url ? toHttpsUrl(d.url) : null
+          })
+      }, level).catch(() => { /* silent */ })
     },
     _restoreState() {
       try {
@@ -1218,7 +1284,7 @@ export default {
           console.log('[PlayerState] restore', { songId: this.restoreSongId, resumeTime: this.resumeTime })
         }
         if (data.duration) this.timeDuration = data.duration
-        if (data.quality) this.currentQuality = data.quality
+        if (data.quality) this.currentQuality = { requested: data.quality.requested || '', actual: data.quality.actual || '', isUnblock: data.quality.actual === 'match' }
 
         // 【关键修复】恢复完成后，同步 curIndex 到正确歌曲位置，再解除守卫
         // 原因：恢复时直接赋值 currentSong（不触发 watcher），但 curIndex 默认为 0，
@@ -1482,6 +1548,12 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     line-height: 1.4;
     transition: all 180ms $ease-standard;
     &:hover { background: rgba(255, 255, 255, 0.1); color: $text; border-color: rgba(255, 255, 255, 0.18); }
+    // 解灰源：第三方音源，音质与版本不可控，用琥珀色提示
+    &.is-unblock {
+      color: #f0c674;
+      border-color: rgba(240, 198, 116, 0.35);
+      background: rgba(240, 198, 116, 0.12);
+    }
   }
 }
 
