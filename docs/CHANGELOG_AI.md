@@ -1615,3 +1615,32 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - VIP 歌在非会员下，无论选哪档都只能走解灰（官方音源全空），这是网易云侧限制，不是 bug
 - `/song/url?br=` 实测 br 参数被忽略（恒 128k），已默认关闭（`config.player.legacyBrFallback`）
 - 回滚：静态站备份 `/root/music.www.bak.20261021-114945`
+
+### 2026-10-21 — 全站页脚：品牌/版本 + API 原仓库 + 免责声明
+
+### 修改内容
+新增全站页脚（版式 A：极简单行），含品牌与版本、API 开源仓库/文档链接、免责声明（弹窗）、版权行。
+
+### 修改文件
+- `src/components/common/AppFooter.vue`（新增）
+- `src/App.vue`（`el-main` 内、`keep-alive` 之外挂载 `<AppFooter/>`）
+- `src/config.js`（新增 `site` 元信息：name / version / apiRepo / apiDocs）
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+站点缺页脚，缺少三件必要信息：① 第三方客户端最容易踩的版权免责说明；② 数据与音频接口的来源（开源项目）；
+③ 版本号，便于确认线上跑的是哪一版。放在 `keep-alive` 之外，保证全站共用一份、不随页面缓存重复挂载。
+
+### 测试结果
+- `yarn lint`（3 个文件）✅ 0 错误
+- `yarn build` ✅（app.f98e0cf4.js / app.46e29f51.css）
+- 线上核对 ✅：产物含「API 仓库 / API 文档 / 免责声明 / 第三方客户端 / 仅供学习交流」及两个外链 URL，
+  `neteasecloudmusicapienhanced/api-enhanced`、`docs-neteasecloudmusicapi.focalors.ltd` 均正确打入；`/` 与 `/user` 200
+
+### 注意事项
+- 页脚 `padding-bottom: calc(60px + 20px)` 用于避让固定播放条（`$bar-h = 60px`），改播放条高度时要同步改
+- 沉浸式大播放器是 `position: fixed; inset: 0; z-index: 200`，会把页脚盖住，无需额外隐藏逻辑
+- 版本号在 `src/config.js` 的 `site.version`，发版时需与 `package.json` 同步
+- 外部链接均带 `target="_blank" rel="noopener noreferrer"`
+- 若日后完成 ICP 备案，需在页脚补备案号并链接 `beian.miit.gov.cn`
+- 回滚：静态站备份 `/root/music.www.bak.20261021-120125`

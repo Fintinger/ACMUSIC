@@ -2,6 +2,15 @@ export default {
     imgUrl: {
         logo: require("@/assets/logo.png")
     },
+    // 站点元信息（页脚 / 免责声明使用）
+    site: {
+        name: 'ACMUSIC',
+        // 与 package.json 的 version 保持同步
+        version: '0.1.0',
+        // 接口来源：开源项目（页脚展示 + 免责声明引用）
+        apiRepo: 'https://github.com/neteasecloudmusicapienhanced/api-enhanced',
+        apiDocs: 'https://docs-neteasecloudmusicapi.focalors.ltd'
+    },
     api: {
         // ACMUSIC 自部署 API Gateway（环境变量覆盖，勿硬编码）
         baseURL: process.env.VUE_APP_API_BASE_URL,

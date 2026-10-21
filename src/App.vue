@@ -66,6 +66,8 @@
             <router-view :key="$route.fullPath"/>
           </keep-alive>
         </transition>
+        <!-- 全站页脚：放在 keep-alive 之外，避免随页面缓存重复挂载 -->
+        <AppFooter/>
       </el-main>
     </el-container>
     <!--播放器组件 -->
@@ -82,12 +84,13 @@
 import MusicPlayer from "@/components/musicPlayer/MusicPlayer";
 import DoSearch from "@/components/DoSearch";
 import PageBack from "@/components/common/PageBack";
+import AppFooter from "@/components/common/AppFooter";
 import {doLogout} from "@/utils/auth";
 import config from "./config"
 
 export default {
   name: 'App',
-  components: {MusicPlayer, DoSearch, PageBack},
+  components: {MusicPlayer, DoSearch, PageBack, AppFooter},
   data() {
     return {
       song: {},
