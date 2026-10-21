@@ -69,18 +69,19 @@
       </div>
       <div class="barRight">
         <div class="barItem volumeWrap">
-          <BaseIcon name="volume" @click="showVolume = !showVolume"/>
+          <BaseIcon ref="volumeBtn" name="volume" @click="showVolume = !showVolume"/>
           <transition name="volume-pop">
-            <div v-if="showVolume" class="volumeSlider" @click.stop>
+            <div v-if="showVolume" ref="volumeSlider" class="volumeSlider" @click.stop>
+              <span class="volumeValue">{{ volume }}</span>
               <input v-model="volume" type="range" min="0" max="100" @input="onInteract" />
             </div>
           </transition>
         </div>
         <div class="barItem qualityWrap">
-          <button class="qualityBtn" :class="{ 'is-unblock': currentQuality.isUnblock }" :title="qualityTitle" @click.stop="showQualityMenu = !showQualityMenu">
+          <button ref="qualityBtn" class="qualityBtn" :class="{ 'is-unblock': currentQuality.isUnblock }" :title="qualityTitle" @click.stop="showQualityMenu = !showQualityMenu">
             {{ currentQualityShort }}
           </button>
-          <QualityMenu :visible="showQualityMenu" :selected="config.player.level" :vip-type="vipType" @select="onQualitySelect" @need-vip="onNeedVip"/>
+          <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="config.player.level" :vip-type="vipType" @select="onQualitySelect" @need-vip="onNeedVip"/>
         </div>
         <div class="barItem playlistWrap">
           <el-dropdown v-if="currentPlaylist.length" trigger="click" placement="top" @command="handleCommand" @visible-change="onDropdownToggle">
@@ -127,7 +128,7 @@ import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
 import * as authApi from "@/api/auth";
-import { toHttpsUrl } from "@/utils/filters";
+import { toHttpsUrl, imgParam } from "@/utils/filters";
 
 export default {
   name: "PlayCore",
@@ -164,6 +165,8 @@ export default {
       resumeTime: 0,
       restoreSongId: null,
       lastSaveTime: 0,
+      // 系统媒体面板进度同步节流时间戳
+      lastPositionSync: 0,
       isRestoring: false,
       bufferedTime: 0,
       playContextId: 0,
@@ -173,6 +176,10 @@ export default {
       audioRetryCount: 0,
       audioLastSrc: '',
       audioUseProxy: false,
+      // 重试定时器句柄（集中管理，便于切档时取消）
+      audioRetryTimer: null,
+      // 主动清空 src 期间抑制 error 重试（否则会把新加载的音频 load() 回 0）
+      suppressAudioError: false,
       playMode: 'order',
       shuffleOrder: [],
       // FM 模式标志（从 Vuex 下沉到 PlayerCore 内部，PersonalFM/HomePage/App 通过 $bus 切换）
@@ -392,12 +399,140 @@ export default {
     },
     'currentSong.id'() {
       this._syncTitle()
+      this._syncMediaSession()
     },
     isPlay() {
       this._syncTitle()
+      this._syncMediaSession()
     }
   },
   methods: {
+    /**
+     * 系统媒体控制（SMTC / 锁屏 / 耳机按键）
+     * 只在浏览器支持时生效；不支持则整体跳过，不影响播放链路。
+     */
+    _initMediaSession() {
+      if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+      const ms = navigator.mediaSession
+      // 各浏览器支持的动作不同，逐个注册并吞掉异常（Safari 对某些 action 抛错）
+      const handlers = {
+        play: () => { if (!this.isPlay) this.playSong() },
+        pause: () => { if (this.isPlay) this.pauseSong() },
+        previoustrack: () => this.preSong(),
+        nexttrack: () => this.nextSong(),
+        stop: () => this.pauseSong(),
+        seekbackward: (d) => this._seekBy(-((d && d.seekOffset) || 10)),
+        seekforward: (d) => this._seekBy((d && d.seekOffset) || 10),
+        seekto: (d) => this._seekTo(d && d.seekTime, d && d.fastSeek),
+      }
+      Object.keys(handlers).forEach(action => {
+        try { ms.setActionHandler(action, handlers[action]) } catch (e) { /* 该动作不支持 */ }
+      })
+      this._syncMediaSession()
+    },
+    _teardownMediaSession() {
+      if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+      const actions = ['play', 'pause', 'previoustrack', 'nexttrack', 'stop', 'seekbackward', 'seekforward', 'seekto']
+      actions.forEach(action => {
+        try { navigator.mediaSession.setActionHandler(action, null) } catch (e) { /* ignore */ }
+      })
+      try { navigator.mediaSession.metadata = null } catch (e) { /* ignore */ }
+      try { navigator.mediaSession.playbackState = 'none' } catch (e) { /* ignore */ }
+    },
+    _syncMediaSession() {
+      if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+      const ms = navigator.mediaSession
+      const s = this.currentSong
+      if (!s || !s.id) {
+        try { ms.metadata = null } catch (e) { /* ignore */ }
+        try { ms.playbackState = 'none' } catch (e) { /* ignore */ }
+        return
+      }
+      // MediaMetadata 在部分浏览器不存在，存在性检查后再构造
+      if (typeof window !== 'undefined' && typeof window.MediaMetadata === 'function') {
+        const cover = imgParam(this.coverUrl, '384y384')
+        const artwork = []
+        ;[96, 192, 384].forEach(size => {
+          const u = imgParam(this.coverUrl, size + 'y' + size)
+          if (u) artwork.push({ src: u, sizes: size + 'x' + size, type: 'image/jpeg' })
+        })
+        try {
+          ms.metadata = new window.MediaMetadata({
+            title: s.name || '未知歌曲',
+            artist: this.artistNames || '未知歌手',
+            album: (s.al && s.al.name) || (s.album && s.album.name) || '',
+            artwork: artwork.length ? artwork : (cover ? [{ src: cover, sizes: '384x384', type: 'image/jpeg' }] : []),
+          })
+        } catch (e) { /* ignore */ }
+      }
+      try { ms.playbackState = this.isPlay ? 'playing' : 'paused' } catch (e) { /* ignore */ }
+    },
+    /**
+     * 同步进度到系统媒体面板（Windows 媒体浮层 / 锁屏进度条）
+     * setPositionState 对参数很挑：duration 必须有限且 > 0，position 必须 <= duration。
+     */
+    _updatePositionState() {
+      if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+      if (typeof navigator.mediaSession.setPositionState !== 'function') return
+      const duration = this.sel && this.sel.duration
+      if (!duration || !isFinite(duration) || duration <= 0) return
+      const position = Math.min(Math.max(this.sel.currentTime || 0, 0), duration)
+      try {
+        navigator.mediaSession.setPositionState({ duration, playbackRate: this.sel.playbackRate || 1, position })
+      } catch (e) { /* ignore */ }
+    },
+    _seekTo(time, fastSeek) {
+      const duration = this.sel && this.sel.duration
+      if (time === undefined || time === null || !duration || !isFinite(duration)) return
+      const target = Math.min(Math.max(time, 0), duration)
+      // fastSeek 是媒体面板给出"近似跳转"信号（Firefox 实现），不可用时退回精确跳转
+      if (fastSeek && typeof this.sel.fastSeek === 'function') {
+        try { this.sel.fastSeek(target) } catch (e) { this.sel.currentTime = target }
+      } else {
+        this.sel.currentTime = target
+      }
+      this.timeNow = this.sel.currentTime
+      this._updatePositionState()
+    },
+    _seekBy(offset) {
+      const duration = this.sel && this.sel.duration
+      if (!duration || !isFinite(duration)) return
+      this._seekTo((this.sel.currentTime || 0) + offset)
+    },
+    /**
+     * 全局键盘快捷键：空格播放/暂停、←→ 快退快进 5s、Shift+←→ 切歌
+     * 输入框 / 文本域 / 可编辑区域 / 滑块聚焦时不拦截，避免影响搜索、评论和拖动进度。
+     */
+    _onGlobalKeydown(e) {
+      if (e.defaultPrevented) return
+      // 组合键留给浏览器（Ctrl+←→ 等）
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target
+      if (t) {
+        const tag = (t.tagName || '').toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable) return
+        const role = t.getAttribute && t.getAttribute('role')
+        if (role === 'slider' || role === 'textbox') return
+        // Element UI 的编辑类组件（回复框等）
+        if (t.closest && t.closest('.el-textarea, .el-input, [contenteditable="true"]')) return
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        if (e.repeat) return
+        e.preventDefault()
+        this.togglePlay()
+        return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const dir = e.key === 'ArrowRight' ? 1 : -1
+        if (e.shiftKey) {
+          e.preventDefault()
+          dir > 0 ? this.nextSong() : this.preSong()
+        } else {
+          e.preventDefault()
+          this._seekBy(dir * 5)
+        }
+      }
+    },
     _syncTitle() {
       const s = this.currentSong
       if (s && s.id) {
@@ -472,6 +607,7 @@ export default {
             self.audioLastSrc = url
             self.audioRetryCount = 0
             self.audioUseProxy = false
+            self.suppressAudioError = false
             self.sel.load()
             resolve()
             return
@@ -516,6 +652,7 @@ export default {
             self.audioLastSrc = newUrl
             self.audioRetryCount = 0
             self.audioUseProxy = false
+            self.suppressAudioError = false
             self.sel.load()
             resolve()
             return
@@ -676,6 +813,7 @@ export default {
       this.sel.src = location.origin + "/api/song/media/outer/url?id=" + id
       this.audioLastSrc = this.sel.src
       this.audioRetryCount = 0
+      this.suppressAudioError = false
       this.sel.load()
     },
     playSong() {
@@ -909,6 +1047,9 @@ export default {
      * @returns {Promise<string>} 给用户看的一句话
      */
     _explainNoSource(id) {
+      // 走到这里说明本次取源失败，切档时挂起的抑制标记必须解除，
+      // 否则后续正常播放的 error 重试会被永久跳过
+      this.suppressAudioError = false
       return tracks.checkMusic(id).then(res => {
         const d = (res && res.data) || {}
         if (d.success === false && d.message) return d.message
@@ -1004,7 +1145,15 @@ export default {
       this.showQualityMenu = false
       if (this.currentSong.id) {
         const sid = this.currentSong.id
+        // 切档要重建 audio.src，而赋值 src 会把 currentTime 归零 → 表现为"从头开始播"。
+        // 这里记下当前位置，交给 _durationTime 里已有的 seek_restore 分支跳回去
+        // （和刷新恢复共用 resumeTime / restoreSongId / hasRestoreProgress 这套字段）。
+        // 必须在清 src 之前读，否则拿到的是 0。
+        const resumeAt = (this.sel && this.sel.currentTime) || Number(this.timeNow) || 0
         this.pauseSong()
+        // 清 src 会触发一次 error → 必须先掐掉重试，否则 400ms 后的 load() 会把新音频重置到 0
+        this._cancelAudioRetry()
+        this.suppressAudioError = true
         this.sel.src = ''
         this.pendingUrlRequests.clear()
         for (const lv of config.player.qualityLevels) {
@@ -1015,9 +1164,40 @@ export default {
         // audioCache 也按档位缓存，切档必须清掉，否则会命中旧音质的地址
         removeAudioCache(sid)
         this.currentQuality = { requested: key, actual: '', isUnblock: false }
+        // 0.5s 以内不折腾：本来就是开头，seek 反而多一次跳转
+        if (resumeAt > 0.5) {
+          this.resumeTime = resumeAt
+          this.restoreSongId = sid
+          this.hasRestoreProgress = true
+          console.log('[QualitySwitch]', { action: 'keep_progress', songId: sid, resumeAt })
+        }
         this.playRequestId++
         this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
       }
+    },
+    /**
+     * 底部浮层（音质菜单 / 音量滑杆）的"点外部关闭"，对齐播放列表（el-dropdown）的交互习惯。
+     * 捕获阶段监听：浮层内部、以及触发它的按钮本身都不算外部。
+     * 触发按钮交给它自己的 @click 处理（再点一次即关闭），否则 mousedown 先关、click 再开，会出现"点不关"。
+     */
+    _onDocMouseDown(e) {
+      const t = e.target
+      if (this.showQualityMenu && this._isOutside(['qualityBtn', 'qualityMenu'], t)) {
+        this.showQualityMenu = false
+      }
+      if (this.showVolume && this._isOutside(['volumeBtn', 'volumeSlider'], t)) {
+        this.showVolume = false
+      }
+    },
+    /** 目标是否落在若干 ref（组件或元素）之外 */
+    _isOutside(refNames, target) {
+      if (!target) return true
+      return !refNames.some(name => {
+        const r = this.$refs[name]
+        if (!r) return false
+        const el = r.$el || r
+        return el === target || (typeof el.contains === 'function' && el.contains(target))
+      })
     },
     onDropdownToggle(visible) {
       this.isDropdownOpen = visible
@@ -1132,6 +1312,12 @@ export default {
     _currentTime() {
       if (this.sel) {
         this.timeNow = (this.sel.currentTime).toFixed(4)
+        // 系统媒体面板进度：timeupdate 约 4 次/秒，节流到 1 秒一次即可
+        const nowMs = Date.now()
+        if (nowMs - this.lastPositionSync > 1000) {
+          this.lastPositionSync = nowMs
+          this._updatePositionState()
+        }
         if (this.currentSong && this.currentSong.id) {
           const now = Date.now()
           if (now - this.lastSaveTime > 5000) {
@@ -1158,6 +1344,8 @@ export default {
           this.restoreSongId = null
         }
         this._preloadNext()
+        // 拿到时长后立刻同步一次，否则系统面板进度条要等下一次 timeupdate 才出现
+        this._updatePositionState()
       }
     },
     _onPause() {
@@ -1181,6 +1369,12 @@ export default {
     _onAudioError() {
       const curSrc = this.sel.src || this.audioLastSrc
       if (!curSrc) return
+      // 主动清空 src（切音质）会触发一次 error，这不是网络故障：
+      // 若放行，下面的重试定时器会在新音频就绪后 load() 一次，把进度重置回 0。
+      if (this.suppressAudioError) {
+        console.log('[AudioRetry]', { action: 'skip_suppressed', songId: this.currentSong.id })
+        return
+      }
       // 直连模式: 重试3次后降级到代理
       if (!this.audioUseProxy && this.audioRetryCount >= 3) {
         this.audioUseProxy = true
@@ -1189,9 +1383,7 @@ export default {
         console.log('[AudioRetry]', { action: 'downgrade_to_proxy', songId: this.currentSong.id, src: proxySrc.slice(0, 60) })
         this.sel.src = proxySrc
         this.audioLastSrc = proxySrc
-        setTimeout(() => {
-          try { this.sel.load(); if (this.isPlay) { const p = this.sel.play(); if (p && p.catch) p.catch(() => {}) } } catch (e) { /* ignore */ }
-        }, 400)
+        this._scheduleAudioRetry()
         return
       }
       // 代理模式: 重试3次后放弃
@@ -1203,9 +1395,18 @@ export default {
       }
       this.audioRetryCount++
       console.log('[AudioRetry]', { action: 'retry', attempt: this.audioRetryCount, mode: this.audioUseProxy ? 'proxy' : 'direct', songId: this.currentSong.id })
-      setTimeout(() => {
+      this._scheduleAudioRetry()
+    },
+    /** 重试定时器集中管理：同一时刻只留一个，切换音质等场景要能主动取消 */
+    _scheduleAudioRetry() {
+      this._cancelAudioRetry()
+      this.audioRetryTimer = setTimeout(() => {
+        this.audioRetryTimer = null
         try { this.sel.load(); if (this.isPlay) { const p = this.sel.play(); if (p && p.catch) p.catch(() => {}) } } catch (e) { /* ignore */ }
       }, 400)
+    },
+    _cancelAudioRetry() {
+      if (this.audioRetryTimer) { clearTimeout(this.audioRetryTimer); this.audioRetryTimer = null }
     },
     _toProxyUrl(src) {
       if (src && src.indexOf('/api/audio-proxy') !== -1) return src
@@ -1351,6 +1552,10 @@ mounted() {
       if (savedMode && ['order', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
     } catch (e) { /* ignore */ }
     this.addEventListeners()
+    this._initMediaSession()
+    window.addEventListener('keydown', this._onGlobalKeydown)
+    // 捕获阶段，早于业务层的 @click.stop，保证点白色区域也能关掉音质菜单
+    document.addEventListener('mousedown', this._onDocMouseDown, true)
     this.pubId = pubsub.subscribe('playAll', this.playAllSong)
     this.fmBatchId = pubsub.subscribe('fmNewBatch', this.playFmNewBatch)
     // FM 模式标志（从 Vuex 下沉）：PersonalFM / HomePage / App 通过 $bus 通知
@@ -1366,8 +1571,11 @@ mounted() {
   },
   beforeDestroy() {
     window.removeEventListener('beforeunload', this._onBeforeUnload)
+    window.removeEventListener('keydown', this._onGlobalKeydown)
+    document.removeEventListener('mousedown', this._onDocMouseDown, true)
     this._saveState()
     this.removeEventListeners()
+    this._teardownMediaSession()
     this.init()
     this.clearHideTimer()
     pubsub.unsubscribe(this.pubId)
@@ -1548,9 +1756,13 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   }
   .volumeWrap .volumeSlider {
     position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
     background: #1f202b; border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 10px; padding: 14px 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); z-index: 10;
+    border-radius: 10px; padding: 10px 10px 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); z-index: 10;
+    .volumeValue {
+      font-size: 11px; font-weight: 600; line-height: 1; color: rgba(255,255,255,0.75);
+      font-variant-numeric: tabular-nums; min-width: 18px; text-align: center;
+    }
     &::after {
       content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px;
       border-width: 6px 6px 0; border-style: solid;
