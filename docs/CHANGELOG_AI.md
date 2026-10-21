@@ -1541,3 +1541,33 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - 该警告与本次 P0 改动无关，是历史遗留（首页排行榜封面一直是裸 `:src`），本次一并修掉
 - 若有新接口返回新的 CDN 域名，`toHttpsUrl` 的白名单需要同步加，否则只靠 CSP 兜底
 - 回滚：nginx 配置备份 `/root/music.nginx.bak.20261020-183545`，静态站 `/root/music.www.bak.20261021-112901`
+
+### 2026-10-21 — 音频也走混合内容：`<audio>` 直接用 http CDN 地址
+
+### 修改内容
+把音频地址的 http → https 升级做在源头，不再依赖 nginx 的 CSP 兜底。
+
+### 修改文件
+- `src/components/musicPlayer/PlayerCore.vue`（`checkSongDntLogin` / `checkSongLoggedIn` 两处置 src 时升级）
+- `src/utils/audioCache.js`（`setAudioCache` 存入前升级，预加载缓存的也是干净地址）
+
+### 修改原因
+控制台报 `Mixed Content: ...requested an insecure audio file 'http://m701.music.126.net/...flac'`。
+`/song/url/v1` 返回的音频地址就是 http，`sel.src = url` 直接使用。上一轮只给 nginx 加了
+`upgrade-insecure-requests` 兜底，浏览器虽有升级能力，但：
+- 对已在旧文档里加载的页面无效（没重新取 HTML 就没有该策略）
+- 控制台/网络面板仍然能看到原始 http 地址，排查时容易误判
+所以在赋值处直接升级更彻底。实测升级后音频 Range 请求返回 206 且字节正常（2048B）。
+
+顺带确认 `/api/song/media/outer/url` 在本版本 API 上返回 404，对应 `initAudioByOuterUrl` 已是死路径，
+故未给它加 `proxy_redirect`。
+
+### 测试结果
+- `yarn lint`（2 个文件）✅
+- `yarn build` ✅（app.e56c6e86.js）
+- 产物核对 ✅：bundle 内含 `indexOf("http://") … "https://"+t.slice(...)` 升级函数
+- 取流验证 ✅：接口返回 `http://m802.music.126.net/...`，升级为 https 后 Range 请求 206 / 2048B
+
+### 注意事项
+- 刷新后若控制台仍有 Mixed Content，说明该请求不是这两个入口发出的，需要看具体 URL 来源
+- 回滚：静态站备份 `/root/music.www.bak.20261021-113216`

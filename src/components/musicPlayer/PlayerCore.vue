@@ -126,6 +126,7 @@ import { setAudioCache, getAudioCache, getAudioUrl } from "@/utils/audioCache"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
+import { toHttpsUrl } from "@/utils/filters";
 
 export default {
   name: "PlayCore",
@@ -442,7 +443,8 @@ export default {
           if (res && res.cancelled) { self.isLoading = false; self.showPlayerPending = false; resolve({ cancelled: true }); return }
           if (requestId !== self.playRequestId) { self.isLoading = false; self.showPlayerPending = false; resolve({ cancelled: true }); return }
           const data = res && res.data && res.data.data
-          const url = data && data[0] && data[0].url
+          // 网易云 CDN 的音频地址是 http://m*.music.126.net/...，https 页面直接使用会被判 Mixed Content
+          const url = toHttpsUrl(data && data[0] && data[0].url)
           if (url) {
             self.sel.src = url
             self.audioLastSrc = url
@@ -481,7 +483,8 @@ export default {
           if (requestId !== self.playRequestId) { self.isLoading = false; resolve({ cancelled: true }); return }
           const data = res && res.data && res.data.data
           const item = data && data[0]
-          const newUrl = item && item.url
+          // 同上：CDN 返回的是 http 音频地址，先升级到 https 再塞给 <audio>
+          const newUrl = toHttpsUrl(item && item.url)
           if (newUrl) {
             console.log('%c✅ 播放就绪 %cid=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id)
             self.sel.src = newUrl

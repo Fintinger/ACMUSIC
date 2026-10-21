@@ -2,7 +2,10 @@
  * 音频 URL 内存缓存
  * TTL 30 分钟，自动过期
  * 内置 pending 去重：同一 songId 并发请求复用同一个 Promise
+ * 存入前统一把 http 升级为 https（网易云 CDN 返回 http，https 页面下会触发 Mixed Content）
  */
+import { toHttpsUrl } from "@/utils/filters"
+
 const cache = new Map()
 const pending = new Map()
 const TTL = 30 * 60 * 1000
@@ -10,7 +13,7 @@ const TTL = 30 * 60 * 1000
 export function setAudioCache(id, url) {
   if (!id || !url) return
   try {
-    cache.set(id, { url, timestamp: Date.now() })
+    cache.set(id, { url: toHttpsUrl(url), timestamp: Date.now() })
     pending.delete(id)
   } catch (e) { /* ignore */ }
 }
