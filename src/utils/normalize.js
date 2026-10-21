@@ -3,22 +3,25 @@
  * 核心原则：只增加兼容字段，绝不删除原字段
  */
 
+import { toHttpsUrl } from "@/utils/filters"
+
 /**
  * 统一封面图
  * 优先级: coverImgUrl -> picUrl -> album.picUrl -> al.picUrl -> artist.picUrl -> pic
+ * 返回前统一把 http 升级为 https（网易云接口仍会返回 http 封面，https 页面下会触发 Mixed Content）
  * @param {Object} item
  * @returns {String}
  */
 export function coverOf(item) {
     if (!item) return ''
-    return item.coverImgUrl
+    return toHttpsUrl(item.coverImgUrl
         || item.picUrl
         || (item.album && item.album.picUrl)
         || (item.al && item.al.picUrl)
         || (item.artist && item.artist.picUrl)
         || (item.artists && item.artists[0] && item.artists[0].picUrl)
         || item.pic
-        || ''
+        || '')
 }
 
 /**

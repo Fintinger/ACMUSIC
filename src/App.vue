@@ -35,11 +35,11 @@
               <div v-if="isLogin" class="avatar row-col-center">
                 <el-dropdown class="row-col-center" size="small" trigger="click"
                              @command="handleCommand">
-                  <img v-if="profile.avatarUrl" :src="profile.avatarUrl" alt="" class="el-dropdown-link">
+                  <img v-if="profile.avatarUrl" :src="profile.avatarUrl | https" alt="" class="el-dropdown-link">
                   <el-dropdown-menu slot="dropdown" class="user-dropdown">
                     <el-dropdown-item class="user-header" disabled>
                       <div class="user-header-inner">
-                        <img v-if="profile.avatarUrl" :src="profile.avatarUrl" alt="" class="user-header-avatar">
+                        <img v-if="profile.avatarUrl" :src="profile.avatarUrl | https" alt="" class="user-header-avatar">
                         <span class="user-header-name">{{ profile.nickname }}</span>
                       </div>
                     </el-dropdown-item>

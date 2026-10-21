@@ -6,7 +6,7 @@
         <li class="playlist" @click="showArtists()">
           <el-card :body-style="{ padding: 0} " shadow="hover">
             <div class="imgContainer">
-              <img :src="topArtists.coverUrl" class="image">
+              <img :src="topArtists.coverUrl | https" class="image">
             </div>
             <div class="moreInfo">
               <p class="listName">{{ topArtists.name }}</p>

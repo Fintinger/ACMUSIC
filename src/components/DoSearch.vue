@@ -74,7 +74,7 @@
                     <scoText class="name-score-icon">
                       <el-col :span="24" class="name">
                         <span class="name">{{ item.searchWord }}</span>
-                        <span v-if="item.iconUrl" class="icon"> <img :src="item.iconUrl" alt=""
+                        <span v-if="item.iconUrl" class="icon"> <img :src="item.iconUrl | https" alt=""
                                                                      style="width: auto;height: 1rem"></span>
                         <span class="score">{{ item.score }}</span>
                       </el-col>

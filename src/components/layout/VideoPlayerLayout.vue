@@ -4,7 +4,7 @@
       <section class="video-player-section" :style="playerBgStyle">
         <vidPlayer :poster="dt_cover" :url="url"/>
         <!-- 隐藏 img：触发封面主色提取，@load 在封面加载完时触发 onCoverLoad -->
-        <img :src="dt_cover" alt="" crossorigin="anonymous" @load="onCoverLoad" class="cover-color-source">
+        <img :src="dt_cover | https" alt="" crossorigin="anonymous" @load="onCoverLoad" class="cover-color-source">
       </section>
 
       <section class="video-info-section">

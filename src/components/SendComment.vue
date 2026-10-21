@@ -2,7 +2,7 @@
   <div class="comment">
     <el-row>
       <el-col class="avatar" :span="4" >
-        <img :src="profile.avatarUrl" alt="">
+        <img :src="profile.avatarUrl | https" alt="">
       </el-col>
       <el-col class="input-box" :span="16">
         <el-input

@@ -41,6 +41,8 @@ Vue.filter('formatS', filters.format_s)
 Vue.filter('fromNow', filters.fromNow)
 Vue.filter('formatDuration', filters.formatDurationMs)
 Vue.filter('imgParam', filters.imgParam)
+// http → https（只对网易云 CDN 域名生效），用于不走 imgParam 的原图/头像
+Vue.filter('https', filters.toHttpsUrl)
 //全局图标组件
 Vue.component('BaseIcon', BaseIcon)
 

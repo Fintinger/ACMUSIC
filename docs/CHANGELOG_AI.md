@@ -1495,3 +1495,49 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - 逐字高亮精度受 `tUpdate` 事件频率限制（约 4Hz），逐字偏快时观感略跳，后续可用 rAF 平滑
 - 下载走 `/song/download/url/v1`，未登录返回 `code:-110`；跨域 URL 的 `download` 属性无效，浏览器可能直接打开而非落盘
 - 回滚：静态站备份 `/root/music.www.bak.20261021-111946`
+
+### 2026-10-21 — 修掉 https 页面的混合内容（地址栏"不安全"）
+
+### 修改内容
+消除 https 页面里的 http 子资源：nginx 下发 `upgrade-insecure-requests`，前端把网易云图片/音频地址在源头升级为 https。
+
+### 修改文件
+- `src/utils/filters.js`（新增 `toHttpsUrl`，`imgParam` 复用它）
+- `src/main.js`（注册全局过滤器 `https`）
+- `src/utils/normalize.js`（`coverOf` 返回值统一升级）
+- `src/components/common/CoverImage.vue`（computed `realSrc` 统一升级）
+- `src/App.vue`、`src/components/DoSearch.vue`、`src/components/SendComment.vue`、
+  `src/components/layout/VideoPlayerLayout.vue`、`src/pages/HomePage.vue`、
+  `src/pages/explorePage/LeaderBoard/LeaderBoard.vue`（裸 `:src` 绑定补 `| https`）
+- 线上（不在本仓库）：`/etc/nginx/sites-available/music` 加
+  `add_header Content-Security-Policy "upgrade-insecure-requests" always;`
+
+### 修改原因
+地址栏出现"不安全 / 与此站点的连接并非完全安全，攻击者可能会看到你在此站点上浏览的图像"，不是证书问题，
+是 **Mixed Content（被动混合内容）**：页面是 https，但子资源是 http。
+
+实测来源：网易云接口大量字段原样返回 http 地址，且不止图片——
+- 图片：`toplist/detail`、`playlist/detail` 的 `coverImgUrl` 形如 `http://p1.music.126.net/...`
+- 音频：`/song/url/v1` 返回 `http://m702.music.126.net/...`，`<audio>.src` 直接用它
+
+原先只有 `imgParam` 过滤器做了协议升级，但 25 处裸 `:src` 绑定（如首页排行榜 `:src="l.coverImgUrl"`）绕过了它。
+
+修复分两层：
+1. 源头：所有经过 `CoverImage`、`normalize`、`imgParam` 的图片，以及 6 处裸绑定，统一 `http → https`
+   （按 `music.126.net` / `netease.com` 白名单升级，其他域名原样返回，避免把不支持 https 的图升坏）
+2. 兜底：nginx 下发 `upgrade-insecure-requests`，浏览器把所有遗漏的 http 子资源自动升级（含 CSS 内联背景、音频）
+
+升级可行性先验证过再动手：图片 CDN 与音频 CDN 的 https 均可用（图片 200、音频 Range 请求 206 且返回真实字节）。
+
+### 测试结果
+- `yarn lint`（10 个文件）✅ 0 错误
+- `yarn build` ✅（app.74d0cb10.js / app.5f13d169.css）
+- 线上复核 ✅
+  - `curl -I /` 与 `/user` 均返回 `Content-Security-Policy: upgrade-insecure-requests`
+  - 产物内含全局 `https` 过滤器，js/css 均 200
+  - 图片 CDN `https://p1.music.126.net/...` = 200；音频 `https://m702.music.126.net/...` Range = 206/1024B
+
+### 注意事项
+- 该警告与本次 P0 改动无关，是历史遗留（首页排行榜封面一直是裸 `:src`），本次一并修掉
+- 若有新接口返回新的 CDN 域名，`toHttpsUrl` 的白名单需要同步加，否则只靠 CSP 兜底
+- 回滚：nginx 配置备份 `/root/music.nginx.bak.20261020-183545`，静态站 `/root/music.www.bak.20261021-112901`

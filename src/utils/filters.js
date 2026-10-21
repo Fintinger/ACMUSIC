@@ -62,6 +62,22 @@ export function fromNow(ms) {
 }
 
 /**
+ * 把图片 URL 的 http 协议升级为 https。
+ * 背景：网易云接口有不少字段原样返回 http://p1.music.126.net/...（如 toplist/detail、
+ * playlist/detail 的 coverImgUrl），页面部署在 https 时浏览器会判定为 Mixed Content，
+ * 地址栏出现"不安全 / 此站点并非完全安全，攻击者可能修改图像"。
+ * 实测这些 CDN 域名 https 可用，因此按域名白名单升级；其他域名原样返回避免坏图。
+ * @param {String} url
+ * @returns {String}
+ */
+export function toHttpsUrl(url) {
+    if (!url || typeof url !== 'string') return url
+    if (url.indexOf('http://') !== 0) return url
+    if (!/music\.126\.net|\.netease\.com/.test(url)) return url
+    return 'https://' + url.slice('http://'.length)
+}
+
+/**
  * 网易云图片缩略: 附加 ?param=宽y高, 减小体积提升加载速度
  * 例: imgParam('https://p1.music.126.net/xxx.jpg', '300y300')
  * 非网易 CDN 原样返回
@@ -75,7 +91,7 @@ export function imgParam(url, size = '300y300') {
     // 仅对网易云 CDN 域名生效（其他域名可能不支持 https，盲目升级会坏图）
     if (!/music\.126\.net|\.netease\.com/.test(url)) return url
     // 先升级协议（http → https）
-    const httpsUrl = url.replace(/^http:\/\//, 'https://')
+    const httpsUrl = toHttpsUrl(url)
     // 已带参数不再加（避免重复）
     if (httpsUrl.indexOf('?') > -1) return httpsUrl
     return httpsUrl + `?param=${size}`

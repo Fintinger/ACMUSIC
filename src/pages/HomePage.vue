@@ -92,7 +92,7 @@
           <div class="topList" @click="plClk(l.id)">
             <el-card :body-style="{ padding: 0 }" shadow="never">
               <div class="img-wrapper" style="aspect-ratio:1;overflow:hidden">
-                <img :src="l.coverImgUrl"
+                <img :src="l.coverImgUrl | https"
                      class="image">
               </div>
               <div class="info">
