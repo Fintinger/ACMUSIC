@@ -15,6 +15,8 @@
             <p class="hero-meta">
               <span v-if="locationName">📍 {{ locationName }}</span>
               <span>{{ profile.follows }} 关注</span><span>{{ profile.followeds }} 粉丝</span>
+              <span v-if="isSelf && subcount.createdPlaylistCount != null">{{ subcount.createdPlaylistCount }} 创建歌单</span>
+              <span v-if="isSelf && subcount.subPlaylistCount != null">{{ subcount.subPlaylistCount }} 收藏歌单</span>
             </p>
             <p class="hero-login" v-if="isSelf && lastLoginText">{{ lastLoginText }}</p>
           </div>
@@ -75,6 +77,8 @@ export default {
       cloudTracks: [], favors: { vids: [], artists: [], albums: [] },
       locationName: '', pageLoading: true,
       lastLoginInfo: { time: "", IP: "", location: "" },
+      // 当前登录用户的收藏计数（/user/subcount，仅本人可见）
+      subcount: {},
     }
   },
   computed: {
@@ -157,7 +161,11 @@ export default {
             })
             .catch(() => { this.favors = { vids: [], artists: [], albums: [] } })
         : Promise.resolve()
-      await Promise.all([this.getUserInfo(uid), p1, p2, p3, p4, p5])
+      // 收藏计数只有本人能取（接口不带 uid，取的是当前登录态）
+      const p6 = isSelf
+        ? User.subcount().then(res => { this.subcount = res.data || {} }).catch(() => { this.subcount = {} })
+        : Promise.resolve()
+      await Promise.all([this.getUserInfo(uid), p1, p2, p3, p4, p5, p6])
       this.pageLoading = false
     },
     layout() {

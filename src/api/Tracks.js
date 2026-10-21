@@ -11,6 +11,44 @@ export function lyric(id) {
 }
 
 /**
+ * 新版歌词（逐字 + 翻译 + 罗马音）
+ * 说明 : 返回 lrc / yrc / tlyric / romalrc 等多份歌词。
+ *   - yrc: 逐字歌词，形如 [行起始,行时长](字起始,字时长,0)字...
+ *   - lrc: 可能混有两种行格式（原样透传上游）：
+ *       [mm:ss.xxx]文本  标准 LRC
+ *       {"t":1000,"c":[{"tx":"作词: "}...]}  富文本行（带歌手跳转信息）
+ *   - tlyric: 翻译歌词（标准 LRC）
+ * 注意 : 大量老歌没有 yrc，此时只能退化到 lrc 逐行高亮
+ * @param {string} id 歌曲id,必填
+ * @returns {AxiosPromise}
+ */
+export function lyricNew(id) {
+    return request('/lyric/new', {params: {id}})
+}
+
+/**
+ * 歌曲可用性检查
+ * 说明 : 返回 success 与 message，可直接用于提示"暂无版权"等具体原因
+ * @param {string|number} id 歌曲 id
+ * @param {number} br 码率，默认 999000
+ * @returns {AxiosPromise<{success:boolean, message:string}>}
+ */
+export function checkMusic(id, br = 999000) {
+    return request('/check/music', {params: {id, br}})
+}
+
+/**
+ * 歌曲下载链接（客户端下载接口）
+ * 说明 : 需要登录；无权限/无版权时 data.url 为 null，data.code 为 -110
+ * @param {string|number} id 歌曲 id
+ * @param {string} level 音质等级 standard|higher|exhigh|lossless|hires
+ * @returns {AxiosPromise}
+ */
+export function downloadUrlV1(id, level = 'standard') {
+    return request('/song/download/url/v1', {params: {id, level}})
+}
+
+/**
  * 获取相似音乐
  * 说明 : 调用此接口 , 传入歌曲 id, 可获得相似歌曲
  * @param{string} id 歌曲id,必填

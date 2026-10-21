@@ -88,6 +88,11 @@ export default {
     search: { type: 'font', class: 'ac-Search' },
     share: { type: 'font', class: 'ac-jia' },
     radio: { type: 'font', class: 'ac-diantai' },
+    download: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M12 3v11 M7 10l5 5 5-5 M4 20h16',
+    },
 
     // ---- 导航 ----
     home: {

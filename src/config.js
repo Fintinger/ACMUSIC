@@ -19,6 +19,8 @@ export default {
         level: initPlayerLevel(),
         // 降级链：请求失败时依次尝试 lower level
         qualityLevels: ['hires', 'lossless', 'exhigh', 'higher', 'standard'],
+        // 需要黑胶VIP 才能用的音质：非会员选了必然降级，菜单里直接拦下
+        vipOnlyLevels: ['lossless', 'hires', 'jyeffect'],
         // 是否启用多级 fallback
         fallbackLevels: true,
         // 音质选项

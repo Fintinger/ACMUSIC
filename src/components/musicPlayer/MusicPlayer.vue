@@ -47,6 +47,7 @@
           </div>
           <div class="actionsRow">
             <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/></button>
+            <button class="actionBtn" :disabled="downloading" @click="downloadSong"><BaseIcon name="download"/><span>{{ downloading ? '获取中' : '下载' }}</span></button>
             <button class="actionBtn" @click="shareSong"><BaseIcon name="share"/><span>分享</span></button>
           </div>
         </div>
@@ -61,7 +62,13 @@
               <div v-if="!lyric.length" class="panelEmpty"><p>暂无歌词</p><p class="emptyHint">纯音乐，请欣赏</p></div>
               <div v-else class="lyricsScroll" ref="lyricsScroll">
                 <div class="lyricsInner">
-                  <p v-for="(line, idx) in lyric" :key="idx" :class="{ active: line.cur, spacer: !line.lytxt || line.lytxt === '<br>' }" @click="lyricClick(line.t)" v-html="line.lytxt || '&nbsp;'"></p>
+                  <p v-for="(line, idx) in lyric" :key="idx" :class="{ active: line.cur, spacer: !line.lytxt || line.lytxt === '<br>' }" @click="lyricClick(line.t)">
+                    <template v-if="line.words && line.words.length">
+                      <span v-for="(w, wi) in line.words" :key="wi" class="lyricWord" :class="{ on: line.wcur >= wi }">{{ w.txt }}</span>
+                    </template>
+                    <span v-else v-html="line.lytxt || '&nbsp;'"></span>
+                    <span v-if="line.tr" class="lyricTr">{{ line.tr }}</span>
+                  </p>
                 </div>
               </div>
             </div>
@@ -100,6 +107,8 @@
 import PlayCore from "@/components/musicPlayer/PlayerCore";
 import CommentLayout from "@/components/layout/CommentLayout";
 import { buildBackground } from "@/utils/colorExtractor";
+import { parseLyricData, parseLrcText, findActiveIndex, findActiveWord } from "@/utils/lyric";
+import config from "@/config";
 import * as tracksApi from "@/api/Tracks";
 
 export default {
@@ -111,6 +120,8 @@ export default {
       isExpand: false,
       isModalOpen: false,
       lyric: [],
+      // 下载按钮请求中标志，防止连点
+      downloading: false,
       timeNow: 0,
       currentSong: {},
       simiTracks: [],
@@ -276,28 +287,19 @@ export default {
       this.colorSongId = sid
       this.bgStyle = buildBackground(img)
     },
-    parseLyric(ly) {
-      const allLine = ly.split("\n"); const resArr = []
-      allLine.map(el => {
-        let t = el.split("]")[0].replace('[', '').trim()
-        let min = 0, s = 0, ms = 0
-        if (t) {
-          const parts = t.split(":")
-          min = parts[0] * 1
-          const secMs = parts[1] ? parts[1].split(".") : [0]
-          s = secMs[0] * 1; ms = (secMs[1] || 0) * 1
-        }
-        t = min * 60 + s + ms / 1000
-        const lytxt = el.split("]")[1] ? el.split("]")[1].trim() : "<br>"
-        resArr.push({ t, lytxt, cur: false })
-      })
-      return resArr
-    },
     getLyric(id) {
       this.lyric = []; this.lastActiveIdx = -1
-      tracksApi.lyric(id).then(res => {
-        this.lyric = this.parseLyric(res.data.lrc.lyric)
-      })
+      // 旧接口兜底：/lyric 只给标准 LRC，但覆盖最广
+      const legacy = () => tracksApi.lyric(id).then(res => {
+        const text = res && res.data && res.data.lrc && res.data.lrc.lyric
+        this.lyric = text ? parseLrcText(text) : []
+      }).catch(() => { this.lyric = [] })
+
+      tracksApi.lyricNew(id).then(res => {
+        const rows = parseLyricData(res && res.data)
+        if (rows.length) this.lyric = rows
+        else return legacy()
+      }).catch(() => legacy())
     },
     timeUpdate(t) { this.timeNow = t * 1 },
     lyricClick(t) {
@@ -306,22 +308,14 @@ export default {
       t + 0.1 > panel.timeDuration ? panel.sel.currentTime = panel.timeDuration : panel.sel.currentTime = t + 0.01
     },
     needUpdate(val) {
-      if (!this.lyric[0]) return
-      const temp = this.lyric.filter(ly => ly.t >= val)[0]
-      let curIdx = -1
-      this.lyric.forEach((ly, ind) => {
-        if (!this.lyric[ind - 1]) return
-        if (temp) {
-          const isCur = temp.t === ly.t
-          this.lyric[ind - 1].cur = isCur
-          if (isCur) curIdx = ind - 1
-        } else {
-          this.lyric[this.lyric.length - 2].cur = true
-          curIdx = this.lyric.length - 2
-          this.lyric[this.lyric.length - 3].cur = false
-        }
-      })
-      if (curIdx !== -1 && curIdx !== this.lastActiveIdx) {
+      if (!this.lyric.length) return
+      // 当前行 = 最后一个 t <= 播放进度 的行（旧实现取的是"下一行"，会导致高亮提前一行）
+      const curIdx = findActiveIndex(this.lyric, val)
+      if (curIdx !== this.lastActiveIdx) {
+        this.lyric.forEach((ly, i) => {
+          const on = i === curIdx
+          if (ly.cur !== on) ly.cur = on
+        })
         this.lastActiveIdx = curIdx
         this.$nextTick(() => {
           const container = this.$refs.lyricsScroll
@@ -332,6 +326,12 @@ export default {
             container.scrollTo({ top: targetTop, behavior: 'smooth' })
           }
         })
+      }
+      // 逐字进度：仅对 yrc 行生效，wcur 之前的字点亮
+      const line = curIdx >= 0 ? this.lyric[curIdx] : null
+      if (line && line.words && line.words.length) {
+        const wi = findActiveWord(line, val)
+        if (line.wcur !== wi) line.wcur = wi
       }
     },
     getSimiTracks(id) { return tracksApi.simiTracks(id) },
@@ -350,6 +350,39 @@ export default {
     toggleLike() {
       // 委托给 PlayerCore（单一数据源，含 likePending 锁 + API 调用 + 失败回滚）
       if (this.$refs.pgPanel) this.$refs.pgPanel.toggleLike()
+    },
+    /**
+     * 下载当前歌曲。
+     * 走 /song/download/url/v1（客户端下载接口），需要登录；无权限时 data.code = -110、url 为 null。
+     * 浏览器对跨域 URL 的 download 属性无效，所以只保证触发下载/新标签打开，不做二次转存。
+     */
+    downloadSong() {
+      const song = this.currentSong || {}
+      if (!song.id) return
+      if (this.downloading) return
+      this.downloading = true
+      const level = config.player.level || 'standard'
+      tracksApi.downloadUrlV1(song.id, level).then(res => {
+        const d = (res && res.data && res.data.data) || {}
+        const url = d.url
+        if (!url) {
+          if (d.code === -110) this.$message.warning('下载歌曲需要登录')
+          else this.$message.warning('该歌曲暂不提供下载')
+          return
+        }
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${song.name || 'song'}${d.type ? '.' + d.type : '.mp3'}`
+        a.target = '_blank'
+        a.rel = 'noopener'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        this.$message.success('已开始下载')
+      }).catch(err => {
+        console.warn('[Download]', err && err.message)
+        this.$message.warning('下载失败，请稍后重试')
+      }).then(() => { this.downloading = false })
     },
     shareSong() {},
     formatTime(s) { s = s * 1; if (!s || isNaN(s)) return '00:00'; const m = Math.floor(s / 60); return String(m).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0') },
@@ -520,7 +553,7 @@ export default {
 
   .actionsRow {
     display: flex; gap: 10px;
-    .actionBtn { display: flex; align-items: center; gap: 5px; padding: 7px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); font-size: 12px; cursor: pointer; transition: all 180ms ease; i { font-size: 14px; } &:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); } &.active { color: rgba(255,255,255,0.9); border-color: rgba(134,133,239,0.3); background: rgba(134,133,239,0.12); i { color: #ef4444; } } }
+    .actionBtn { display: flex; align-items: center; gap: 5px; padding: 7px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); font-size: 12px; cursor: pointer; transition: all 180ms ease; i { font-size: 14px; } &:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); } &:disabled { opacity: 0.5; cursor: not-allowed; } &.active { color: rgba(255,255,255,0.9); border-color: rgba(134,133,239,0.3); background: rgba(134,133,239,0.12); i { color: #ef4444; } } }
   }
 
   .heroRight { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; }
@@ -541,6 +574,13 @@ export default {
     &::-webkit-scrollbar { width: 4px; } &::-webkit-scrollbar-track { background: transparent; } &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
     .lyricsInner { padding: 40vh 0; }
     p { font-size: 16px; line-height: 2.5; color: rgba(255,255,255,0.28); text-align: center; cursor: pointer; transition: all 400ms cubic-bezier(0.22,0.61,0.36,1); margin: 0; padding: 0 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; &:hover { color: rgba(255,255,255,0.45); } &.active { font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.92); line-height: 2; } &.spacer { height: 10px; font-size: 0; } }
+    /* 逐字（yrc）：未唱到的字压暗，唱到的字提亮 */
+    .lyricWord { opacity: .45; transition: opacity 120ms linear, color 120ms linear; }
+    .lyricWord.on { opacity: 1; }
+    p.active .lyricWord.on { color: #fff; text-shadow: 0 0 14px rgba(134,133,239,0.5); }
+    /* 翻译副行 */
+    .lyricTr { display: block; font-size: .6em; font-weight: 400; line-height: 1.7; color: rgba(255,255,255,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    p.active .lyricTr { color: rgba(255,255,255,0.62); }
   }
 
   .panelEmpty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 200px; color: rgba(255,255,255,0.28); p { margin: 0; font-size: 15px; } .emptyHint { font-size: 13px; opacity: 0.5; margin-top: 6px; } }

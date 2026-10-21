@@ -81,3 +81,22 @@ export function cloudDetail(id) {
 export function cloudDel(id) {
     return request('/user/cloud/del', {params: {id}})
 }
+
+/**
+ * 当前登录用户的收藏计数
+ * 说明 : 无需 uid，返回当前登录态（游客返回游客账号）的各类收藏数量
+ * @returns {AxiosPromise<{createdPlaylistCount:number, subPlaylistCount:number, artistCount:number, mvCount:number, djRadioCount:number, programCount:number}>}
+ */
+export function subcount() {
+    return request('/user/subcount')
+}
+
+/**
+ * 会员信息
+ * 说明 : 返回 associator（黑胶VIP）与 musicPackage（音乐包）两套权益，vipCode 为 0 即无该权益。
+ *   用于判断能否使用无损/臻音等高音质，避免给非会员默认开 hires 造成必然降级。
+ * @returns {AxiosPromise<{associator:{vipCode:number,vipLevel:number}, musicPackage:{vipCode:number}}>}
+ */
+export function vipInfo() {
+    return request('/vip/info')
+}

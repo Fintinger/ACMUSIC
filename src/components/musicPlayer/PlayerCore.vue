@@ -80,7 +80,7 @@
           <button class="qualityBtn" @click.stop="showQualityMenu = !showQualityMenu">
             {{ currentQualityShort }}
           </button>
-          <QualityMenu :visible="showQualityMenu" :selected="config.player.level" @select="onQualitySelect"/>
+          <QualityMenu :visible="showQualityMenu" :selected="config.player.level" :vip-type="vipType" @select="onQualitySelect" @need-vip="onNeedVip"/>
         </div>
         <div class="barItem playlistWrap">
           <el-dropdown v-if="currentPlaylist.length" trigger="click" placement="top" @command="handleCommand" @visible-change="onDropdownToggle">
@@ -125,6 +125,7 @@ import QualityMenu from "@/components/musicPlayer/QualityMenu"
 import { setAudioCache, getAudioCache, getAudioUrl } from "@/utils/audioCache"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
+import * as userApi from "@/api/User";
 
 export default {
   name: "PlayCore",
@@ -183,6 +184,9 @@ export default {
       likedSongIds: new Set(),
       // 当前歌曲的喜欢请求锁定，防止快速连点
       likePending: false,
+      // 会员权益：0=确认无会员, 1=仅音乐包, 2=黑胶VIP, -1=未知（拉取失败，不做门控）
+      vipType: 0,
+      vipChecked: false,
     }
   },
   computed: {
@@ -213,6 +217,7 @@ export default {
       return ''
     },
     config() { return config },
+    isVip() { return this.vipType !== 0 },
     currentQualityShort() {
       const opts = config.player.qualityOptions || []
       const f = opts.find(o => o.key === this.currentLevel)
@@ -224,6 +229,9 @@ export default {
       // 登录后拉取一次 /likelist，填充 likedSongIds Set
       // 之后所有歌曲切换都从 Set 判断 liked 状态，免调接口
       if (val) this._initLikedSet()
+      // 会员权益随登录态变化，登出要清掉，否则菜单会对未登录用户解锁无损
+      if (val) this._loadVipInfo()
+      else { this.vipType = 0; this.vipChecked = false }
     },
     song(val) {
       console.trace('[CurrentSongSet] song_watch', val && val.id)
@@ -444,20 +452,12 @@ export default {
             resolve()
             return
           }
-          // 所有 fallback 均失败 → 查询 song detail 判断原因，然后自动切下一首
-          tracks.detail(id).then(detailRes => {
+          // 所有 fallback 均失败 → 问清原因（/check/music 会直接给"暂无版权"），然后自动切下一首
+          self._explainNoSource(id).then(msg => {
             if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
-            const fee = detailRes.data && detailRes.data.songs && detailRes.data.songs[0] && detailRes.data.songs[0].fee
-            if (fee === 1) self.$message.warning("VIP歌曲，尝试解锁失败")
-            else if (fee === 4) self.$message.warning("专辑歌曲，暂无资源")
-            else self.$message.warning("暂无可用音源")
+            self.$message.warning(msg)
             self.isLoading = false
-            resolve("no_url")
-            if (self._inPlaylist()) self.nextSong()
-          }).catch(() => {
-            self.isLoading = false
-            console.warn('[PlayerLoading]', { action: 'error', songId: id, requestId })
-            if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
+            console.warn('[PlayerLoading]', { action: 'no_source', songId: id, requestId, reason: msg })
             resolve("no_url")
             if (self._inPlaylist()) self.nextSong()
           })
@@ -492,20 +492,12 @@ export default {
             resolve()
             return
           }
-          // 所有 fallback 均失败 → 查询 song detail 判断原因，然后自动切下一首
-          tracks.detail(id).then(detailRes => {
+          // 所有 fallback 均失败 → 问清原因（/check/music 会直接给"暂无版权"），然后自动切下一首
+          self._explainNoSource(id).then(msg => {
             if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
-            const fee = detailRes.data && detailRes.data.songs && detailRes.data.songs[0] && detailRes.data.songs[0].fee
-            if (fee === 1) self.$message.warning("VIP歌曲，尝试解锁失败")
-            else if (fee === 4) self.$message.warning("专辑歌曲，暂无资源")
-            else self.$message.warning("暂无可用音源")
+            self.$message.warning(msg)
             self.isLoading = false
-            resolve("no_url")
-            if (self._inPlaylist()) self.nextSong()
-          }).catch(() => {
-            self.isLoading = false
-            console.warn('[PlayerLoading]', { action: 'error', songId: id, requestId })
-            if (requestId === self.playRequestId) self.$message.warning("暂无可用音源")
+            console.warn('[PlayerLoading]', { action: 'no_source', songId: id, requestId, reason: msg })
             resolve("no_url")
             if (self._inPlaylist()) self.nextSong()
           })
@@ -849,7 +841,62 @@ export default {
     onMouseLeave() { this.scheduleHide() },
     onMouseMove() { this.clearHideTimer(); if (!this.showBar) this.showBar = true },
     onInteract() { this.clearHideTimer() },
+    /**
+     * 取流全失败后解释原因。
+     * 先问 /check/music（上游直接给"亲爱的,暂无版权"这类结论，准确）；
+     * 拿不到结论再退回 song detail 的 fee 字段推断；都没有就给通用文案。
+     * @returns {Promise<string>} 给用户看的一句话
+     */
+    _explainNoSource(id) {
+      return tracks.checkMusic(id).then(res => {
+        const d = (res && res.data) || {}
+        if (d.success === false && d.message) return d.message
+        return null
+      }).catch(() => null).then(msg => {
+        if (msg) return msg
+        return tracks.detail(id).then(r => {
+          const song = r.data && r.data.songs && r.data.songs[0]
+          const fee = song && song.fee
+          if (fee === 1) return 'VIP歌曲，尝试解锁失败'
+          if (fee === 4) return '专辑歌曲，暂无资源'
+          return '暂无可用音源'
+        }).catch(() => '暂无可用音源')
+      })
+    },
+    /**
+     * 拉取会员权益，用于音质门控。
+     * associator = 黑胶VIP（vipCode>0 才有无损/臻音），musicPackage = 音乐包。
+     * 失败不阻塞播放，只是菜单不标记 VIP 门槛。
+     */
+    _loadVipInfo() {
+      return userApi.vipInfo().then(res => {
+        const d = (res && res.data && res.data.data) || {}
+        const assoc = d.associator || {}
+        const pkg = d.musicPackage || {}
+        const hasRed = Number(assoc.vipCode) > 0
+        const hasPkg = Number(pkg.vipCode) > 0
+        this.vipType = hasRed ? 2 : (hasPkg ? 1 : 0)
+        this.vipChecked = true
+        console.log('[VipInfo]', { associatorCode: assoc.vipCode, packageCode: pkg.vipCode, vipType: this.vipType })
+      }).catch(err => {
+        // 拉取失败 → 标记未知（-1），菜单不做门控，避免把真会员误拦
+        this.vipType = -1
+        this.vipChecked = true
+        console.warn('[VipInfo] 获取失败，音质门控跳过', err && err.message)
+      })
+    },
+    onNeedVip(opt) {
+      this.showQualityMenu = false
+      const label = (opt && opt.label) || '该音质'
+      this.$message.warning(`「${label}」需要黑胶VIP，已保持当前音质`)
+    },
     onQualitySelect(key) {
+      const vipOnly = (config.player.vipOnlyLevels || []).indexOf(key) !== -1
+      // 只在"确认非会员"时拦截；vipType=-1(未知) 放行，宁可多一次降级也不要误伤真会员
+      if (vipOnly && this.vipType === 0) {
+        this.onNeedVip((config.player.qualityOptions || []).find(o => o.key === key))
+        return
+      }
       const oldLevel = this.currentLevel
       const oldSrc = this.sel.src
       console.log('[QualitySwitch]', { action: 'select', oldLevel, newLevel: key, songId: this.currentSong.id, oldSrc: oldSrc ? oldSrc.slice(0, 80) : '', playRequestId: this.playRequestId })
@@ -1205,7 +1252,10 @@ mounted() {
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
     // 登录态启动后拉取一次 /likelist 填充 likedSongIds
-    if (this.isLogin) this._initLikedSet()
+    if (this.isLogin) {
+      this._initLikedSet()
+      this._loadVipInfo()
+    }
   },
   beforeDestroy() {
     window.removeEventListener('beforeunload', this._onBeforeUnload)

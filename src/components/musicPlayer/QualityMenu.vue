@@ -6,13 +6,13 @@
         v-for="opt in options"
         :key="opt.key"
         class="qm-item"
-        :class="{ active: opt.key === selected }"
-        @click="select(opt.key)"
+        :class="{ active: opt.key === selected, locked: isLocked(opt) }"
+        @click="select(opt)"
       >
         <div class="qm-left">
           <span class="qm-short">{{ opt.short }}</span>
           <div class="qm-info">
-            <span class="qm-label">{{ opt.label }}</span>
+            <span class="qm-label">{{ opt.label }}<span v-if="isLocked(opt)" class="qm-vip">VIP</span></span>
             <span v-if="opt.desc" class="qm-desc">{{ opt.desc }} · {{ opt.bitrate }}</span>
           </div>
         </div>
@@ -31,16 +31,31 @@ export default {
   name: "QualityMenu",
   props: {
     visible: { type: Boolean, default: false },
-    selected: { type: String, default: '' }
+    selected: { type: String, default: '' },
+    // 0=确认无会员, 1=音乐包, 2=黑胶VIP, -1=未知（不做门控）
+    vipType: { type: Number, default: 0 }
   },
   computed: {
     options() {
       return config.player.qualityOptions || []
+    },
+    isVip() {
+      return this.vipType !== 0
     }
   },
   methods: {
-    select(key) {
-      this.$emit('select', key)
+    /** 确认非会员时，把无损/臻音标成 VIP 专属，点了给提示而不是切过去再降级 */
+    isLocked(opt) {
+      if (!opt || opt.key === this.selected) return false
+      const vipOnly = (config.player.vipOnlyLevels || []).indexOf(opt.key) !== -1
+      return vipOnly && this.vipType === 0
+    },
+    select(opt) {
+      if (this.isLocked(opt)) {
+        this.$emit('need-vip', opt)
+        return
+      }
+      this.$emit('select', opt.key)
     }
   }
 }
@@ -84,6 +99,26 @@ export default {
 
   &:hover { background: rgba(255, 255, 255, 0.06); }
   &.active { background: rgba(134, 133, 239, 0.12); }
+  &.locked {
+    .qm-label { color: rgba(255, 255, 255, 0.5); }
+    .qm-short { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.45); }
+  }
+
+  .qm-vip {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    height: 15px;
+    line-height: 15px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    color: #f0c674;
+    background: rgba(240, 198, 116, 0.14);
+    border: 1px solid rgba(240, 198, 116, 0.28);
+    vertical-align: 1px;
+  }
 
   .qm-left {
     display: flex;

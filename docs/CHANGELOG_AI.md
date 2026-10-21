@@ -1447,3 +1447,51 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - `docs/API_INDEX.md` 是生成物，改分类逻辑请改 `scripts/gen-api-index.mjs` 的 `GROUP_OF` / `GROUP_ORDER`，不要手改 md
 - API 版本升级后需重新生成，索引表头会记录版本号，便于发现漂移
 - 官方 d.ts 把大量必填参数标成了 `?`（历史遗留），参数列只能作参考，写代码前以文档页或 `module/*.js` 为准
+
+### 2026-10-21 — P0 五项落地：逐字歌词、下载、版权判断、音质门控、收藏计数
+
+### 修改内容
+按 `docs/API_GAPS.md` 的 P0 清单落地五项（首页聚合经实测不可行，暂缓并记录原因）。
+
+### 修改文件
+- `src/utils/lyric.js`（新增，纯函数解析器）
+- `src/api/Tracks.js`（新增 `lyricNew` / `checkMusic` / `downloadUrlV1`）
+- `src/api/User.js`（新增 `subcount` / `vipInfo`）
+- `src/config.js`（新增 `player.vipOnlyLevels`）
+- `src/config/icon.js`（新增 `download` 内联 SVG 图标）
+- `src/components/musicPlayer/MusicPlayer.vue`（歌词渲染 + 下载按钮）
+- `src/components/musicPlayer/PlayerCore.vue`（VIP 权益 + 取流失败原因）
+- `src/components/musicPlayer/QualityMenu.vue`（VIP 标记与拦截）
+- `src/components/layout/UserDetailLayout.vue`（收藏计数）
+- `docs/API_GAPS.md`、`docs/CHANGELOG_AI.md`
+
+### 修改原因
+1. **逐字歌词**：`/lyric` 只有整行时间轴。`/lyric/new` 的 `yrc` 带逐字时间。
+   实测发现同一接口返回三种行格式混排（标准 LRC / 富文本 JSON 行 / yrc 逐字行），且大量老歌没有 yrc，
+   所以解析器写成三格式兼容 + 逐字优先 + lrc 退化 + 旧接口兜底四层。
+2. **音质门控**：非会员选无损必然走降级链，抖动且费时。`/vip/info` 的 `associator.vipCode`
+   才是判定依据；拉取失败记为 -1（未知）不做门控，避免把真会员误拦。
+3. **版权判断**：取流全失败时原来用 `song/detail` 的 `fee` 字段猜原因，`/check/music` 能直接给出
+   "亲爱的,暂无版权"，更准。只在失败路径调用，不影响正常播放耗时。
+4. **收藏计数 / 下载**：补上主页与播放器缺失的两处能力。
+5. **首页聚合暂缓**：游客侧 `/homepage/block/page` 仅 3 个 block（无 banner），`/homepage/dragon/ball` 返回空数组，
+   替换现有首页等于重做版式，单独立项。
+
+顺带修掉歌词高亮的老 bug：原 `needUpdate` 取的是"下一行"，导致高亮永远提前一行、逐字进度无法对齐。
+
+### 测试结果
+- `yarn lint`（单文件 ESLint，10 个文件）✅ 0 错误
+- `yarn build` ✅（app.e39bfd6f.js / app.4af86632.css）
+- 解析器真机数据测试 ✅（未提交的临时脚本，跑完即删）
+  - 33894312（有 yrc）：49 行，逐字 47 行，`t=13.93s → 行 2 / 字 4` 与手工计算一致
+  - 2058263032（有 tlyric）：64 行，翻译挂载 50 行
+  - 347230（纯 lrc）/ 186016（富文本 JSON 行）：均正确解析，时间单调递增
+  - 旧 `/lyric` 兜底：49 行正常
+- 线上部署复核 ✅：`/` 引用 `js/app.e39bfd6f.js`，产物含"下载歌曲需要登录/需要黑胶VIP/创建歌单/收藏歌单"文案，
+  CSS 含 `lyricWord`，`/` 与 `/user` 均 200
+
+### 注意事项
+- `/lyric/new` 并非所有歌都有 yrc，实测 4/7 有逐字；没有时自动退化逐行，不是缺陷
+- 逐字高亮精度受 `tUpdate` 事件频率限制（约 4Hz），逐字偏快时观感略跳，后续可用 rAF 平滑
+- 下载走 `/song/download/url/v1`，未登录返回 `code:-110`；跨域 URL 的 `download` 属性无效，浏览器可能直接打开而非落盘
+- 回滚：静态站备份 `/root/music.www.bak.20261021-111946`
