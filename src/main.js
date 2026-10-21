@@ -66,6 +66,33 @@ window.addEventListener('api:unauthorized', () => {
         .catch(() => { /* 网络异常不断定为登录失效，保持现状 */ })
 })
 
+// 全局渲染错误边界
+// 默认 Vue 会把 render / 生命周期 / watcher 里的异常打到 console 后继续执行，结果往往是某块区域
+// 静默空白。这里统一兜一层：留全量日志 + 限频提示，同时把最近 10 条塞进 window.__acmusicErrors，
+// 出问题时在控制台执行 __acmusicErrors 就能直接拿到栈（本项目无单测、无 CI，这是唯一的现场证据）。
+window.__acmusicErrors = []
+let errorToastAt = 0
+Vue.config.errorHandler = (err, vm, info) => {
+    const msg = (err && err.message) || String(err)
+    const opts = (vm && vm.$options) || {}
+    window.__acmusicErrors.push({
+        time: new Date().toISOString(),
+        info,
+        component: opts.name || opts._componentTag || '',
+        message: msg,
+        stack: (err && err.stack) || ''
+    })
+    if (window.__acmusicErrors.length > 10) window.__acmusicErrors.shift()
+    console.error('[VueError]', info, err)
+    // 浏览器自身噪声（ResizeObserver 循环告警）不打扰用户
+    if (/ResizeObserver/i.test(msg)) return
+    const now = Date.now()
+    if (now - errorToastAt < 8000) return
+    errorToastAt = now
+    const brief = msg.length > 60 ? msg.slice(0, 60) + '…' : msg
+    ElementUI.Message.error({ message: `页面渲染异常：${brief}`, duration: 6000, showClose: true })
+}
+
 new Vue({
     render: h => h(App),
     beforeCreate() {

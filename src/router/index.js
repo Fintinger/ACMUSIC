@@ -1,35 +1,47 @@
 import VueRouter from "vue-router";
-import HomePage from "@/pages/HomePage";
-import ExplorePage from "@/pages/ExplorePage";
-import UserPage from "@/pages/UserPage";
-import Playlist from "@/pages/Playlist";
-import ListDetail from "@/pages/ListDetail";
-import AlbumDetail from "@/pages/AlbumDetail";
-import ArtistDetail from "@/pages/artist/ArtistDetail";
-import ArtistAllSongs from "@/pages/artist/ArtistAllSongs";
-import mvPlay from "@/pages/mvPlay";
-import VideoPlay from "@/pages/VideoPlay";
-import SearchResult from "@/pages/SearchResult";
-import DailySongs from "@/pages/DailySongs";
-
-import AllList from "@/pages/explorePage/playlist/AllList";
-import BoutiqueList from "@/pages/explorePage/playlist/BoutiqueList";
-import MvList from "@/pages/explorePage/MvList";
-import LeaderBoard from "@/pages/explorePage/LeaderBoard/LeaderBoard";
-import ArtistList from "@/pages/explorePage/LeaderBoard/ArtistList";
-import VideoList from "@/pages/explorePage/VideoList";
-
-import AlbumRes from "@/pages/search/AlbumRes";
-import ArtistRes from "@/pages/search/ArtistRes";
-import LyricRes from "@/pages/search/LyricRes";
-import MvRes from "@/pages/search/MvRes";
-import PlaylistRes from "@/pages/search/PlaylistRes";
-import TrackRes from "@/pages/search/TrackRes";
-import UserRes from "@/pages/search/UserRes";
-import VoiceRes from "@/pages/search/VoiceRes";
-import VideoRes from "@/pages/search/VideoRes";
-import UserDetail from "@/pages/UserDetail";
 import { setRouteTitle, BASE } from "@/utils/title";
+
+/**
+ * 路由级代码分割：页面组件改为动态 import，首屏只加载首页那一个 chunk。
+ *
+ * - 统一用 `webpackChunkName` 命名，产物里能看到 page-home / page-list-detail 这类可读文件名
+ * - 与 keep-alive 的关系：异步只影响首次进入时的解析，缓存的是解析后的组件实例；
+ *   App.vue 里 reapEvictedPages() 依赖的 `vnode.data.keepAlive` / `keepAlive.keys` 不受影响
+ * - NotFound 保持动态也能用，但兜底页要立刻可见，所以和首页一样不额外加依赖
+ */
+const HomePage = () => import(/* webpackChunkName: "page-home" */ "@/pages/HomePage");
+const ExplorePage = () => import(/* webpackChunkName: "page-explore" */ "@/pages/ExplorePage");
+const UserPage = () => import(/* webpackChunkName: "page-user" */ "@/pages/UserPage");
+const Playlist = () => import(/* webpackChunkName: "page-playlist" */ "@/pages/Playlist");
+const ListDetail = () => import(/* webpackChunkName: "page-list-detail" */ "@/pages/ListDetail");
+const AlbumDetail = () => import(/* webpackChunkName: "page-album-detail" */ "@/pages/AlbumDetail");
+const ArtistDetail = () => import(/* webpackChunkName: "page-artist-detail" */ "@/pages/artist/ArtistDetail");
+const ArtistAllSongs = () => import(/* webpackChunkName: "page-artist-songs" */ "@/pages/artist/ArtistAllSongs");
+const mvPlay = () => import(/* webpackChunkName: "page-mv" */ "@/pages/mvPlay");
+const VideoPlay = () => import(/* webpackChunkName: "page-video" */ "@/pages/VideoPlay");
+const SearchResult = () => import(/* webpackChunkName: "page-search" */ "@/pages/SearchResult");
+const DailySongs = () => import(/* webpackChunkName: "page-daily-songs" */ "@/pages/DailySongs");
+const UserDetail = () => import(/* webpackChunkName: "page-user-detail" */ "@/pages/UserDetail");
+const NotFound = () => import(/* webpackChunkName: "page-not-found" */ "@/pages/NotFound");
+
+// 发现页子路由：合并成一个 chunk，进「发现」时一次取回，切 tab 不再等
+const AllList = () => import(/* webpackChunkName: "page-explore-subs" */ "@/pages/explorePage/playlist/AllList");
+const BoutiqueList = () => import(/* webpackChunkName: "page-explore-subs" */ "@/pages/explorePage/playlist/BoutiqueList");
+const MvList = () => import(/* webpackChunkName: "page-explore-subs" */ "@/pages/explorePage/MvList");
+const LeaderBoard = () => import(/* webpackChunkName: "page-explore-subs" */ "@/pages/explorePage/LeaderBoard/LeaderBoard");
+const ArtistList = () => import(/* webpackChunkName: "page-explore-subs" */ "@/pages/explorePage/LeaderBoard/ArtistList");
+const VideoList = () => import(/* webpackChunkName: "page-explore-subs" */ "@/pages/explorePage/VideoList");
+
+// 搜索结果 9 个子视图：同一 chunk，搜索一次全取回
+const AlbumRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/AlbumRes");
+const ArtistRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/ArtistRes");
+const LyricRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/LyricRes");
+const MvRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/MvRes");
+const PlaylistRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/PlaylistRes");
+const TrackRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/TrackRes");
+const UserRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/UserRes");
+const VideoRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/VideoRes");
+const VoiceRes = () => import(/* webpackChunkName: "page-search-subs" */ "@/pages/search/VoiceRes");
 
 const originalPush = VueRouter.prototype.push
 VueRouter.prototype.push = function push(location) {
@@ -178,7 +190,21 @@ const router = new VueRouter({
             },
         },
         {path: '/daily-songs', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2, title: '每日推荐'}},
-    ]
+        // 兜底：history 模式下任何未匹配的 URL 都落到这里，避免 router-view 空转白屏。
+        // 必须放最后 —— vue-router 3 按定义顺序匹配，'*' 会吃掉后面所有路由。
+        {path: '*', name: "notFound", component: NotFound, meta: {level: 1, title: '页面不存在'}},
+    ],
+    /**
+     * 滚动位置恢复：
+     * - 浏览器前进/后退 → 回到离开时的位置（savedPosition 由 vue-router 提供）
+     * - 同 path 仅 query 变化（歌单/专辑/歌手详情切 id）→ 保持不动，避免视觉跳动
+     * - 其余新导航 → 回顶部
+     */
+    scrollBehavior(to, from, savedPosition) {
+        if (savedPosition) return savedPosition
+        if (to.path === from.path) return false
+        return {x: 0, y: 0}
+    }
 })
 
 router.beforeEach((to, from, next) => {
