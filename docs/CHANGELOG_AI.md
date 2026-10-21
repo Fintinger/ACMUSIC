@@ -1668,3 +1668,38 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 ### 注意事项
 - 同轮把此前只在本地的 7 个 commit 一并推送到 origin（`67ebecd..7e54aaf`）
 - 回滚：静态站备份 `/root/music.www.bak.20261021-121341`
+
+### 2026-10-21 — 部署自动化：GitHub Actions + 版本戳 + 兜底脚本
+
+### 修改内容
+把「本地构建 → scp 覆盖 /var/www/music」的手工流程换成 CI 自动部署，并给产物加 commit 版本戳。
+
+### 修改文件
+- `.github/workflows/deploy.yml`（新增）
+- `scripts/deploy.sh`（新增，CI 不可用时的兜底）
+- `vue.config.js`（构建时注入 `VUE_APP_COMMIT_SHA`）
+- `src/config.js`（`site.commit`）
+- `src/components/common/AppFooter.vue`（页脚显示 `v0.1.0 · <hash>`）
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+排查发现线上与 GitHub 完全解耦：`/var/www/music` 不是 git 工作区、服务器无 cron/timer、仓库无 CI，
+线上一直是手工 scp 覆盖。后果是「线上已更新、仓库还停在旧 commit」的漂移——今天就发生过一次（8 个 commit 未推送）。
+
+三层改造：
+1. **CI**：push 到 master（仅 `src/**`、`public/**`、依赖与构建配置变更时触发）→ `npm ci` → build → 备份 → `rsync --delete`（排除 `.well-known`，保护 ACME）→ 校验「线上 index.html 引用了本次产物 js」否则失败
+2. **版本戳**：构建注入 commit 短 hash，页脚显示，线上产物可直接对回 commit
+3. **兜底脚本**：`scripts/deploy.sh` 带工作区/未推送检查、备份、线上校验
+
+### 测试结果
+- workflow YAML 解析 ✅（1 job / 8 steps，触发路径正确）
+- `npm ci --dry-run` ✅ 无锁文件不同步报错
+- 本地构建 ✅ `app.8627bff5.js` 内含 `04c2461`（当前 HEAD），版本戳注入生效
+- 专用部署密钥 `~/.ssh/gha_acmusic_deploy` 已加入服务器 `authorized_keys`，实测可登录（`root@iZ2ze...`），rsync 存在
+
+### 注意事项
+- **需要在 GitHub 添加仓库 Secret `SSH_PRIVATE_KEY`**（内容为 `~/.ssh/gha_acmusic_deploy` 私钥），否则部署步骤会失败
+- 服务器仍是 root 部署；如需最小权限，可后续建 `deploy` 用户并让其拥有 `/var/www/music`
+- 纯文档改动不触发部署（paths 过滤）；需要强制部署时可手动 `workflow_dispatch`
+- rsync 用 `--delete` 清理旧 hash 文件，必须保留 `.well-known` 排除项
+- 备份在 `/root/music.www.bak.*`，目前不自动清理，注意磁盘占用

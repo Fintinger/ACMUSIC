@@ -1,0 +1,87 @@
+name: Deploy to production
+
+# 只在会改变产物的路径上触发；纯文档改动不会部署
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vue.config.js'
+      - 'babel.config.js'
+      - '.env.production'
+  workflow_dispatch: # 支持手动触发
+
+# 部署串行，绝不并发覆盖
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  SSH_HOST: 39.96.78.231
+  SSH_USER: root
+  SITE_URL: https://music.archai.space
+  TARGET_DIR: /var/www/music
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: |
+          export VUE_APP_COMMIT_SHA=$(git rev-parse --short HEAD)
+          echo "building commit $VUE_APP_COMMIT_SHA"
+          npm run build
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'echo "SSH OK: $(hostname)"'
+
+      - name: Backup current release
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
+            "set -e; TS=\$(date +%Y%m%d-%H%M%S); cp -a $TARGET_DIR /root/music.www.bak.\$TS; echo \"backup=/root/music.www.bak.\$TS\""
+
+      - name: Upload
+        run: |
+          # --delete 清掉旧 hash 文件；.well-known 必须排除（ACME 续期验证要用）
+          rsync -az --delete --exclude='.well-known' \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            dist/ "$SSH_USER@$SSH_HOST:$TARGET_DIR/"
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "chmod -R a+rX $TARGET_DIR"
+
+      - name: Verify
+        run: |
+          set -e
+          EXPECTED_JS=$(basename "$(ls dist/js/app.*.js | head -1)")
+          echo "本次构建产物: $EXPECTED_JS"
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/")
+          echo "首页 HTTP $code"
+          test "$code" = "200"
+
+          if ! curl -s "$SITE_URL/" | grep -q "$EXPECTED_JS"; then
+            echo "::error::线上 index.html 未引用 $EXPECTED_JS，部署可能未生效"
+            exit 1
+          fi
+
+          js_code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/js/$EXPECTED_JS")
+          echo "产物 JS HTTP $js_code"
+          test "$js_code" = "200"
+          echo "✅ 线上已切换为 $EXPECTED_JS"

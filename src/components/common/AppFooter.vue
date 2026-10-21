@@ -2,7 +2,7 @@
   <footer class="app-footer">
     <div class="af-left">
       <span class="af-brand">{{ site.name }}</span>
-      <span class="af-meta">第三方客户端 · v{{ site.version }}</span>
+      <span class="af-meta">第三方客户端 · v{{ site.version }}<template v-if="site.commit"> · {{ site.commit }}</template></span>
     </div>
 
     <nav class="af-links">

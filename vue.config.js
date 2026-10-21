@@ -1,4 +1,16 @@
 const {defineConfig} = require('@vue/cli-service')
+const {execSync} = require('child_process')
+
+// 构建时把 commit 短 hash 注入客户端（页脚显示），用于把线上产物和仓库 commit 对上号。
+// CI 里由 workflow 提供 GITHUB_SHA；本地构建自动取 git HEAD。
+if (!process.env.VUE_APP_COMMIT_SHA) {
+    try {
+        process.env.VUE_APP_COMMIT_SHA = execSync('git rev-parse --short HEAD', {encoding: 'utf8'}).trim()
+    } catch (e) {
+        process.env.VUE_APP_COMMIT_SHA = ''
+    }
+}
+
 module.exports = defineConfig({
     transpileDependencies: true,
     //代码eslint验证
