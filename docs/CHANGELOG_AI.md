@@ -1644,3 +1644,27 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - 外部链接均带 `target="_blank" rel="noopener noreferrer"`
 - 若日后完成 ICP 备案，需在页脚补备案号并链接 `beian.miit.gov.cn`
 - 回滚：静态站备份 `/root/music.www.bak.20261021-120125`
+
+### 2026-10-21 — 页脚补上源码仓库与反馈入口
+
+### 修改内容
+页脚增加「源码」「反馈」两个链接；免责声明弹窗补一句源码地址。
+
+### 修改文件
+- `src/components/common/AppFooter.vue`
+- `src/config.js`（`site` 增加 `repo` / `issues`）
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+上一轮误判"项目没有 GitHub 仓库"，其实远端一直是 `github.com/Fintinger/ACMUSIC`（公开、Issues 已开启），
+是我的失误：下结论前没查 `git remote -v`。仓库可用，故把源码与反馈补上。
+
+### 测试结果
+- `yarn lint`（2 个文件）✅
+- `yarn build` ✅（app.bce51611.js）
+- 线上核对 ✅：产物含 `github.com/Fintinger/ACMUSIC`、「源码」「反馈」及免责声明新文案；
+  两个链接实测 200
+
+### 注意事项
+- 同轮把此前只在本地的 7 个 commit 一并推送到 origin（`67ebecd..7e54aaf`）
+- 回滚：静态站备份 `/root/music.www.bak.20261021-121341`

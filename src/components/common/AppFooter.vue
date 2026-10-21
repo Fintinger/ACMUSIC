@@ -6,6 +6,8 @@
     </div>
 
     <nav class="af-links">
+      <a :href="site.repo" target="_blank" rel="noopener noreferrer">源码</a>
+      <a :href="site.issues" target="_blank" rel="noopener noreferrer">反馈</a>
       <a :href="site.apiRepo" target="_blank" rel="noopener noreferrer">API 仓库</a>
       <a :href="site.apiDocs" target="_blank" rel="noopener noreferrer">API 文档</a>
       <button type="button" class="af-link-btn" @click="showDisclaimer = true">免责声明</button>
@@ -28,6 +30,11 @@
           数据与音频接口来自开源项目
           <a :href="site.apiRepo" target="_blank" rel="noopener noreferrer">{{ repoLabel }}</a>，
           遵循其原始开源许可。
+        </p>
+        <p>
+          本站源码开源在
+          <a :href="site.repo" target="_blank" rel="noopener noreferrer">{{ siteName }}</a>，
+          问题与建议欢迎在 Issues 反馈。
         </p>
       </div>
       <span slot="footer">
@@ -56,6 +63,12 @@ export default {
       if (!repo) return 'API 项目'
       const m = repo.match(/github\.com\/([^/]+\/[^/]+)/i)
       return m ? m[1] : 'API 项目'
+    },
+    siteName() {
+      const repo = this.site && this.site.repo
+      if (!repo) return 'GitHub'
+      const m = repo.match(/github\.com\/([^/]+\/[^/]+)/i)
+      return m ? m[1] : 'GitHub'
     }
   }
 }
