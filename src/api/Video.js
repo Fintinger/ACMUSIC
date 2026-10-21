@@ -17,20 +17,16 @@ export function url(id) {
 }
 
 /**
- * 相关视频
- * @param id 视频 id
- */
-export function related(id) {
-    return request('/related/allvideo', { params: { id } })
-}
-
-/**
  * mlog 转 video
  * @param id mlog id
  */
 export function mlogToVideo(id) {
     return request('/mlog/to/video', { params: { id } })
 }
+
+// 注: 原 related()(/related/allvideo 相关视频) 已删除 —— 上游 /api/cloudvideo/v1/allvideo/rcmd
+// 恒返回 { code:200, data:[] }(2026-10 实测，匿名与登录态一致)，相关推荐改用
+// utils/relatedVideos.js 的按标题搜索方案。
 
 /**
  * 视频分类列表（全部分类）

@@ -1,22 +1,29 @@
 <template>
-  <div id="player"></div>
+  <div :id="uid" class="player-root"></div>
 </template>
 
 <script>
 import Player from 'xgplayer'
+
+// ⚠️ 不能用固定 id="player"：xgplayer 通过 document.getElementById 定位容器，
+// 而 router-view 以 :key="$route.fullPath" 重建页面 —— 从一个播放页点相关推荐跳另一个播放页时，
+// 新旧两个 #player 会短暂共存于文档，getElementById 命中前面的旧容器，
+// 播放器渲染进即将销毁的旧 DOM → 新页面只剩黑框且控制台无任何报错。必须用唯一 id。
+let playerSeq = 0
 
 export default {
   name: "vidPlayer",
   props: ["url", "poster"],
   data() {
     return {
-      ply: {}
+      ply: null,
+      uid: `xgplayer-${Date.now()}-${playerSeq++}`
     }
   },
   methods: {
     initPlayer() {
       this.ply = new Player({
-        id: 'player',
+        id: this.uid,
         url: this.url,
         definitionActive: 'click',
         fluid: false,
@@ -52,24 +59,28 @@ export default {
     this.$nextTick(() => { if (this.ply && this.ply.resize) this.ply.resize() })
   },
   beforeDestroy() {
-    this.ply.destroy()
+    // url 为空等异常路径下 ply 可能未成功创建，安全销毁
+    if (this.ply && typeof this.ply.destroy === 'function') {
+      this.ply.destroy()
+    }
+    this.ply = null
   }
 }
 </script>
 
 <style scoped>
-#player{
+.player-root{
   position: absolute; inset: 0;
   width: 100%; height: 100%;
 }
 /* 关键修复：之前用 width:100% !important; height:100% !important 强制拉伸 video
    配合 fitVideoSize:'auto'，9:16 视频会被选为 'fix-width' → 高度超出容器 → 上半被裁切
    现在改成只让 xgplayer 自然占满容器（容器固定 16:9，video 用 object-fit:contain 保持比例） */
-#player ::v-deep .xgplayer {
+.player-root ::v-deep .xgplayer {
   width: 100%;
   height: 100%;
 }
-#player ::v-deep video {
+.player-root ::v-deep video {
   object-fit: contain;
   /* 保证控制条 z-index 永远在视频之上（已有 100 即可，覆盖 xgplayer 内部样式） */
 }

@@ -22,7 +22,7 @@
       <p>暂无评论</p>
     </div>
 
-    <div class="load-more">
+    <div class="load-more" v-if="!hideLoadMoreWhenEmpty || hotComment.length || newComment.length">
       <LoadMore :load="loadMoreNewComment" :loading="loading" :no-more="noMore"/>
     </div>
 
@@ -58,6 +58,8 @@ export default {
   props: {
     type: { required: true, type: String },
     id: { required: true },
+    // 无评论时隐藏底部 LoadMore（避免"已经到底了"误导），仅播放页开启
+    hideLoadMoreWhenEmpty: { type: Boolean, default: false },
   },
   components: { SendComment, CommentContentLayout, LoadMore },
   data() {

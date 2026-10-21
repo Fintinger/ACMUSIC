@@ -74,6 +74,10 @@ export default {
   watch: {
     curId() {
       this.reload()
+    },
+    // 从播放页点标签跳转过来（/explore/videoList?tag=现场）
+    '$route.query.tag'() {
+      this.applyRouteTag()
     }
   },
   methods: {
@@ -160,6 +164,17 @@ export default {
       this.curName = t.name
       this.curId = t.id
     },
+    /** 路由带 tag 时自动选中对应标签（播放页"#"标签跳转入口） */
+    applyRouteTag() {
+      const tag = this.$route && this.$route.query && this.$route.query.tag
+      if (!tag || !this.tags.length) return false
+      const t = this.tags.find(x => x.name === tag)
+      if (t && t.id !== this.curId) {
+        this.tagClick(t)
+        return true
+      }
+      return false
+    },
     /** 回到推荐流 */
     selectAll() {
       this.curName = ""
@@ -210,6 +225,8 @@ export default {
           .then(this.$axios.spread((tags, recommend) => {
             this.tags = (tags.data && tags.data.data) || []
             if (recommend) this.applyResult(recommend)
+            // 首次进入带 ?tag= 参数时，等标签就绪后再选中
+            this.applyRouteTag()
             this.$nextTick(() => this.updateArrows())
           }))
           .catch(() => { if (!this.curId) this.tagError = "加载失败，请稍后重试" })
@@ -238,6 +255,7 @@ export default {
     // 首次进入拉标签 + 推荐流; 已选标签时保留标签视图, 只重拉一次避免数据过期
     if (!this.tags.length) this.concurrentRequests()
     else if (this.curId) this.reload()
+    this.applyRouteTag()
   }
 }
 </script>

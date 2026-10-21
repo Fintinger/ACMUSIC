@@ -17,13 +17,9 @@ export function url(id, r) {
     return request('/mv/url', { params: { id, r } })
 }
 
-/**
- * 相似 MV
- * @param id MV id
- */
-export function simi(id) {
-    return request('/simi/mv', { params: { mvid: id } })
-}
+// 注: 原 simi()(/simi/mv 相似 MV) 已删除 —— 上游 /api/discovery/simiMV 完全忽略 mvid，
+// 任何 id 都返回同一份固定列表(2026-10 实测)，相似推荐改用
+// utils/relatedVideos.js 的按标题搜索方案。
 
 /**
  * 最新 MV（全部）

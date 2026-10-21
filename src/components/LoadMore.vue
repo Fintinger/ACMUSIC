@@ -4,7 +4,7 @@
       <i class="el-icon-loading"></i>
       <span>加载中...</span>
     </div>
-    <p v-else-if="noMore" class="state">已经到底了</p>
+    <p v-else-if="noMore" class="state">{{ noMoreText }}</p>
     <button v-else class="loadBtn" @click="load">加载更多</button>
   </div>
 </template>
@@ -15,7 +15,9 @@ export default {
   props: {
     loading: { type: Boolean, required: true },
     noMore: { type: Boolean, required: true },
-    load: { type: Function, required: true }
+    load: { type: Function, required: true },
+    // 自定义"没有更多"文案（如播放页评论区传"暂无评论"），默认不影响其他页面
+    noMoreText: { type: String, default: "已经到底了" }
   },
   data() {
     return { observer: null }
