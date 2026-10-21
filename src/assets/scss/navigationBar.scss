@@ -154,6 +154,22 @@
               .el-dropdown{
                 display: flex;
                 align-items: center;
+                .avatar-trigger{
+                  display: flex;
+                  align-items: center;
+                }
+                /* 无头像时的兜底：保证下拉触发器始终有内容，避免 ElDropdown 空插槽崩溃 */
+                .avatar-fallback{
+                  width: 64px;
+                  height: 64px;
+                  border-radius: 50%;
+                  background: #ececf2;
+                  color: #9c9cb0;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  cursor: pointer;
+                }
                 img{
                   width: 64px;
                   height: 64px;

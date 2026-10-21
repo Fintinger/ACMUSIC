@@ -35,7 +35,13 @@
               <div v-if="isLogin" class="avatar row-col-center">
                 <el-dropdown class="row-col-center" size="small" trigger="click"
                              @command="handleCommand">
-                  <img v-if="profile.avatarUrl" :src="profile.avatarUrl | https" alt="" class="el-dropdown-link">
+                  <!-- 默认插槽必须始终有内容：ElDropdown 的 render 直接取 $slots.default[0]，
+                       头像为空（头像未加载完 / 用户没设头像）时会抛
+                       "Cannot read properties of undefined (reading '0')" 导致整个导航区变白。 -->
+                  <span class="avatar-trigger">
+                    <img v-if="profile.avatarUrl" :src="profile.avatarUrl | https" alt="" class="el-dropdown-link">
+                    <i v-else class="avatar-fallback"><BaseIcon name="user" :size="26"/></i>
+                  </span>
                   <el-dropdown-menu slot="dropdown" class="user-dropdown">
                     <el-dropdown-item class="user-header" disabled>
                       <div class="user-header-inner">
