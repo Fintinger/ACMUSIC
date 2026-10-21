@@ -6,7 +6,7 @@ export default {
     site: {
         name: 'ACMUSIC',
         // 与 package.json 的 version 保持同步
-        version: '0.1.0',
+        version: '0.2.0',
         // 构建时的 commit 短 hash（vue.config.js 注入），用于核对线上产物对应哪个提交
         commit: process.env.VUE_APP_COMMIT_SHA || '',
         // 本站源码仓库（公开）

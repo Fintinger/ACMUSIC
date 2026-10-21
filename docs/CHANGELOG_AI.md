@@ -1703,3 +1703,24 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - 纯文档改动不触发部署（paths 过滤）；需要强制部署时可手动 `workflow_dispatch`
 - rsync 用 `--delete` 清理旧 hash 文件，必须保留 `.well-known` 排除项
 - 备份在 `/root/music.www.bak.*`，目前不自动清理，注意磁盘占用
+
+### 2026-10-21 — 版本号 0.2.0
+
+### 修改内容
+`package.json` 与 `config.site.version` 同步升到 0.2.0，标记今天这批改动（登录 502 / P0 五项 / 混合内容 / 音质链路 / 页脚）。
+
+### 修改文件
+- `package.json`
+- `src/config.js`
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+今天累计落地的功能量已远超 0.1.0 的语义，需要一个可对照的版本号；同时这次真实文件变更会触发首次自动部署。
+
+### 测试结果
+- 由 GitHub Actions 自动构建部署，见后续 run 结论
+- 验证点：页脚显示 `v0.2.0 · <commit>`，且线上 index.html 引用的 js 与本次构建一致
+
+### 注意事项
+- `package.json` 与 `config.site.version` 必须一起改，否则页脚版本与发布版本会漂移
+- 空提交（`--allow-empty`）不会触发部署，因为 workflow 有 `paths` 过滤
