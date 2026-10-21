@@ -1724,3 +1724,22 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 ### 注意事项
 - `package.json` 与 `config.site.version` 必须一起改，否则页脚版本与发布版本会漂移
 - 空提交（`--allow-empty`）不会触发部署，因为 workflow 有 `paths` 过滤
+
+### 2026-10-21 — CI 备份自动保留最近 5 份
+
+### 修改内容
+`deploy.yml` 的备份步骤追加 `ls -dt /root/music.www.bak.* | tail -n +6 | xargs -r rm -rf`，只保留最近 5 份。
+
+### 修改文件
+- `.github/workflows/deploy.yml`
+
+### 修改原因
+首次自动部署后服务器已有 8 份备份（每份约 15MB）。手工部署时代靠人记着清理，进 CI 后每次 push 都会多一份，必须自动收敛。
+
+### 测试结果
+- workflow YAML 解析 ✅（9 steps，备份命令含 prune 逻辑）
+- 本次改动不触发部署（`paths` 未包含 `.github/**`），会在下次 src 变更时生效
+
+### 注意事项
+- 删除范围严格限定 `/root/music.www.bak.*`，且保留最近 5 份
+- 若希望长期保留某个版本，改名移出该前缀即可

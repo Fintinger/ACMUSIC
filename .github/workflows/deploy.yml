@@ -55,8 +55,9 @@ jobs:
 
       - name: Backup current release
         run: |
+          # 备份当前版本，并只保留最近 5 份（每份约 15MB，避免长期堆积占盘）
           ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
-            "set -e; TS=\$(date +%Y%m%d-%H%M%S); cp -a $TARGET_DIR /root/music.www.bak.\$TS; echo \"backup=/root/music.www.bak.\$TS\""
+            "set -e; TS=\$(date +%Y%m%d-%H%M%S); cp -a $TARGET_DIR /root/music.www.bak.\$TS; ls -dt /root/music.www.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -rf; echo \"backup=/root/music.www.bak.\$TS\""
 
       - name: Upload
         run: |
