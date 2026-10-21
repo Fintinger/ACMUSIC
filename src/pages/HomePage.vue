@@ -122,6 +122,7 @@ import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 import playTracksBtn from "@/components/playTracksBtn";
 
 import {normalizeTrack, normalizePlaylist, normalizeArtist} from "@/utils/normalize";
+import {fetchFmBatch} from "@/utils/personalFm";
 import coverLight from "@/mixins/coverLight";
 import * as tracksApi from "@/api/Tracks";
 import * as playlistApi from "@/api/Playlist";
@@ -204,8 +205,14 @@ export default {
     getPersonalPlaylist() {
       return tracksApi.recommendResource()
     },
+    /**
+     * 私人FM 数据：直接用 /personal_fm 单次结果会出现不足 3 首的情况
+     * （实测游客态一次只返回 1 首），旧 UI 会拿同一首歌补满三张卡。
+     * 这里走 fetchFmBatch：不足则并发补拉，按 id 去重，最多 3 首且互不重复。
+     * 失败也不 reject（返回空数组），避免拖垮 concurrentRequests 里并行的其它请求。
+     */
     getPersonalFM() {
-      return tracksApi.personalFM(new Date().getTime())
+      return fetchFmBatch(3)
     },
     getDailySongs() {
       return tracksApi.recommendSongs()
@@ -235,9 +242,9 @@ export default {
     playPersonalFM() {
       //更新私人FM 标志（已下沉到 PlayerCore，通过 $bus 通知）
       this.$bus.$emit('fm-mode', true)
-      //初次播放私人FM：只取前 3 首，列表始终保持 3 首歌循环
-      this.getPersonalFM().then(res => {
-        this.personalFM = (res.data.data || []).slice(0, 3)
+      //初次播放私人FM：列表始终保持 3 首互不重复的歌（不足时不重复补位）
+      this.getPersonalFM().then(list => {
+        if (list && list.length) this.personalFM = list
       })
       this.$refs.personalFM.$emit('initPlay')
     },
@@ -268,7 +275,8 @@ export default {
             this.limitNum(personalPlaylist.data.recommend,5,item=>this.personalPlaylist.push(normalizeTrack(item)))
             this.personalLoading = false
             this.$nextTick(() => this.revealAfterImages('.recTracks-personalFM + .el-row', 'personalReady'))
-            this.personalFM = personalFM.data.data
+            // personalFM 已是去重后的歌曲数组（fetchFmBatch 直接返回数组，不再是 axios response）
+            if (personalFM && personalFM.length) this.personalFM = personalFM
             this.dailySongs = (dailySongs.data.data.dailySongs || []).map(normalizeTrack)
           }))
     }

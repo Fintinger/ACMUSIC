@@ -21,28 +21,28 @@
     <div class="fm-cover-group">
       <div class="fm-stage" v-if="displayList.length" ref="stage">
         <div
-            v-for="(item, i) in displayList"
-            :key="item.id"
+            v-for="d in displayList"
+            :key="d.pos + d.item.id"
             class="fm-card-wrapper"
-            :class="['fm-' + cardPos(i), { 'light-cover': isLightCover(item) }]"
-            :style="[cardStyle(i), item && item.album ? { '--fm-cover-url': `url('${coverUrl(item)}')` } : null]"
-            @click="playCard(item, $event)"
-            @mouseenter="onCardEnter(i)"
+            :class="['fm-' + d.pos, { 'light-cover': isLightCover(d.item) }]"
+            :style="[cardStyle(d.pos), d.item && d.item.album ? { '--fm-cover-url': `url('${coverUrl(d.item)}')` } : null]"
+            @click="playCard(d.item, $event)"
+            @mouseenter="onCardEnter(d.pos)"
             @mouseleave="onCardLeave"
-            @mousemove="i === 1 ? onStageMove($event) : null"
+            @mousemove="d.pos === 'current' ? onStageMove($event) : null"
         >
           <div class="fm-card">
-            <img :src="(item.album ? item.album.picUrl : '') | imgParam('300y300')" class="fm-cover" alt="">
+            <img :src="(d.item.album ? d.item.album.picUrl : '') | imgParam('300y300')" class="fm-cover" alt="">
             <!-- 歌曲信息 (绑定每张卡片, 随卡片轮播/旋转) -->
             <div class="fm-track-info">
-              <div class="fm-title">{{ item.name }}</div>
-              <div class="fm-artist">{{ artistsOf(item) }}</div>
+              <div class="fm-title">{{ d.item.name }}</div>
+              <div class="fm-artist">{{ artistsOf(d.item) }}</div>
             </div>
           </div>
           <!-- 每张卡独立镜面倒影平面 -->
           <div class="fm-reflection-plane">
             <div class="fm-reflection">
-              <img :src="(item.album ? item.album.picUrl : '') | imgParam('300y300')" alt=""/>
+              <img :src="(d.item.album ? d.item.album.picUrl : '') | imgParam('300y300')" alt=""/>
             </div>
           </div>
         </div>
@@ -53,7 +53,7 @@
 
 <script>
 import pubsub from 'pubsub-js'
-import * as tracksApi from "@/api/Tracks"
+import { fetchFmBatch } from "@/utils/personalFm"
 import { imgParam } from "@/utils/filters"
 
 export default {
@@ -80,14 +80,30 @@ export default {
     }
   },
   computed: {
-    // 横向三卡: [previous, current, next]
+    /**
+     * 横向三卡: [previous, current, next]
+     * ⚠️ /personal_fm 未登录/推荐池不足时可能只返回 1~2 首（实测游客态恒 1 首），
+     *    旧实现对 len=1 取模三次取到同一首 → 三张卡同一首歌。按实际数量出卡，不补位重复。
+     */
     displayList() {
-      if (!this.currentList.length) return []
-      const len = this.currentList.length
-      const prev = this.currentList[(this.activeIndex - 1 + len) % len]
-      const cur = this.currentList[this.activeIndex % len]
-      const next = this.currentList[(this.activeIndex + 1) % len]
-      return [prev, cur, next]
+      const list = this.currentList
+      if (!list.length) return []
+      if (list.length === 1) {
+        return [{ item: list[0], pos: 'current' }]
+      }
+      if (list.length === 2) {
+        const other = (this.activeIndex + 1) % 2
+        return [
+          { item: list[other], pos: 'previous' },
+          { item: list[this.activeIndex % 2], pos: 'current' }
+        ]
+      }
+      const len = list.length
+      return [
+        { item: list[(this.activeIndex - 1 + len) % len], pos: 'previous' },
+        { item: list[this.activeIndex % len], pos: 'current' },
+        { item: list[(this.activeIndex + 1) % len], pos: 'next' }
+      ]
     },
     currentCover() {
       const cur = this.currentList[this.activeIndex % this.currentList.length]
@@ -162,12 +178,9 @@ export default {
       img.onerror = () => { this.$set(this.coverLight, url, false) }
       img.src = url
     },
-    cardPos(i) {
-      return i === 0 ? 'previous' : (i === 1 ? 'current' : 'next')
-    },
-    // 当前卡片: 中心 + 鼠标微倾斜
-    cardStyle(i) {
-      if (i !== 1) return null
+    // 当前卡片: 中心 + 鼠标微倾斜（pos 为 previous / current / next）
+    cardStyle(pos) {
+      if (pos !== 'current') return null
       return {
         transform: `translateX(0) translateZ(120px) scale(1.03) rotateX(${this.tiltX}deg) rotateY(${this.tiltY}deg)`
       }
@@ -192,7 +205,8 @@ export default {
       this.$store.dispatch('TracksAbout/playAllTracks', [item])
       // 重新设回 true，保持 FM 模式（isPersonalFM 已下沉到 PlayerCore，通过 $bus 通知）
       this.$bus.$emit('fm-mode', true)
-      this.activeIndex = this.currentList.findIndex(s => s.id === item.id)
+      const idx = this.currentList.findIndex(s => s.id === item.id)
+      if (idx >= 0) this.activeIndex = idx
       this.$nextTick(() => this.startCarousel())
     },
     startCarousel() {
@@ -207,8 +221,8 @@ export default {
       if (this.fmTimer) { clearInterval(this.fmTimer); this.fmTimer = null }
     },
     // 鼠标移入当前卡片 -> 暂停轮播; 移出 -> 继续
-    onCardEnter(i) {
-      if (i === 1) this.stopCarousel()
+    onCardEnter(pos) {
+      if (pos === 'current') this.stopCarousel()
     },
     onCardLeave() {
       // 重置最前卡片的鼠标倾斜
@@ -270,12 +284,14 @@ export default {
       if (now - this.fmLastFetchAt < 1500) return Promise.resolve(null)
 
       this.fmFetching = true
-      return tracksApi.personalFM(now)
-        .then(res => {
-          const songs = res.data && res.data.data
+      // 走补量版拉取：/personal_fm 单次常不足 3 首（游客态实测恒 1 首），
+      // 且排除当前这批 id，避免换批后卡片看起来没变化
+      const excludeIds = this.currentList.map(s => s.id)
+      return fetchFmBatch(3, 4, excludeIds)
+        .then(songs => {
           if (!Array.isArray(songs) || !songs.length) return null
           this.fmLastFetchAt = Date.now()
-          return songs.slice(0, 3)
+          return songs
         })
         .catch(err => {
           console.error('[FMRefresh] failed', err)
