@@ -35,6 +35,8 @@
           <div class="personal-fm-area"><div class="rec-skeleton-block skeleton-item"></div></div>
         </div>
       </transition>
+      <!-- 私人漫游：每个模式/场景一张卡，单行横向滚动（不侵入私人FM 卡片） -->
+      <FmRoamCards/>
       <!--每日推荐-推荐歌单-->
       <el-row>
         <h2>每日推荐-推荐歌单</h2>
@@ -117,6 +119,7 @@ import AlbumLayout from "@/components/layout/AlbumLayout";
 import ArtistLayout from "@/components/layout/ArtistLayout";
 
 import PersonalFM from "@/components/PersonalFM";
+import FmRoamCards from "@/components/FmRoamCards";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 import playTracksBtn from "@/components/playTracksBtn";
@@ -154,7 +157,7 @@ export default {
     }
   },
   mixins: [coverLight],
-  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, GridSkeleton, playTracksBtn},
+  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, FmRoamCards, GridSkeleton, playTracksBtn},
   computed: {
     isLogin() {
       return this.$store.getters["UserAbout/isLogin"];

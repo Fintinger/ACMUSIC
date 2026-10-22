@@ -76,7 +76,11 @@ export default {
       fmLastFetchAt: 0,
       // reactive 触发时若 staged 不在且 fetch 进行中，设此标志
       // 等 fetch 完成后由 fetchAndStage 检测并立即应用
-      fmPendingApply: false
+      fmPendingApply: false,
+      // 撞上同一时间窗后的补拉定时器
+      staleTimer: null,
+      // 漫游模式切换的竞态令牌：连点多个模式时只认最后一次
+      roamToken: 0
     }
   },
   computed: {
@@ -237,6 +241,31 @@ export default {
       this.$bus.$emit('fm-mode', true)
     },
     /**
+     * 由首页「私人漫游」行触发（$bus 'fm-roam'）：
+     * 按 store 里的 fmMode / fmSubmode 重拉一批并立即播放。
+     *
+     * 为什么切模式要"重拉 + 重播"而不是接着原队列：
+     * 模式批次是上游按 (用户, 模式/场景, 时间窗) 生成的独立批次，
+     * 和当前队列无关，混在一起会得到"运动歌里夹着上一条流"的怪结果。
+     */
+    startRoam() {
+      const token = ++this.roamToken
+      // 作废旧批次，避免切换后先闪一下上一个模式的内容
+      this.$store.commit('TracksAbout/CLEAR_FM_STAGED_BATCH')
+      this.fmLastFetchAt = 0
+      this._doFetch().then(batch => {
+        // 连点多个模式时只认最后一次
+        if (token !== this.roamToken) return
+        if (!batch || !batch.length) {
+          if (this.$message) this.$message.warning('这个模式暂时没拉到内容，已保持原样')
+          return
+        }
+        this.$store.dispatch('TracksAbout/playAllTracks', batch)
+        this.$bus.$emit('fm-mode', true)
+        this._applyBatch(batch)
+      })
+    },
+    /**
      * FM 预加载（proactive）：PlayerCore 进入 song 3 时 publish 'fmPrefetch'
      * 拉取新一批 FM 歌曲并暂存到 store.fmStagedBatch（**不 REPLACE_PLAYLIST**）
      * 这样 song 3 继续播放，等歌曲自然结束时 reactive 流程再无缝切换
@@ -287,10 +316,24 @@ export default {
       // 走补量版拉取：/personal_fm 单次常不足 3 首（游客态实测恒 1 首），
       // 且排除当前这批 id，避免换批后卡片看起来没变化
       const excludeIds = this.currentList.map(s => s.id)
-      return fetchFmBatch(3, 4, excludeIds)
+      // 漫游模式：默认走 /personal_fm（推荐流），其余走 /personal/fm/mode
+      const { fmMode, fmSubmode } = this.$store.state.TracksAbout
+      const opts = fmMode && fmMode !== 'DEFAULT'
+        ? { mode: fmMode, submode: fmMode === 'SCENE_RCMD' ? fmSubmode : undefined }
+        : null
+      return fetchFmBatch(3, 4, excludeIds, opts)
         .then(songs => {
           if (!Array.isArray(songs) || !songs.length) return null
           this.fmLastFetchAt = Date.now()
+          /**
+           * 拿回来的跟当前这批一模一样：说明撞上了同一个时间窗（上游约 2 分钟一轮），
+           * 快速跳歌时很容易发生。此时不能干等——隔 60 秒在后台重试，
+           * 窗口一转就把新批预存起来，用户下一首自然就接上了。
+           */
+          if (this._sameAsCurrent(songs)) {
+            console.log('[FMRefresh]', { action: 'stale_window', count: songs.length })
+            this._scheduleStaleRetry()
+          }
           return songs
         })
         .catch(err => {
@@ -301,6 +344,22 @@ export default {
         .finally(() => {
           this.fmFetching = false
         })
+    },
+    /** 新批次是否与当前展示的完全相同（同时间窗） */
+    _sameAsCurrent(list) {
+      if (!list || !list.length) return false
+      const cur = this.currentList.map(s => s.id)
+      if (cur.length !== list.length) return false
+      return list.every(s => cur.indexOf(s.id) !== -1)
+    },
+    /** 撞上同一时间窗时，60 秒后在后台补拉一次（窗口一转就能拿到新批） */
+    _scheduleStaleRetry() {
+      if (this.staleTimer) return
+      this.staleTimer = setTimeout(() => {
+        this.staleTimer = null
+        this.fmLastFetchAt = 0
+        this.fetchAndStage()
+      }, 60000)
     },
     /**
      * 应用批次：REPLACE_PLAYLIST + 同步 PersonalFM 组件 UI + 通知 PlayerCore
@@ -315,6 +374,7 @@ export default {
     }
   },
   mounted() {
+    this.$bus.$on('fm-roam', this.startRoam)
     this.$on('initPlay', () => {
       if (this.currentList.length) {
         this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
@@ -334,6 +394,8 @@ export default {
   },
   beforeDestroy() {
     this.stopCarousel()
+    if (this.staleTimer) { clearTimeout(this.staleTimer); this.staleTimer = null }
+    this.$bus.$off('fm-roam', this.startRoam)
     if (this.fmPrefetchSubId !== null) pubsub.unsubscribe(this.fmPrefetchSubId)
     if (this.fmReactiveSubId !== null) pubsub.unsubscribe(this.fmReactiveSubId)
   }

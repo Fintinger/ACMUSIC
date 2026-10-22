@@ -25,6 +25,11 @@ export default {
         CLEAR_FM_STAGED_BATCH(state) {
             state.fmStagedBatch = null
         },
+        /** 私人漫游模式切换（mode 是互斥枚举，submode 只在 SCENE_RCMD 下有意义） */
+        SET_FM_MODE(state, { mode, submode }) {
+            if (mode) state.fmMode = mode
+            if (submode !== undefined) state.fmSubmode = submode
+        },
         //playList中添加歌曲
         PUSH_PLAYLIST(state, val) {
             //添加多首
@@ -55,5 +60,10 @@ export default {
         currentPlaylist: [],
         // FM 暂存批次（详见 SET_FM_STAGED_BATCH）
         fmStagedBatch: null,
+        // 私人漫游模式：DEFAULT / FAMILIAR / EXPLORE / SCENE_RCMD
+        // 供 PersonalFM 拉批时读取、由 FmRoamRow 写入（两者解耦，靠这个字段通信）
+        fmMode: 'DEFAULT',
+        // SCENE_RCMD 时生效的场景键（运动/专注/助眠…）
+        fmSubmode: 'EXERCISE',
     },
 }

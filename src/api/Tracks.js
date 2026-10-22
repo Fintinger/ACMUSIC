@@ -133,6 +133,38 @@ export function personalFM(t = Date.now()) {
 }
 
 /**
+ * 私人 FM 模式（可指定推荐策略 / 场景）
+ * 说明 : 官方参数（api-enhanced v4.39.0）
+ *   mode 必选 :
+ *     DEFAULT          默认模式
+ *     FAMILIAR         熟悉模式
+ *     EXPLORE          探索模式
+ *     SCENE_RCMD       场景模式（必须带 submode，否则上游静默回落成默认场景）
+ *     PUZZLE_MODE_RCMD 拼图模式
+ *   submode 仅在 SCENE_RCMD 时生效，枚举见 config/player.js 的 fmScenes
+ * 实测（2026-10-22 游客态）：
+ *   - 四种 mode 返回的首曲互不相同，说明 mode 真的起作用
+ *   - SCENE_RCMD + 合法 submode 每次返回 3 首；同一时间窗内重复调用结果稳定，
+ *     跨几分钟会换批（所以"补拉"拿不到新歌，需要回落 /personal_fm）
+ *   - 传入不存在的 submode **不会报错**，上游会静默回落成默认场景并照常返回数据，
+ *     因此不能靠"返回空"校验枚举，只能靠白名单
+ * @param mode 见上
+ * @param submode SCENE_RCMD 时必填
+ * @param limit 数量
+ * @param t 时间戳。**关键**：不带 t 时网关/上游会按时间窗缓存，
+ *   同一窗口内反复调用返回完全相同的 3 首（实测 2 分钟一轮）；
+ *   带上 t 后每次调用都返回一批全新的歌（实测连续三次三批全不同）。
+ *   推荐流必须带 t，否则续播永远拿不到新歌。
+ */
+export function personalFmMode(mode, submode, limit, t) {
+    const params = { mode }
+    if (submode) params.submode = submode
+    if (limit) params.limit = limit
+    params.t = t || Date.now()
+    return request('/personal/fm/mode', { params })
+}
+
+/**
  * 歌曲 URL（v1，可指定码率）
  * @param id 歌曲 id
  * @param br 码率（如 999000 = 无损）

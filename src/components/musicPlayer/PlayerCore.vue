@@ -229,6 +229,9 @@ export default {
       trackForm: 'full',
       // 副歌区间（秒）：{start,end} | null。null=本曲无可用标注
       chorusRange: null,
+      // chorusRange 属于哪首歌：与 currentSong.id 不一致时一律视为"还没有数据"，
+      // 防止换歌瞬间拿上一首的区间去 seek（见 _loadChorus 的竞态注释）
+      chorusRangeSongId: null,
       // 当前已加载副歌数据的歌曲 id（避免同一首歌重复请求/重复 seek）
       chorusSongId: null,
       // 已经为哪首歌做过「起播跳到副歌」的 seek，防重复触发把进度拉回开头
@@ -299,14 +302,18 @@ export default {
      * 宁可"开了但这次按全曲播"，也不要让用户等一个永远不会到来的跳转。
      */
     effectiveForm() {
-      return this.trackForm === 'chorus' && this.chorusRange ? 'chorus' : 'full'
+      return this.trackForm === 'chorus' && this.chorusRangeValid ? 'chorus' : 'full'
+    },
+    /** 区间存在且确实属于当前这首歌（换歌瞬间的残影不算） */
+    chorusRangeValid() {
+      return !!this.chorusRange && this.chorusRangeSongId === String(this.currentSong.id || '')
     },
     /**
      * 副歌区间在进度条上的几何位置（百分比）。
      * 时长优先取实际音频 duration（可能与歌曲元信息有两三秒差异），拿不到再退回 dt。
      */
     chorusStyle() {
-      const r = this.chorusRange
+      const r = this.chorusRangeValid ? this.chorusRange : null
       const dur = Number(this.timeDuration) || (this.currentSong.dt ? this.currentSong.dt / 1000 : 0)
       if (!r || !dur || r.start >= dur) return null
       const end = Math.min(r.end, dur)
@@ -709,6 +716,9 @@ export default {
             self.audioRetryCount = 0
             self.audioUseProxy = false
             self.suppressAudioError = false
+            // 新 src 会把播放进度归零：之前那次「跳到副歌起点」的 seek 已经作废，
+            // 清掉标记，让 canplay 时重新定位（否则副歌模式看起来像失效）
+            self.chorusSeekSongId = null
             self.sel.load()
             resolve()
             return
@@ -754,6 +764,9 @@ export default {
             self.audioRetryCount = 0
             self.audioUseProxy = false
             self.suppressAudioError = false
+            // 新 src 会把播放进度归零：之前那次「跳到副歌起点」的 seek 已经作废，
+            // 清掉标记，让 canplay 时重新定位（否则副歌模式看起来像失效）
+            self.chorusSeekSongId = null
             self.sel.load()
             resolve()
             return
@@ -915,6 +928,7 @@ export default {
       this.audioLastSrc = this.sel.src
       this.audioRetryCount = 0
       this.suppressAudioError = false
+      this.chorusSeekSongId = null
       this.sel.load()
     },
     playSong() {
@@ -1061,12 +1075,15 @@ export default {
     },
     _restartCurrent() {
       this.onInteract()
-      if (this.sel) {
-        try {
-          this.sel.currentTime = 0
-          if (!this.isPlay) this.playSong()
-        } catch (e) { /* ignore */ }
-      }
+      if (!this.sel) return
+      try {
+        this.sel.currentTime = 0
+        // 必须无条件 play()：autoNext 里只是原生 pause()，并没有改 isPlay，
+        // 靠 `if (!this.isPlay)` 判断会让「单曲循环 / FM 同批重播」停在 0:00 不出声
+        const p = this.sel.play()
+        if (p && p.catch) p.catch(() => {})
+        this.isPlay = true
+      } catch (e) { /* ignore */ }
     },
     togglePlayMode() {
       const order = ['order', 'sequence', 'loop', 'random']
@@ -1096,18 +1113,29 @@ export default {
       if (!id) {
         this.chorusSongId = null
         this.chorusRange = null
+        this.chorusRangeSongId = null
         this.chorusSeekSongId = null
         return
       }
-      if (String(id) === this.chorusSongId) return
-      this.chorusSongId = String(id)
+      const reqId = String(id)
+      if (reqId === this.chorusSongId) return
+      this.chorusSongId = reqId
       this.chorusRange = null
+      this.chorusRangeSongId = null
       this.chorusSeekSongId = null
       getChorus(id).then(r => {
-        // 期间可能已切歌：只认最新一首
-        if (String(this.currentSong.id) !== this.chorusSongId) return
+        // 【竞态修复】必须拿"发起请求时的 id"做校验，不能只比 currentSong 与 chorusSongId：
+        // 上一首歌的响应晚到时，后者两者都已经是新歌 id，校验会通过，
+        // 于是把上一首的区间写进当前歌 → seek 到错误的秒数、切歌点也永远不触发
+        //（表现为"换了模式之后只播副歌不生效"）。
+        if (reqId !== this.chorusSongId) return
+        if (String(this.currentSong.id) !== reqId) return
         this.chorusRange = r
+        this.chorusRangeSongId = r ? reqId : null
         console.log('[Chorus]', { songId: id, hasRange: !!r, start: r && r.start, end: r && r.end })
+        if (this.trackForm === 'chorus' && !r) {
+          console.warn('[Chorus] 无副歌数据，本曲按完整播放', { songId: id })
+        }
         if (this.effectiveForm === 'chorus') this._applyChorusSeek()
       })
     },
@@ -1120,7 +1148,7 @@ export default {
      *  3. 同时清掉 hasRestoreProgress，避免恢复进度逻辑把位置改回去。
      */
     _applyChorusSeek(force) {
-      const r = this.chorusRange
+      const r = this.chorusRangeValid ? this.chorusRange : null
       const id = this.currentSong && this.currentSong.id
       if (!r || !id) return
       if (this.sel.readyState < 1) return
@@ -1143,7 +1171,7 @@ export default {
      * @returns {boolean} true 表示本次已消费（调用方应停止后续的整曲结束判定）
      */
     _onChorusTick(n) {
-      const r = this.chorusRange
+      const r = this.chorusRangeValid ? this.chorusRange : null
       if (!r || this.effectiveForm !== 'chorus') return false
       const t = Number(n)
       if (!t || t < r.end - 0.35) return false
@@ -1530,6 +1558,30 @@ export default {
       if (!this.isPersonalFM) return
       if (typeof startIndex !== 'number' || startIndex < 0) return
       if (startIndex >= this.currentPlaylist.length) return
+      const target = this.currentPlaylist[startIndex]
+      if (!target) return
+      const sameIndex = this.curIndex === startIndex
+      const sameSong = target.id === this.currentSong.id
+      /**
+       * curIndex 赋值只有在"值变了"的时候才会触发 watcher。
+       * 而模式接口单次常只回 1 首、或换批后新歌正好落在同一位置（index 0），
+       * 这时直接 `this.curIndex = 0` 是个空操作 → 声音一直停在旧歌上，
+       * 表现为"换不了歌/永远是这三首"。所以这里必须显式区分三种情况。
+       */
+      if (sameIndex && !sameSong) {
+        console.log('[FM]', { action: 'switch_same_index', from: this.currentSong.id, to: target.id })
+        this.currentSongSource = 'playlist'
+        this.playlistContextId = this.playContextId
+        this.currentSong = target
+        return
+      }
+      if (sameIndex && sameSong) {
+        this.chorusSeekSongId = null
+        this._restartCurrent()
+        if (this.effectiveForm === 'chorus') this._applyChorusSeek(true)
+        console.log('[FM]', { action: 'replay_same_batch', songId: target.id })
+        return
+      }
       this.curIndex = startIndex
     },
     /**
