@@ -13,6 +13,18 @@
         <span v-if="opt.key === policy" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
       </div>
       <div v-if="fm" class="mm-note">私人 FM 中，队列策略暂不生效</div>
+
+      <div class="mm-header mm-header-gap">来源</div>
+      <div
+          class="mm-item"
+          :class="{ active: heart, muted: heartBusy }"
+          @click="$emit('toggle-heart')"
+      >
+        <span class="mm-label">心动模式</span>
+        <span v-if="heartBusy" class="mm-busy">取流中</span>
+        <span v-else-if="heart" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
+      </div>
+      <div class="mm-note">从红心歌单 + 当前这首，续出一路相似风格</div>
     </div>
   </transition>
 </template>
@@ -32,7 +44,11 @@ export default {
     // order=列表循环 / loop=单曲循环 / random=随机播放
     policy: { type: String, default: 'order' },
     // 私人 FM 态：队列策略被 FM 覆盖，这里只提示不隐藏
-    fm: { type: Boolean, default: false }
+    fm: { type: Boolean, default: false },
+    // 心动模式：开启时接管"下一首从哪来"，与 FM 互斥
+    heart: { type: Boolean, default: false },
+    // 取流中：置灰并给文字反馈，避免连点
+    heartBusy: { type: Boolean, default: false }
   },
   data() {
     return {
@@ -78,6 +94,13 @@ $accent: #8685EF;
   color: rgba(255, 255, 255, 0.35);
   letter-spacing: .8px;
   padding: 6px 10px 6px;
+
+  // 分组之间隔一条细线，否则"队列"和"来源"两组会糊成一片
+  &.mm-header-gap {
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
 }
 
 .mm-item {
@@ -99,6 +122,7 @@ $accent: #8685EF;
 }
 
 .mm-check { color: $accent; display: flex; align-items: center; flex-shrink: 0; }
+.mm-busy { font-size: 10px; color: rgba(255, 255, 255, 0.32); flex-shrink: 0; }
 
 .mm-note {
   font-size: 10px;

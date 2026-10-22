@@ -30,6 +30,8 @@ export default {
             if (mode) state.fmMode = mode
             if (submode !== undefined) state.fmSubmode = submode
         },
+        SET_HEART_MODE(state, val) { state.heartMode = !!val },
+        SET_HEART_BUSY(state, val) { state.heartBusy = !!val },
         //playList中添加歌曲
         PUSH_PLAYLIST(state, val) {
             //添加多首
@@ -65,5 +67,10 @@ export default {
         fmMode: 'DEFAULT',
         // SCENE_RCMD 时生效的场景键（运动/专注/助眠…）
         fmSubmode: 'EXERCISE',
+        // 心动模式是否接管队列来源（与私人 FM 互斥，两者都要决定"下一首从哪来"）
+        // 放在 store 而不是 PlayerCore 的 data：首页的入口卡片要读它显示状态
+        heartMode: false,
+        // 取流中：入口卡片要置灰并给文字反馈，避免连点
+        heartBusy: false,
     },
 }

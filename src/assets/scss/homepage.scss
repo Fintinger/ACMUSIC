@@ -21,6 +21,24 @@
     }
   }
 
+  // 漫游卡片行 + 右侧心动模式入口：同一排，卡片行吃满剩余宽度
+  // （嵌在 .homePage 里是为了压过上面的 `.homePage > div { margin-bottom: 50px }`）
+  .roam-line {
+    display: flex;
+    // 左右各留 12px 内边距：整排卡片（含心动卡）不再顶到内容区边线上，
+    // 左箭头也不会探出容器外。值只写在这里一处，_fit() 会读 computed padding
+    // 把这部分减掉再算卡宽，所以改这个数不用同步改 JS。
+    padding: 0 12px;
+    // 【必须 flex-end，不能 stretch】roam-strip 比卡片本身高出一截标题行
+    // （.roam-heading 26px + 14px 下边距），stretch 会把右边的心动卡一起拉到
+    // 整行高度，比卡片高出 ~40px。改成底部对齐，它才和卡片同高。
+    align-items: flex-end;
+    // 中间间距由 FmRoamCards._fit() 算成"刚好铺满"的剩余量下发（--roam-line-gap），
+    // 这样心动卡严丝合缝贴在最右、行尾不留零头；12 是 JS 没跑时的兜底
+    gap: var(--roam-line-gap, 12px);
+    margin-bottom: 30px;
+  }
+
   .fade-slide-enter-active,
   .fade-slide-leave-active {
     transition: opacity .3s ease, transform .3s ease;

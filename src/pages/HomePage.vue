@@ -36,7 +36,12 @@
         </div>
       </transition>
       <!-- 私人漫游：每个模式/场景一张卡，单行横向滚动（不侵入私人FM 卡片） -->
-      <FmRoamCards/>
+      <!-- 心动模式入口贴在漫游行右侧，但独立成块：它走 /playmode/intelligence/list
+           （红心歌单 + 种子曲目），和漫游卡选的 FM mode 不是一回事，不塞进同一个组件 -->
+      <div class="roam-line">
+        <FmRoamCards/>
+        <HeartModeCard/>
+      </div>
       <!--每日推荐-推荐歌单-->
       <el-row>
         <h2>每日推荐-推荐歌单</h2>
@@ -120,6 +125,7 @@ import ArtistLayout from "@/components/layout/ArtistLayout";
 
 import PersonalFM from "@/components/PersonalFM";
 import FmRoamCards from "@/components/FmRoamCards";
+import HeartModeCard from "@/components/HeartModeCard";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 
 import playTracksBtn from "@/components/playTracksBtn";
@@ -157,7 +163,7 @@ export default {
     }
   },
   mixins: [coverLight],
-  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, FmRoamCards, GridSkeleton, playTracksBtn},
+  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, FmRoamCards, HeartModeCard, GridSkeleton, playTracksBtn},
   computed: {
     isLogin() {
       return this.$store.getters["UserAbout/isLogin"];

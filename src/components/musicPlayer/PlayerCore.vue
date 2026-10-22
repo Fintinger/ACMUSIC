@@ -53,13 +53,17 @@
               <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="18"/>
               <BaseIcon v-else-if="playMode === 'sequence'" name="sequence" :size="18"/>
               <BaseIcon v-else name="loopOne" :size="18"/>
-              <i v-if="effectiveForm === 'chorus'" class="chorusDot"></i>
+              <i v-if="effectiveForm !== 'full'" class="chorusDot"></i>
+              <i v-else-if="heartMode" class="heartDot"></i>
             </span>
             <ModeMenu
                 :visible="showModeMenu"
                 :policy="playMode"
                 :fm="isPersonalFM"
+                :heart="heartMode"
+                :heart-busy="heartBusy"
                 @select-policy="setPlayMode"
+                @toggle-heart="toggleHeartMode"
             />
           </div>
           <span class="miniTrackBtn" @click="preSong"><BaseIcon name="prev" :size="18"/></span>
@@ -249,6 +253,7 @@ import QualityMenu from "@/components/musicPlayer/QualityMenu"
 import ModeMenu from "@/components/musicPlayer/ModeMenu"
 import { setAudioCache, getAudioCache, getAudioUrl, removeAudioCache } from "@/utils/audioCache"
 import { getChorus } from "@/utils/chorusCache"
+import { fetchHeartBatch, resetHeartPlaylistId } from "@/utils/heartMode"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
@@ -359,6 +364,8 @@ export default {
       longPressed: false,
       // FM 模式标志（从 Vuex 下沉到 PlayerCore 内部，PersonalFM/HomePage/App 通过 $bus 切换）
       isPersonalFM: false,
+      // 续批的 in-flight promise：并发调用要复用同一个，否则会重复拉两批
+      heartExtendPromise: null,
       shufflePos: -1,
       // _autoNext 锁：防止 song end 期间 timeNow watcher 多次触发 _autoNext
       // （音频暂停前 timeupdate 事件持续触发，会让 _autoNext 被多次调用）
@@ -388,6 +395,29 @@ export default {
       const len = this.currentPlaylist.length
       return len > 0 && this.curIndex === len - 1
     },
+    /**
+     * 心动模式（B 层内容来源）：接管"下一首从哪来"，与 FM 互斥。
+     * 状态放在 Vuex 而不是本地 data —— 首页那张入口卡片要读它显示"播放中"。
+     * 用 computed + setter 是为了让下面所有 `this.heartMode = x` 的写法保持原样。
+     */
+    heartMode: {
+      get() { return this.$store.state.TracksAbout.heartMode },
+      set(v) { this.$store.commit('TracksAbout/SET_HEART_MODE', v) }
+    },
+    heartBusy: {
+      get() { return this.$store.state.TracksAbout.heartBusy },
+      set(v) { this.$store.commit('TracksAbout/SET_HEART_BUSY', v) }
+    },
+    /**
+     * 心动模式的续批信号：比 FM 提前一首（倒数第二首就开始拉）。
+     * FM 到最后一首才预取是因为它一次只回 3 首、且 PersonalFM 有自己的暂存机制；
+     * 心动模式是"追加到队尾"，提前一首才来得及在切过去之前把队列补上。
+     */
+    heartShouldPrefetch() {
+      if (!this.heartMode) return false
+      const len = this.currentPlaylist.length
+      return len > 0 && this.curIndex >= len - 2
+    },
     coverUrl() {
       const s = this.currentSong
       return (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || ''
@@ -405,8 +435,10 @@ export default {
     modeBtnTitle() {
       const policy = this.modeLabel
       const form = this.effectiveForm === 'chorus' ? '只播副歌' : (this.effectiveForm === 'ab' ? 'A-B 循环' : '')
-      return form
-        ? `${policy} · ${form}（右键切换）`
+      const src = this.heartMode ? '心动模式' : ''
+      const tail = [form, src].filter(Boolean).join(' · ')
+      return tail
+        ? `${policy} · ${tail}（右键切换）`
         : `${policy}（右键切换播放模式）`
     },
     modeLabel() {
@@ -553,6 +585,9 @@ export default {
       // 会员权益随登录态变化，登出要清掉，否则菜单会对未登录用户解锁无损
       if (val) this._loadVipInfo()
       else { this.vipType = 0; this.vipChecked = false }
+      // 换账号/登出：红心歌单 id 缓存必须失效，否则会拿上一个账号的歌单去要推荐
+      resetHeartPlaylistId()
+      if (!val && this.heartMode) this.heartMode = false
     },
     song(val) {
       console.trace('[CurrentSongSet] song_watch', val && val.id)
@@ -690,6 +725,9 @@ export default {
      */
     fmShouldPrefetch(needed) {
       if (needed) pubsub.publish('fmPrefetch', Date.now())
+    },
+    heartShouldPrefetch(needed) {
+      if (needed) this._heartExtend()
     },
     'currentSong.id'(id, oldId) {
       // A-B 是按歌设定的：换歌就整块丢弃（区间 + 选点中间态）
@@ -1155,6 +1193,7 @@ export default {
       this.onInteract()
       // 手动下一首也要消耗"再播 N 首"的额度，否则计数会卡住不动
       if (this._consumeSleep(true)) return
+      if (this.heartMode) { this._heartAdvance(); return }
       if (this.isPersonalFM) {
         // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
         if (this.curIndex < this.currentPlaylist.length - 1) {
@@ -1194,6 +1233,7 @@ export default {
       // 定时停止：本曲已消耗掉，到点就停，不再往下切
       if (this._consumeSleep()) return
       if (this.playMode === 'loop' && !(opts && opts.skipLoop)) { this._restartCurrent(); return }
+      if (this.heartMode) { this._heartAdvance(); return }
       if (this.isPersonalFM) {
         // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
         if (this.curIndex < this.currentPlaylist.length - 1) {
@@ -1218,6 +1258,120 @@ export default {
       this.pauseSong()
       this.$message.info('队列已播完（顺序播放）')
       console.log('[PlayMode]', { action: 'queue_end', mode: this.playMode })
+    },
+    // ---------------- 心动模式（B 层：内容来源） ----------------
+    toggleHeartMode() {
+      if (this.heartBusy) return
+      this.heartMode ? this._heartOff() : this._heartOn()
+    },
+    _heartOff() {
+      this.heartMode = false
+      this.heartExtendPromise = null
+      this.$message.info('已关闭心动模式，队列保持当前内容')
+    },
+    /**
+     * 开启：以当前在播的这首为种子，从红心歌单拉一批，**整队替换**并从第一首开始播。
+     *
+     * 为什么是"清空重来"而不是"接在当前歌后面"：心动模式是一次明确的换台动作——
+     * 用户点它是想"换个口味听一路"，不是想给当前队列续命。保留旧队列会让
+     * 「列表循环」把用户绕回原来的歌，语义就糊了。
+     *
+     * 两个坑：
+     *  1. `isPersonalFM = false` 必须在 REPLACE_PLAYLIST **之前很久**做——
+     *     isPersonalFM 的 watcher 会 REPLACE_PLAYLIST([currentSong]) 把队列清成一首，
+     *     而 watcher 是 nextTick 才跑，同帧内先 REPLACE 会被它覆盖掉。放在异步取流
+     *     之前就天然错开了。
+     *  2. `curIndex = 0` 很可能是**空操作**（Vue 对同值赋值不触发 watcher），
+     *     这正是之前 FM 换不了歌的老毛病。所以必须显式判断：目标下标与当前下标
+     *     相同时直接改 currentSong，不走 curIndex。
+     */
+    _heartOn() {
+      const seed = (this.currentSong && this.currentSong.id) || (this.currentPlaylist[0] && this.currentPlaylist[0].id)
+      if (!seed) { this.$message.warning('先播放一首歌，心动模式需要一首歌作为起点'); return }
+      if (!this.isLogin) { this.$message.warning('心动模式基于你的红心歌单，请先登录'); return }
+      if (this.isPersonalFM) this.isPersonalFM = false
+      this.heartBusy = true
+      fetchHeartBatch(seed, 20).then(list => {
+        this.heartBusy = false
+        if (!list.length) { this.$message.info('这次没拿到心动推荐，稍后再试'); return }
+        this.heartMode = true
+        this.playContextId++
+        this.playlistContextId = this.playContextId
+        this.currentSongSource = 'playlist'
+        this.currentPlaySourceLocked = true
+        this.$store.commit('TracksAbout/REPLACE_PLAYLIST', list)
+        const target = list[0]
+        if (this.curIndex === 0) {
+          // 同下标：必须直接换 currentSong，否则 watcher 不触发、声音还停在上首歌
+          if (target.id === this.currentSong.id) {
+            this.chorusSeekSongId = null
+            this._restartCurrent()
+            if (this.effectiveForm !== 'full') this._applyRangeSeek(true)
+          } else {
+            this.currentSong = target
+          }
+        } else {
+          this.curIndex = 0
+        }
+        this.$nextTick(() => {
+          this.currentPlaylist.forEach(el => { el.curSong = el.id === target.id })
+        })
+        this.$message.success(`心动模式：已换上 ${list.length} 首，从第 1 首开始播`)
+        console.log('[Heart]', { action: 'on', seed, got: list.length, first: target.id })
+      }).catch(err => {
+        this.heartBusy = false
+        const map = {
+          NO_UID: '心动模式需要登录',
+          NO_HEART_PLAYLIST: '没找到你的红心歌单',
+          // 400 绝大多数是"红心歌单里还没有收藏"，得说明白，否则用户只会觉得功能坏了
+          BAD_PLAYLIST: '心动模式需要先有几首收藏歌曲（它基于红心歌单推荐）'
+        }
+        this.$message.warning((err && map[err.reason]) || '心动模式拉取失败，请稍后重试')
+        console.warn('[Heart] failed', err && err.reason, err && err.message)
+      })
+    },
+    /**
+     * 续批：把新一批追加到队尾（不去重到当前歌之前，避免队列重排打断播放）。
+     * 并发调用复用同一个 promise —— 否则 prefetch 和 _autoNext 兜底会各拉一批，
+     * 队列里出现两组内容相近的推荐。
+     */
+    _heartExtend() {
+      if (!this.heartMode) return Promise.resolve(false)
+      if (this.heartExtendPromise) return this.heartExtendPromise
+      const seed = this.currentSong && this.currentSong.id
+      if (!seed) return Promise.resolve(false)
+      this.heartExtendPromise = fetchHeartBatch(seed, 20).then(list => {
+        this.heartExtendPromise = null
+        if (!list.length) return false
+        const seen = new Set(this.currentPlaylist.map(t => String(t.id)))
+        const fresh = list.filter(t => !seen.has(String(t.id)))
+        if (!fresh.length) return false
+        this.$store.commit('TracksAbout/REPLACE_PLAYLIST', this.currentPlaylist.concat(fresh))
+        console.log('[Heart]', { action: 'extend', seed, added: fresh.length })
+        return true
+      }).catch(err => {
+        this.heartExtendPromise = null
+        console.warn('[Heart] extend failed', err && err.message)
+        return false
+      })
+      return this.heartExtendPromise
+    },
+    /** 心动模式下推进到下一首：队尾时先续批再走（正常情况 prefetch 已经补好了） */
+    _heartAdvance() {
+      if (this.curIndex < this.currentPlaylist.length - 1) {
+        this.currentSongSource = 'playlist'
+        this.playlistContextId = this.playContextId
+        this.curIndex = this.curIndex + 1
+        return
+      }
+      this._heartExtend().then(() => {
+        if (!this.heartMode) return
+        if (this.curIndex < this.currentPlaylist.length - 1) {
+          this.currentSongSource = 'playlist'
+          this.playlistContextId = this.playContextId
+          this.curIndex = this.curIndex + 1
+        }
+      })
     },
     getNextIndex() {
       // FM 模式：保持推荐算法给出的顺序，不走 shuffle（shuffle 会破坏 NetEase /personal_fm 的推荐排序）
@@ -2387,8 +2541,15 @@ mounted() {
     this.pubId = pubsub.subscribe('playAll', this.playAllSong)
     this.fmBatchId = pubsub.subscribe('fmNewBatch', this.playFmNewBatch)
     // FM 模式标志（从 Vuex 下沉）：PersonalFM / HomePage / App 通过 $bus 通知
-    this._fmModeHandler = (val) => { this.isPersonalFM = !!val }
+    // 心动模式与 FM 互斥（两者都要接管队列来源），开 FM 就关心动
+    this._fmModeHandler = (val) => {
+      this.isPersonalFM = !!val
+      if (val && this.heartMode) this.heartMode = false
+    }
     this.$bus.$on('fm-mode', this._fmModeHandler)
+    // 首页「心动模式」入口卡片：只发信号，真正的开关逻辑（登录校验/取流/换队列）在这里
+    this._heartToggleHandler = () => this.toggleHeartMode()
+    this.$bus.$on('heart-toggle', this._heartToggleHandler)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
     // 登录态启动后拉取一次 /likelist 填充 likedSongIds
@@ -2411,6 +2572,7 @@ mounted() {
     pubsub.unsubscribe(this.pubId)
     pubsub.unsubscribe(this.fmBatchId)
     this.$bus.$off('fm-mode', this._fmModeHandler)
+    this.$bus.$off('heart-toggle', this._heartToggleHandler)
   }
 }
 </script>
@@ -2553,6 +2715,13 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
         position: absolute; right: 2px; bottom: 2px;
         width: 6px; height: 6px; border-radius: 50%;
         background: $accent;
+        box-shadow: 0 0 0 2px rgba(28, 29, 40, 0.95);
+      }
+      // 心动模式指示点：琥珀色，和"区间形态"的点区分开
+      .heartDot {
+        position: absolute; right: 2px; bottom: 2px;
+        width: 6px; height: 6px; border-radius: 50%;
+        background: #f0c674;
         box-shadow: 0 0 0 2px rgba(28, 29, 40, 0.95);
       }
       &:hover {

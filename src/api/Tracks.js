@@ -60,13 +60,28 @@ export function simiTracks(id) {
 
 /**
  * 心动模式/智能播放
- * 说明 : 登录后调用此接口 , 可获取心动模式/智能播放列表
- * @param id(必选) 歌曲id
- * @param pid(必选) 歌单id
+ *
+ * @param id(必选) 种子歌曲 id —— 决定"从什么风格出发"
+ * @param pid(必选) 歌单 id —— **必须是「我喜欢的音乐」红心歌单**
  * @param sid(可选) 要开始播放的歌曲的 id
+ * @param count(可选) 建议条数
+ *
+ * 三条实测结论（2026-10-22，官方文档 + 真实请求双向验证）：
+ *  1. **pid 传普通歌单一律 400「不支持该歌单类型」**。官方开放平台明确写
+ *     「仅支持红心歌单使用」，前提条件（含匿名用户）是：有红心歌单 + 红心歌单有红心歌曲。
+ *     实测：匿名账号先 /like 一首进红心歌单，再拿该歌单 id 调，立刻 200。
+ *  2. **种子歌曲不要求在红心歌单里**（用一首没收藏的歌当种子照样 200）。
+ *  3. **count 只是建议值**：实测传 3 回过 3 也回过 81，传 10 回了 11。
+ *     所以调用方不要按 count 截断，上游自己有 150 上限。
+ *
+ * 返回结构：data[] -> { id, alg, recommended, songInfo }，
+ * 真正能播的字段在 songInfo 里（含 ar / al / dt，可直接过 normalizeTrack）。
  */
-export function smartPlay(id, pid, sid) {
-    return request('/playmode/intelligence/list', {params: {id, pid, sid}})
+export function smartPlay(id, pid, sid, count) {
+    const params = { id, pid }
+    if (sid) params.sid = sid
+    if (count) params.count = count
+    return request('/playmode/intelligence/list', { params })
 }
 
 /**
