@@ -60,6 +60,18 @@ export default {
         stroke: 'currentColor', strokeWidth: 2,
         path: 'M4 12h12 M12 8l4 4-4 4 M5 19h15',
     },
+    // A-B 循环：两个端点夹一段，右端回指箭头隐喻"到 B 跳回 A"
+    abLoop: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M6 6v12 M18 6v12 M7 12h9 M13 9.5l3 2.5-3 2.5',
+    },
+    // 定时停止：带指针的时钟
+    timer: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7.5V12l3.2 2',
+    },
     close: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 2,

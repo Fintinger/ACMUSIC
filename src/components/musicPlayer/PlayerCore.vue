@@ -41,7 +41,7 @@
           <div class="modeWrap" ref="modeWrap">
             <span
                 class="modeBtn"
-                :class="['mode-' + playMode, { 'is-chorus': effectiveForm === 'chorus' }]"
+                :class="['mode-' + playMode, { 'is-chorus': effectiveForm !== 'full' }]"
                 :title="modeBtnTitle"
                 @click="onModeClick"
                 @contextmenu.prevent="openModeMenu"
@@ -74,7 +74,7 @@
         </div>
         <div class="barProgress">
           <span class="barTime">{{ formatTime(timeNow) }}</span>
-          <div class="barTrack" ref="barTrack" @click="onProgressClick">
+          <div class="barTrack" ref="barTrack" :class="{ 'is-arming': abSetting }" @click="onProgressClick">
             <div class="barFill" :style="{ width: progress + '%' }">
               <div class="barThumb" ref="barThumb" @mousedown.stop="startDrag"></div>
             </div>
@@ -84,6 +84,14 @@
                 :class="{ on: effectiveForm === 'chorus' }"
                 :style="chorusStyle"
             ></div>
+            <div
+                v-if="abStyle"
+                class="abBand"
+                :class="{ on: effectiveForm === 'ab' }"
+                :style="abStyle"
+            ></div>
+            <!-- A 点已选、等 B 点时的临时标记 -->
+            <div v-if="abStartStyle" class="abMark" :style="abStartStyle"></div>
           </div>
           <span class="barTime">{{ formatTime(timeDuration) }}</span>
         </div>
@@ -106,9 +114,13 @@
         </div>
         <div class="barItem chorusWrap">
           <el-dropdown trigger="click" placement="top" @command="setTrackForm" @visible-change="onChorusDropdown">
-            <span class="chorusTrigger" :class="{ on: effectiveForm === 'chorus' }" :title="chorusTriggerTitle">
-              <BaseIcon name="chorus" :size="13"/>
-              <span class="chorusLabel">{{ trackForm === 'chorus' ? '副歌' : '完整' }}</span>
+            <span
+                class="chorusTrigger"
+                :class="{ on: effectiveForm !== 'full', 'is-arming': abSetting }"
+                :title="formTriggerTitle"
+            >
+              <BaseIcon :name="formIcon" :size="13"/>
+              <span class="chorusLabel">{{ formLabel }}</span>
             </span>
             <el-dropdown-menu slot="dropdown" class="chorusDropdown">
               <el-dropdown-item command="full" :class="{ 'is-active': trackForm === 'full' }">完整播放</el-dropdown-item>
@@ -116,6 +128,77 @@
                 只播副歌
                 <span v-if="!chorusRange" class="opt-hint">本曲无数据</span>
               </el-dropdown-item>
+              <el-dropdown-item command="ab" :class="{ 'is-active': trackForm === 'ab' }">
+                A-B 循环
+                <span class="opt-hint">{{ abHint }}</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="ab-here">
+                {{ abStart === null ? '把当前位置设为 A' : '把当前位置设为 B' }}
+              </el-dropdown-item>
+              <el-dropdown-item v-if="abRangeValid" command="ab-clear">清除 A-B 区间</el-dropdown-item>
+            </el-dropdown-menu>
+          </el-dropdown>
+        </div>
+        <div class="barItem sleepWrap">
+          <el-dropdown trigger="click" placement="top" @command="onSleepCommand" @visible-change="onChorusDropdown">
+            <span class="sleepTrigger" :class="{ on: sleepActive }" :title="sleepTitle">
+              <BaseIcon name="timer" :size="13"/>
+              <span class="sleepLabel">{{ sleepLabel }}</span>
+            </span>
+            <el-dropdown-menu slot="dropdown" class="sleepDropdown">
+              <el-dropdown-item command="off" :class="{ 'is-active': sleepMode === 'off' }">不定时</el-dropdown-item>
+              <el-dropdown-item command="song" :class="{ 'is-active': sleepMode === 'song' }">播完本首停止</el-dropdown-item>
+
+              <!-- 两档可调节：−/+ 步进，数字框里也能直接敲；改动即时生效 -->
+              <div class="sdRow" :class="{ 'is-active': sleepMode === 'count' }" title="从现在起重新计数">
+                <span class="sdLabel">再播</span>
+                <span
+                    class="sdStep"
+                    :class="{ disabled: countValue <= 1 }"
+                    @click.stop="stepSleep('count', -1)"
+                >−</span>
+                <input
+                    class="sdNum"
+                    type="text"
+                    inputmode="numeric"
+                    :value="countValue"
+                    @click.stop
+                    @change="onSleepNumInput('count', $event)"
+                />
+                <span
+                    class="sdStep"
+                    :class="{ disabled: countValue >= 99 }"
+                    @click.stop="stepSleep('count', 1)"
+                >+</span>
+                <span class="sdUnit">首</span>
+              </div>
+              <div class="sdRow" :class="{ 'is-active': sleepMode === 'time' }" title="从现在起重新计时">
+                <span class="sdLabel">播放</span>
+                <span
+                    class="sdStep"
+                    :class="{ disabled: timeValue <= 1 }"
+                    @click.stop="stepSleep('time', -1)"
+                >−</span>
+                <input
+                    class="sdNum"
+                    type="text"
+                    inputmode="numeric"
+                    :value="timeValue"
+                    @click.stop
+                    @change="onSleepNumInput('time', $event)"
+                />
+                <span
+                    class="sdStep"
+                    :class="{ disabled: timeValue >= 180 }"
+                    @click.stop="stepSleep('time', 1)"
+                >+</span>
+                <span class="sdUnit">分钟</span>
+              </div>
+
+              <div class="sdFade" @click.stop="toggleSleepFade">
+                <span>最后 {{ fadeSec }} 秒渐弱淡出</span>
+                <i class="sdSwitch" :class="{ on: sleepFade }"></i>
+              </div>
             </el-dropdown-menu>
           </el-dropdown>
         </div>
@@ -238,6 +321,39 @@ export default {
       chorusSeekSongId: null,
       // 首次开启副歌模式的一次性提示
       chorusHinted: false,
+      // ---- A-B 区间循环（C 层：手选区间，与副歌互斥）----
+      // 已确认的区间 {start,end}（秒）。按歌临时设定，不跨会话恢复
+      abRange: null,
+      // abRange 属于哪首歌（换歌瞬间的残影不算）
+      abRangeSongId: null,
+      // 选点过程中已确定的 A 点（秒），null=还没选
+      abStart: null,
+      // 选点状态：true 时点进度条是"选点"而不是"定位"
+      abSetting: false,
+      // 选点属于哪首歌
+      abSongId: null,
+      // A-B 回跳的瞬时锁：timeupdate 可能在 seek 之后又带旧值回来
+      abSeekLock: false,
+      // 已为哪首歌+哪种形态做过「起播定位」，避免重复 seek 把进度拉回起点
+      chorusSeekForm: '',
+      // ---- 定时停止（D 层：环境约束，与队列策略/单曲形态正交）----
+      // off=不定时 / song=播完本首 / count=再播 N 首 / time=N 分钟后
+      sleepMode: 'off',
+      sleepValue: 0,
+      // 未开启时两档各自记住的上次取值，避免每次打开菜单都从默认值开始调
+      countDraft: 5,
+      timeDraft: 30,
+      // count 模式剩余首数；time 模式截止时间戳
+      songsLeft: 0,
+      sleepDeadline: 0,
+      // 每秒刷新一次的"现在"，用来驱动倒计时文案重算
+      sleepNow: 0,
+      sleepTimerId: null,
+      // 渐弱淡出：最后 fadeSec 秒把音量线性降到 0
+      sleepFade: true,
+      fadeSec: 20,
+      fadeStarted: false,
+      fadeBase: 20,
       showModeMenu: false,
       longPressTimer: null,
       longPressed: false,
@@ -288,8 +404,9 @@ export default {
     config() { return config },
     modeBtnTitle() {
       const policy = this.modeLabel
-      return this.effectiveForm === 'chorus'
-        ? `${policy} · 只播副歌（右键切换）`
+      const form = this.effectiveForm === 'chorus' ? '只播副歌' : (this.effectiveForm === 'ab' ? 'A-B 循环' : '')
+      return form
+        ? `${policy} · ${form}（右键切换）`
         : `${policy}（右键切换播放模式）`
     },
     modeLabel() {
@@ -302,27 +419,66 @@ export default {
      * 宁可"开了但这次按全曲播"，也不要让用户等一个永远不会到来的跳转。
      */
     effectiveForm() {
-      return this.trackForm === 'chorus' && this.chorusRangeValid ? 'chorus' : 'full'
+      if (this.trackForm === 'chorus' && this.chorusRangeValid) return 'chorus'
+      if (this.trackForm === 'ab' && this.abRangeValid) return 'ab'
+      return 'full'
     },
     /** 区间存在且确实属于当前这首歌（换歌瞬间的残影不算） */
     chorusRangeValid() {
       return !!this.chorusRange && this.chorusRangeSongId === String(this.currentSong.id || '')
+    },
+    /** A-B 区间有效：已设定，且属于当前这首歌 */
+    abRangeValid() {
+      return !!this.abRange && this.abRangeSongId === String(this.currentSong.id || '')
     },
     /**
      * 副歌区间在进度条上的几何位置（百分比）。
      * 时长优先取实际音频 duration（可能与歌曲元信息有两三秒差异），拿不到再退回 dt。
      */
     chorusStyle() {
-      const r = this.chorusRangeValid ? this.chorusRange : null
-      const dur = Number(this.timeDuration) || (this.currentSong.dt ? this.currentSong.dt / 1000 : 0)
-      if (!r || !dur || r.start >= dur) return null
-      const end = Math.min(r.end, dur)
-      const left = Math.max(0, (r.start / dur) * 100)
-      const width = Math.max(1.2, ((end - r.start) / dur) * 100)
-      return { left: left + '%', width: Math.min(width, 100 - left) + '%' }
+      return this.rangePct(this.chorusRangeValid ? this.chorusRange : null)
+    },
+    /** A-B 区间在进度条上的几何位置 */
+    abStyle() {
+      return this.rangePct(this.abRangeValid ? this.abRange : null)
+    },
+    /** 只选了 A 点时的竖线标记 */
+    abStartStyle() {
+      if (this.abStart === null) return null
+      if (this.abSongId !== String(this.currentSong.id || '')) return null
+      const pct = this.rangePct({ start: this.abStart, end: this.abStart })
+      return pct ? { left: pct.left } : null
+    },
+    /** 右侧形态切换器的图标：A-B 用专用图标，其余沿用波形 */
+    formIcon() { return this.trackForm === 'ab' ? 'abLoop' : 'chorus' },
+    /**
+     * 右侧形态切换器的文案。
+     * 选点过程中文案要变成「设A / 设B」——否则用户点开菜单选了 A-B 之后
+     * 没有任何反馈，不知道下一步该干嘛。
+     */
+    formLabel() {
+      if (this.abSetting) return this.abStart === null ? '设A' : '设B'
+      if (this.trackForm === 'chorus') return '副歌'
+      if (this.trackForm === 'ab') return this.abRangeValid ? 'A-B' : 'A-B?'
+      return '完整'
+    },
+    /** A-B 菜单项右侧的小注：告诉用户现在是"没设"还是"设到哪了" */
+    abHint() {
+      if (!this.abRangeValid) return '需手动选点'
+      return `${this.formatTime(this.abRange.start)}-${this.formatTime(this.abRange.end)}`
     },
     /** 右侧形态切换器的提示：说明当前状态，并区分「本曲无副歌数据」的情况 */
-    chorusTriggerTitle() {
+    formTriggerTitle() {
+      if (this.abSetting) {
+        return this.abStart === null
+          ? '正在设定 A-B：点击进度条选择起点 A'
+          : `起点 A 已设为 ${this.formatTime(this.abStart)}，再点一次设定终点 B`
+      }
+      if (this.trackForm === 'ab') {
+        return this.abRangeValid
+          ? `当前：A-B 循环 ${this.formatTime(this.abRange.start)} - ${this.formatTime(this.abRange.end)}（点击切换）`
+          : '当前：A-B 循环 · 本曲还没选点（点击切换）'
+      }
       if (this.trackForm === 'chorus') {
         return this.chorusRange
           ? '当前：只播副歌（点击切换）'
@@ -331,6 +487,36 @@ export default {
       return this.chorusRange
         ? '当前：完整播放（点击切换为只播副歌）'
         : '当前：完整播放 · 本曲无副歌数据（点击切换）'
+    },
+    sleepActive() { return this.sleepMode !== 'off' },
+    /** 菜单里的「再播 N 首」当前取值：该档已启用时显示生效值，否则显示草稿 */
+    countValue() { return this.sleepMode === 'count' ? this.sleepValue : this.countDraft },
+    /** 菜单里的「N 分钟后」当前取值：同理 */
+    timeValue() { return this.sleepMode === 'time' ? this.sleepValue : this.timeDraft },
+    /** 剩余秒数（仅 time 模式有意义） */
+    sleepRemainSec() {
+      if (this.sleepMode !== 'time' || !this.sleepDeadline) return 0
+      return Math.max(0, Math.ceil((this.sleepDeadline - this.sleepNow) / 1000))
+    },
+    /**
+     * 定时按钮文案：激活时显示"还剩多少"，而不是"设了多久"。
+     * 用户关心的是还要多久停，不是自己刚才点了哪个档。
+     */
+    sleepLabel() {
+      if (this.sleepMode === 'time') return this.formatTime(this.sleepRemainSec)
+      if (this.sleepMode === 'count') return `${this.songsLeft}首`
+      if (this.sleepMode === 'song') return '本首后'
+      return '定时'
+    },
+    sleepTitle() {
+      const map = {
+        off: '定时停止：未开启（点击选择）',
+        song: '定时停止：播完当前这首后停止',
+        count: `定时停止：再播 ${this.songsLeft} 首后停止`,
+        time: `定时停止：${this.formatTime(this.sleepRemainSec)} 后停止`
+      }
+      const base = map[this.sleepMode] || map.off
+      return this.sleepFade ? `${base}（最后 ${this.fadeSec} 秒渐弱）` : base
     },
     isVip() { return this.vipType !== 0 },
     /**
@@ -483,7 +669,7 @@ export default {
     timeNow(n) {
       this.isExpand && this.$emit('tUpdate', n)
       // 副歌形态优先：到副歌终点就切歌，别等整曲自然播完
-      if (this._onChorusTick(n)) return
+      if (this._onRangeTick(n)) return
       if (this.sel.currentTime === this.timeDuration) this._autoNext()
       if ((this.timeDuration - n) < 0.5 && this.sel.currentTime !== this.timeDuration) {
         this._autoNext()
@@ -505,7 +691,9 @@ export default {
     fmShouldPrefetch(needed) {
       if (needed) pubsub.publish('fmPrefetch', Date.now())
     },
-    'currentSong.id'() {
+    'currentSong.id'(id, oldId) {
+      // A-B 是按歌设定的：换歌就整块丢弃（区间 + 选点中间态）
+      if (id !== oldId) this._resetAb()
       this._syncTitle()
       this._syncMediaSession()
     },
@@ -965,6 +1153,8 @@ export default {
     },
     nextSong() {
       this.onInteract()
+      // 手动下一首也要消耗"再播 N 首"的额度，否则计数会卡住不动
+      if (this._consumeSleep(true)) return
       if (this.isPersonalFM) {
         // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
         if (this.curIndex < this.currentPlaylist.length - 1) {
@@ -1001,6 +1191,8 @@ export default {
       setTimeout(() => {
         this.autoNextLocked = false
       }, 1000)
+      // 定时停止：本曲已消耗掉，到点就停，不再往下切
+      if (this._consumeSleep()) return
       if (this.playMode === 'loop' && !(opts && opts.skipLoop)) { this._restartCurrent(); return }
       if (this.isPersonalFM) {
         // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
@@ -1136,45 +1328,77 @@ export default {
         if (this.trackForm === 'chorus' && !r) {
           console.warn('[Chorus] 无副歌数据，本曲按完整播放', { songId: id })
         }
-        if (this.effectiveForm === 'chorus') this._applyChorusSeek()
+        if (this.effectiveForm === 'chorus') this._applyRangeSeek()
       })
     },
     /**
-     * 把播放位置跳到副歌起点（幂等）
+     * 把秒级区间换算成进度条上的百分比几何。
+     * 时长优先取实际音频 duration（可能与歌曲元信息有两三秒差异），拿不到再退回 dt。
+     */
+    rangePct(r) {
+      const dur = Number(this.timeDuration) || (this.currentSong.dt ? this.currentSong.dt / 1000 : 0)
+      if (!r || !dur || r.start >= dur) return null
+      const end = Math.min(r.end === undefined ? r.start : r.end, dur)
+      const left = Math.max(0, (r.start / dur) * 100)
+      const width = Math.max(1.2, ((end - r.start) / dur) * 100)
+      return { left: left + '%', width: Math.min(width, 100 - left) + '%' }
+    },
+    /**
+     * 把播放位置跳到当前生效区间的起点（幂等）
      *
      * 三条守卫都是踩过坑的：
      *  1. readyState < 1 时浏览器会丢弃 seek（元数据没加载出来，时长未知）；
-     *  2. 已经在区间内就不动，否则用户手动点进副歌会被拽回起点；
+     *  2. 已经在区间内就不动，否则用户手动点进区间会被拽回起点；
      *  3. 同时清掉 hasRestoreProgress，避免恢复进度逻辑把位置改回去。
+     *
+     * 「形态」也要参与幂等判断：同一首歌从副歌切到 A-B，起点不同，必须重新定位。
      */
-    _applyChorusSeek(force) {
-      const r = this.chorusRangeValid ? this.chorusRange : null
+    _applyRangeSeek(force) {
+      const form = this.effectiveForm
+      const r = form === 'chorus' ? this.chorusRange : (form === 'ab' ? this.abRange : null)
       const id = this.currentSong && this.currentSong.id
-      if (!r || !id) return
+      if (!r || !id || form === 'full') return
       if (this.sel.readyState < 1) return
-      if (!force && this.chorusSeekSongId === String(id)) return
+      if (!force && this.chorusSeekSongId === String(id) && this.chorusSeekForm === form) return
       const cur = this.sel.currentTime || 0
       if (cur >= r.start - 1 && cur < r.end) {
         this.chorusSeekSongId = String(id)
+        this.chorusSeekForm = form
         return
       }
       this.chorusSeekSongId = String(id)
+      this.chorusSeekForm = form
       this.hasRestoreProgress = false
       try {
         this.sel.currentTime = r.start
         this.timeNow = r.start
       } catch (e) { /* ignore */ }
-      console.log('[Chorus]', { action: 'seek_start', songId: id, start: r.start })
+      console.log('[Range]', { action: 'seek_start', form, songId: id, start: r.start })
     },
     /**
-     * 副歌形态的「到点」处理，由 timeNow watcher 每帧调用。
+     * 区间形态的「到点」处理，由 timeNow watcher 每帧调用。
      * @returns {boolean} true 表示本次已消费（调用方应停止后续的整曲结束判定）
      */
-    _onChorusTick(n) {
+    _onRangeTick(n) {
+      const t = Number(n)
+      if (!t) return false
+      // A-B 优先且"不切歌"：命中 B 点就跳回 A，即便单曲循环也如此
+      //（单曲循环 × A-B 的语义就是"反复听这一小段"）
+      if (this.effectiveForm === 'ab' && this.abRangeValid) {
+        const r = this.abRange
+        if (t < r.end - 0.05) return false
+        if (this.abSeekLock) return true
+        this.abSeekLock = true
+        setTimeout(() => { this.abSeekLock = false }, 300)
+        try {
+          this.sel.currentTime = r.start
+          this.timeNow = r.start
+        } catch (e) { /* ignore */ }
+        return true
+      }
       const r = this.chorusRangeValid ? this.chorusRange : null
       if (!r || this.effectiveForm !== 'chorus') return false
-      const t = Number(n)
-      if (!t || t < r.end - 0.35) return false
+      if (t < r.end - 0.35) return false
       if (this.autoNextLocked) return true
       if (this.playMode === 'loop') {
         // 单曲循环 × 只播副歌 = 副歌段循环
@@ -1190,16 +1414,23 @@ export default {
       this._autoNext({ skipLoop: true })
       return true
     },
-    /** 单曲形态切换（控制条右侧下拉用）：'full' | 'chorus' */
+    /**
+     * 单曲形态切换（控制条右侧下拉用）
+     * @param {string} form 'full' | 'chorus' | 'ab' | 'ab-here' | 'ab-clear'
+     */
     setTrackForm(form) {
-      const next = form === 'chorus' ? 'chorus' : 'full'
       this.showModeMenu = false
-      if (next === this.trackForm) return
+      if (form === 'ab-clear') { this._abClear(); return }
+      if (form === 'ab-here') { this._abPickHere(); return }
+      const next = form === 'chorus' ? 'chorus' : (form === 'ab' ? 'ab' : 'full')
+      // 切到别的形态时取消 A-B 选点，否则进度条会一直"点不动"
+      if (next !== 'ab') { this.abSetting = false; this.abStart = null }
       this.trackForm = next
-      try { localStorage.setItem('acmusic_track_form', next) } catch (e) { /* ignore */ }
+      // A-B 是按歌临时设的，不写进 localStorage（刷新后区间没了，留个 'ab' 只会让人困惑）
+      try { localStorage.setItem('acmusic_track_form', next === 'ab' ? 'full' : next) } catch (e) { /* ignore */ }
       if (next === 'chorus') {
         if (this.chorusRange) {
-          this._applyChorusSeek(true)
+          this._applyRangeSeek(true)
         } else {
           this.$message.info('这首歌没有副歌数据，本次按完整播放')
         }
@@ -1208,7 +1439,233 @@ export default {
           this.$message.success('已开启副歌模式：每首只播副歌段，到点自动切下一首')
         }
       }
-      console.log('[TrackForm]', { form: next, hasRange: !!this.chorusRange })
+      if (next === 'ab') {
+        if (this.abRangeValid) {
+          this.abSetting = false
+          this._applyRangeSeek(true)
+        } else {
+          this._abEnsureSong()
+          this.abSetting = true
+          this.$message.info('点击进度条设定起点 A')
+        }
+      }
+      console.log('[TrackForm]', { form: next, hasChorus: !!this.chorusRange, ab: !!this.abRangeValid })
+    },
+    /** A-B 选点前确保状态属于当前这首歌 */
+    _abEnsureSong() {
+      const id = String(this.currentSong.id || '')
+      if (this.abSongId === id) return
+      this.abSongId = id
+      this.abStart = null
+      this.abRange = null
+      this.abRangeSongId = null
+    },
+    /**
+     * 选一个点（秒）。第一次定 A，第二次定 B。
+     * 这是"点进度条"和"用当前播放位置"两条选点路径的公共落地逻辑。
+     */
+    _abPickPoint(t) {
+      const dur = Number(this.timeDuration) || 0
+      if (!dur) return
+      this._abEnsureSong()
+      const time = Math.max(0, Math.min(Number(t) || 0, dur))
+      if (this.abStart === null) {
+        this.abStart = time
+        this.$message.info(`起点 A：${this.formatTime(time)}，再点一次设定终点 B`)
+        return
+      }
+      const start = this.abStart
+      if (time - start < 1) {
+        this.$message.warning('终点 B 至少要晚于起点 A 1 秒')
+        return
+      }
+      this.abRange = { start, end: time }
+      this.abRangeSongId = String(this.currentSong.id || '')
+      this.abStart = null
+      this.abSetting = false
+      this.trackForm = 'ab'
+      this.$message.success(`A-B 已设定：${this.formatTime(start)} - ${this.formatTime(time)}`)
+      this._applyRangeSeek(true)
+      console.log('[AB]', { action: 'set', songId: this.abRangeSongId, start, end: time })
+    },
+    /** 用"当前播放位置"选点：比点进度条精确，适合卡某个乐句 */
+    _abPickHere() {
+      if (!this.currentSong.id) return
+      this._abEnsureSong()
+      this.abSetting = true
+      this._abPickPoint(Number(this.timeNow) || 0)
+    },
+    _abClear() {
+      this.abRange = null
+      this.abRangeSongId = null
+      this.abStart = null
+      this.abSetting = false
+      if (this.trackForm === 'ab') {
+        this.trackForm = 'full'
+        try { localStorage.setItem('acmusic_track_form', 'full') } catch (e) { /* ignore */ }
+      }
+      this.$message.info('已清除 A-B 区间')
+    },
+    /** 换歌：A-B 是按歌设定的，旧区间必须整块丢弃 */
+    _resetAb() {
+      this.abRange = null
+      this.abRangeSongId = null
+      this.abStart = null
+      this.abSetting = false
+      this.abSongId = null
+      if (this.trackForm === 'ab') {
+        this.trackForm = 'full'
+        try { localStorage.setItem('acmusic_track_form', 'full') } catch (e) { /* ignore */ }
+      }
+    },
+    // ---------------- 定时停止（D 层） ----------------
+    onSleepCommand(cmd) {
+      const [kind, val] = String(cmd).split(':')
+      if (kind === 'off') { this._clearSleep(); return }
+      if (kind === 'song') { this._applySleep('song', 0); return }
+      if (kind === 'count') { this._applySleep('count', Number(val) || this.countDraft); return }
+      if (kind === 'time') { this._applySleep('time', Number(val) || this.timeDraft); return }
+    },
+    /** 两档的取值范围与步进：首数按 1 走，分钟按 5 走（分钟没必要 1 分钟粒度的加减） */
+    _sleepSpec(kind) {
+      return kind === 'count'
+        ? { min: 1, max: 99, step: 1 }
+        : { min: 1, max: 180, step: 5 }
+    },
+    /**
+     * −/+ 步进。改动即时生效，并且是"从现在起重算"：
+     * 正在倒计时 12:30 时按 + ，得到的是 35 分钟后，而不是 12:35——
+     * 用户按 + 的意图是"再加一段"，不是"给当前剩余补 5 分钟"。
+     */
+    stepSleep(kind, dir) {
+      const spec = this._sleepSpec(kind)
+      const cur = kind === 'count' ? this.countValue : this.timeValue
+      const next = Math.min(spec.max, Math.max(spec.min, cur + dir * spec.step))
+      // 已在边界：按钮同时置灰，静默忽略（再弹提示连点会刷屏）
+      if (next === cur) return
+      // 静默生效：数字本身已经在变，再叠 toast 连点会刷屏
+      this._applySleep(kind, next, true)
+    },
+    /** 数字框直接输入：失焦/回车时提交，越界自动夹到边界 */
+    onSleepNumInput(kind, e) {
+      const spec = this._sleepSpec(kind)
+      const cur = kind === 'count' ? this.countValue : this.timeValue
+      const raw = parseInt(e.target.value, 10)
+      if (!raw || isNaN(raw)) { e.target.value = cur; return }
+      const next = Math.min(spec.max, Math.max(spec.min, raw))
+      e.target.value = next
+      if (next === cur && this.sleepMode === kind) return
+      this._applySleep(kind, next)
+      console.log('[Sleep]', { action: 'input', kind, value: next })
+    },
+    toggleSleepFade() {
+      this.sleepFade = !this.sleepFade
+      try { localStorage.setItem('acmusic_sleep_fade', this.sleepFade ? '1' : '0') } catch (e) { /* ignore */ }
+      if (!this.sleepFade) this._cancelFade()
+      console.log('[Sleep]', { action: 'fade_toggle', on: this.sleepFade })
+    },
+    _applySleep(mode, value, quiet) {
+      this._clearSleepClock()
+      this._cancelFade()
+      this.sleepMode = mode
+      this.sleepValue = value
+      // 记住取值，下次打开菜单从这里接着调
+      if (mode === 'count') this.countDraft = value
+      if (mode === 'time') this.timeDraft = value
+      this.songsLeft = mode === 'count' ? value : 0
+      this.sleepDeadline = mode === 'time' ? Date.now() + value * 60000 : 0
+      this.sleepNow = Date.now()
+      this._startSleepClock()
+      if (!quiet) {
+        const label = mode === 'song'
+          ? '播完当前这首后停止'
+          : (mode === 'count' ? `再播 ${value} 首后停止` : `${value} 分钟后停止`)
+        this.$message.success(`定时停止：${label}${this.sleepFade ? `（最后 ${this.fadeSec} 秒渐弱）` : ''}`)
+      }
+      console.log('[Sleep]', { action: 'set', mode, value, quiet: !!quiet })
+    },
+    _clearSleep() {
+      this._clearSleepClock()
+      this._cancelFade()
+      this.sleepMode = 'off'
+      this.sleepValue = 0
+      this.songsLeft = 0
+      this.sleepDeadline = 0
+      this.$message.info('已取消定时停止')
+    },
+    _startSleepClock() {
+      this._clearSleepClock()
+      // 1s 粒度：倒计时只要精确到秒，但必须真的每秒变一次，否则文案会"卡住"
+      this.sleepTimerId = setInterval(() => {
+        this.sleepNow = Date.now()
+        this._maybeFade()
+        if (this.sleepMode === 'time' && this.sleepRemainSec <= 0) {
+          this._sleepStop('定时已到，停止播放')
+        }
+      }, 1000)
+    },
+    _clearSleepClock() {
+      if (this.sleepTimerId) { clearInterval(this.sleepTimerId); this.sleepTimerId = null }
+    },
+    /**
+     * 每首歌结束（自然播完 / 副歌唱完 / 手动切下一首）时调用一次。
+     * @param {boolean} manual 是否是用户手动点的下一首
+     * @returns {boolean} true=已经到点，调用方不要再走切歌逻辑
+     */
+    _consumeSleep(manual) {
+      if (this.sleepMode === 'off') return false
+      if (this.sleepMode === 'song') {
+        // "播完本首"的语义是让它自然播完，手动切歌不该触发停止
+        if (manual) return false
+        this._sleepStop('已播完当前歌曲，停止播放')
+        return true
+      }
+      if (this.sleepMode === 'count') {
+        this.songsLeft -= 1
+        if (this.songsLeft <= 0) { this._sleepStop(`已播完 ${this.sleepValue} 首，停止播放`); return true }
+        console.log('[Sleep]', { action: 'song_left', songsLeft: this.songsLeft })
+      }
+      return false
+    },
+    _sleepStop(msg) {
+      this._cancelFade()
+      this.pauseSong()
+      this._clearSleepClock()
+      this.sleepMode = 'off'
+      this.sleepValue = 0
+      this.songsLeft = 0
+      this.sleepDeadline = 0
+      this.$message.info(msg)
+      console.log('[Sleep]', { action: 'stop', msg })
+    },
+    /**
+     * 渐弱淡出：把"距离停止还有多少秒"映射成音量比例。
+     * 只对"最后一首/最后一段"生效——中间几首突然变小声反而吓人。
+     */
+    _fadeRemainSec() {
+      if (this.sleepMode === 'time') return (this.sleepDeadline - this.sleepNow) / 1000
+      const isLastSong = this.sleepMode === 'song' || (this.sleepMode === 'count' && this.songsLeft <= 1)
+      if (!isLastSong) return null
+      const dur = Number(this.timeDuration) || 0
+      if (!dur) return null
+      return Math.max(0, dur - (Number(this.timeNow) || 0))
+    },
+    _maybeFade() {
+      if (!this.sleepFade || this.sleepMode === 'off') { this._cancelFade(); return }
+      const rem = this._fadeRemainSec()
+      if (rem === null || rem > this.fadeSec) { this._cancelFade(); return }
+      if (!this.fadeStarted) {
+        this.fadeStarted = true
+        this.fadeBase = this.volume
+      }
+      const f = Math.max(0, Math.min(1, rem / this.fadeSec))
+      const v = Math.round(this.fadeBase * f)
+      if (v !== this.volume) this.volume = v
+    },
+    _cancelFade() {
+      if (!this.fadeStarted) return
+      this.fadeStarted = false
+      this.volume = this.fadeBase
     },
     openModeMenu() {
       this.onInteract()
@@ -1504,7 +1961,8 @@ export default {
       }, 100)
     },
     scheduleHide() {
-      if (this.isDropdownOpen) return
+      // A-B 选点中不能自动收起：一收起用户就看不见自己在选什么了
+      if (this.isDropdownOpen || this.abSetting) return
       this.clearHideTimer()
       this.hideTimer = setTimeout(() => { this.showBar = false; this.showVolume = false }, this.isPlay ? 10000 : 10000)
     },
@@ -1518,11 +1976,16 @@ export default {
       const el = this.$refs.barTrack || this.$refs.miniTrack
       if (!el || !this.timeDuration) return
       const rect = el.getBoundingClientRect()
-      this.sel.currentTime = Math.max(0, Math.min(1, (evt.clientX - rect.left) / rect.width)) * this.timeDuration
+      const t = Math.max(0, Math.min(1, (evt.clientX - rect.left) / rect.width)) * this.timeDuration
+      // A-B 选点中：这一下是"选点"，不是"定位"——必须吃掉，否则选完 A 播放位置也跑了
+      if (this.abSetting) { this._abPickPoint(t); return }
+      this.sel.currentTime = t
     },
     startDrag(evt) {
       this.onInteract()
       if (!this.timeDuration) return
+      // 选点期间禁用拖动：拖动会连续改 currentTime，选点语义会乱
+      if (this.abSetting) return
       const onMove = (e) => {
         const el = this.$refs.barTrack; if (!el) return
         const rect = el.getBoundingClientRect()
@@ -1578,7 +2041,7 @@ export default {
       if (sameIndex && sameSong) {
         this.chorusSeekSongId = null
         this._restartCurrent()
-        if (this.effectiveForm === 'chorus') this._applyChorusSeek(true)
+        if (this.effectiveForm !== 'full') this._applyRangeSeek(true)
         console.log('[FM]', { action: 'replay_same_batch', songId: target.id })
         return
       }
@@ -1673,6 +2136,8 @@ export default {
           this.lastPositionSync = nowMs
           this._updatePositionState()
         }
+        // 定时淡出要跟着播放进度走（"播完本首"类的剩余时间来自 timeNow）
+        this._maybeFade()
         if (this.currentSong && this.currentSong.id) {
           const now = Date.now()
           if (now - this.lastSaveTime > 5000) {
@@ -1690,9 +2155,9 @@ export default {
         console.log('[PlayerLoading]', { action: 'ready', songId: this.currentSong.id, requestId: this.playRequestId })
         console.log('%c[AudioReady] %cduration=%s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', this.sel.duration)
         this.timeDuration = this.sel.duration
-        // 副歌形态要在 restore 之前定位：恢复进度可能落在歌曲前奏，
-        // 而副歌模式期望的是"一开口就是高潮段"
-        if (this.effectiveForm === 'chorus') this._applyChorusSeek()
+        // 区间形态（副歌 / A-B）要在 restore 之前定位：恢复进度可能落在歌曲前奏，
+        // 而这两种形态期望的是"一开口就在区间起点"
+        if (this.effectiveForm !== 'full') this._applyRangeSeek()
         if (this.hasRestoreProgress && this.currentSong.id && this.currentSong.id === this.restoreSongId && this.resumeTime > 0) {
           console.log('[PlayerState] seek_restore', { songId: this.currentSong.id, currentTime: this.resumeTime })
           this.sel.currentTime = this.resumeTime
@@ -1909,7 +2374,10 @@ mounted() {
       const savedMode = localStorage.getItem('acmusic_play_mode')
       if (savedMode && ['order', 'sequence', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
       const savedForm = localStorage.getItem('acmusic_track_form')
-      if (savedForm === 'chorus' || savedForm === 'full') this.trackForm = savedForm
+      // 'ab' 不会被写入（按歌临时设定），这里防御一下：区间不在了就回落完整播放
+      if (savedForm === 'chorus') this.trackForm = 'chorus'
+      const savedFade = localStorage.getItem('acmusic_sleep_fade')
+      if (savedFade === '0') this.sleepFade = false
     } catch (e) { /* ignore */ }
     this.addEventListeners()
     this._initMediaSession()
@@ -1930,6 +2398,8 @@ mounted() {
     }
   },
   beforeDestroy() {
+    // 定时器的 setInterval 不随组件销毁消失，必须显式清
+    this._clearSleepClock()
     window.removeEventListener('beforeunload', this._onBeforeUnload)
     window.removeEventListener('keydown', this._onGlobalKeydown)
     document.removeEventListener('mousedown', this._onDocMouseDown, true)
@@ -2119,8 +2589,14 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     .barTime { font-size: 11px; color: rgba(255,255,255,0.34); font-variant-numeric: tabular-nums; min-width: 34px; letter-spacing: .2px; &:first-child { text-align: right; } }
     .barTrack {
       flex: 1; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; cursor: pointer; position: relative;
-      transition: height 160ms ease;
+      transition: height 160ms ease, box-shadow 200ms ease;
       &:hover { height: 6px; border-radius: 3px; }
+      // A-B 选点中：整条轨道亮一下，明确"现在点我是在选点"
+      &.is-arming {
+        height: 6px; border-radius: 3px;
+        background: rgba(255,255,255,0.12);
+        box-shadow: 0 0 0 1px rgba($accent, 0.55), 0 0 10px rgba($accent, 0.35);
+      }
       .barFill {
         height: 100%; background: $accent; border-radius: inherit; position: relative;
         transition: width 0.1s linear; box-shadow: 0 0 6px rgba($accent, 0.18);
@@ -2145,12 +2621,35 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
         transition: background 200ms ease;
         &.on { background: rgba($accent, 0.5); }
       }
+
+      // A-B 区间：与副歌带子同规格，但用琥珀色区分来源
+      //（副歌是上游标注，A-B 是用户自己框的，颜色一样会分不清）
+      .abBand {
+        position: absolute; top: 0; bottom: 0;
+        background: rgba(240, 198, 116, 0.22);
+        border-left: 1px solid rgba(240, 198, 116, 0.85);
+        border-right: 1px solid rgba(240, 198, 116, 0.85);
+        border-radius: 2px;
+        pointer-events: none;
+        transition: background 200ms ease;
+        &.on { background: rgba(240, 198, 116, 0.46); }
+      }
+
+      // 只选了 A 点时的竖线
+      .abMark {
+        position: absolute; top: -3px; bottom: -3px;
+        width: 2px; margin-left: -1px;
+        background: rgba(240, 198, 116, 0.95);
+        border-radius: 1px;
+        pointer-events: none;
+        box-shadow: 0 0 6px rgba(240, 198, 116, 0.6);
+      }
     }
   }
 }
 
 .barRight {
-  flex: 0 0 168px; width: 168px; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  flex: 0 0 236px; width: 236px; display: flex; align-items: center; justify-content: flex-end; gap: 7px;
   .barItem {
     position: relative; cursor: pointer; color: $text-sec; display: flex; align-items: center;
     transition: color 160ms cubic-bezier(0.22,0.61,0.36,1);
@@ -2231,14 +2730,52 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       border-color: rgba($accent, 0.3);
       &:hover { background: rgba($accent, 0.16); border-color: rgba($accent, 0.45); }
     }
+    // 选点中：呼吸一下，提示"还差一步"
+    &.is-arming {
+      color: #f0c674;
+      border-color: rgba(240, 198, 116, 0.45);
+      background: rgba(240, 198, 116, 0.12);
+      animation: ab-arming 1.4s ease-in-out infinite;
+    }
+  }
+
+  // 定时停止：与形态切换器同规格 chip，激活时用主题色并显示倒计时
+  .sleepWrap .sleepTrigger {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    height: 22px; padding: 0 7px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    color: $text-sec;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    cursor: pointer;
+    transition: all 180ms $ease-standard;
+    &:hover { background: rgba(255, 255, 255, 0.1); color: $text; border-color: rgba(255, 255, 255, 0.18); }
+    &.on {
+      color: $accent;
+      background: rgba($accent, 0.1);
+      border-color: rgba($accent, 0.3);
+      .sleepLabel { font-variant-numeric: tabular-nums; }
+      &:hover { background: rgba($accent, 0.16); border-color: rgba($accent, 0.45); }
+    }
   }
 }
 
+@keyframes ab-arming {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 198, 116, 0); }
+  50% { box-shadow: 0 0 0 3px rgba(240, 198, 116, 0.14); }
+}
+
+@media (max-width: 1280px) {
+  // 未开启定时任务时省掉「定时」两个字，图标本身够表意
+  .barRight .sleepWrap .sleepTrigger:not(.on) .sleepLabel { display: none; }
+}
 @media (max-width: 1024px) {
   .barLeft { flex: 0 0 180px; width: 180px; }
-  .barRight { flex: 0 0 146px; width: 146px; }
+  .barRight { flex: 0 0 188px; width: 188px; }
   // 窄屏只留图标+箭头，避免右侧挤出可用区
   .barRight .chorusWrap .chorusTrigger .chorusLabel { display: none; }
+  .barRight .sleepWrap .sleepTrigger:not(.on) .sleepLabel { display: none; }
 }
 @media (max-width: 768px) {
   .fullBar { padding: 0 10px; gap: 6px; }
@@ -2360,6 +2897,111 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       color: rgba(255,255,255,0.28);
       background: rgba(255,255,255,0.05);
       border-radius: 4px; padding: 1px 5px;
+    }
+  }
+}
+
+/* global: 定时停止下拉（teleported to body，scoped 样式管不到） */
+.sleepDropdown {
+  background: #1c1d29 !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.55) !important;
+  border-radius: 12px !important;
+  padding: 6px !important;
+  min-width: 186px !important;
+  max-width: 220px;
+
+  .el-dropdown-menu__item {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 8px 10px; border-radius: 8px;
+    font-size: 13px; color: rgba(255,255,255,0.62);
+    line-height: 1.4;
+    transition: background 160ms ease, color 160ms ease;
+
+    &:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
+    &.is-active {
+      color: #8685EF;
+      background: rgba(134,133,239,0.12);
+      font-weight: 600;
+    }
+  }
+
+  // 可调节档位行：「再播 [−] N [+] 首后停止」/「播放 [−] N [+] 分钟后停止」
+  // 不用 el-dropdown-item：行内要放按钮和输入框，而 item 是一次性命令
+  .sdRow {
+    display: flex; align-items: center; gap: 5px;
+    padding: 7px 10px; border-radius: 8px;
+    font-size: 13px; color: rgba(255,255,255,0.62);
+    transition: background 160ms ease, color 160ms ease;
+
+    &:hover { background: rgba(255,255,255,0.06); }
+    &.is-active { color: #8685EF; background: rgba(134,133,239,0.1); font-weight: 600; }
+
+    .sdLabel { flex-shrink: 0; }
+    .sdUnit { flex-shrink: 0; font-weight: 400; }
+
+    .sdStep {
+      flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 6px;
+      font-size: 14px; line-height: 1;
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.8);
+      cursor: pointer; user-select: none;
+      transition: background 140ms ease, color 140ms ease;
+      &:hover { background: rgba(255,255,255,0.18); color: #fff; }
+      &:active { transform: scale(0.92); }
+      // 到边界置灰但仍占位，避免按钮消失导致行宽跳动
+      &.disabled { opacity: 0.3; cursor: not-allowed; &:hover { background: rgba(255,255,255,0.08); } }
+    }
+
+    // 定宽而不是 flex:1 —— 撑满会让整个弹窗被拉宽，而这里只需要放下两三位数字
+    .sdNum {
+      flex: 0 0 34px; width: 34px;
+      height: 20px; padding: 0 2px;
+      text-align: center;
+      font-size: 13px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      font-family: inherit;
+      color: inherit;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 140ms ease, background 140ms ease;
+      &:focus { border-color: rgba(134,133,239,0.6); background: rgba(0,0,0,0.34); }
+    }
+  }
+
+  // 淡出开关：不是"菜单项"，所以不用 el-dropdown-item，
+  // 自己画一个小 switch，避免选完就关菜单
+  .sdFade {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 4px; padding: 9px 10px 7px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 12px; color: rgba(255,255,255,0.45);
+    cursor: pointer;
+    transition: color 160ms ease;
+    &:hover { color: rgba(255,255,255,0.8); }
+  }
+
+  .sdSwitch {
+    position: relative; flex-shrink: 0;
+    width: 26px; height: 14px; border-radius: 7px;
+    background: rgba(255,255,255,0.14);
+    transition: background 180ms ease;
+
+    &::after {
+      content: '';
+      position: absolute; top: 2px; left: 2px;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: rgba(255,255,255,0.75);
+      transition: transform 180ms ease, background 180ms ease;
+    }
+
+    &.on {
+      background: rgba(134,133,239,0.55);
+      &::after { transform: translateX(12px); background: #fff; }
     }
   }
 }
