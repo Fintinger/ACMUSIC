@@ -8,7 +8,7 @@
           <el-row class="search-input">
             <el-row class="input-container">
               <input ref="input" v-model="keyword" :placeholder="placeholder" class="search-box" type="text"
-                     @blur="toggleSearch(false)"
+                     @blur="onBlur"
                      @focus="toggleSearch(true)"
                      @keypress.enter="search(keyword)"
               >
@@ -18,14 +18,12 @@
               <el-row v-if="suggest.songs.length" class="songs">
                 <el-divider content-position="left">单曲</el-divider>
                 <div class="suggest-container">
-                  <el-row v-for="s in suggest.songs" :key="s.id" class="tracks">
-                    <div class="wrapper" @click="songClk(s)">
-
+                  <el-row v-for="s in suggest.songs" :key="s.id" class="tracks" @click.native="songClk(s)">
+                    <div class="wrapper">
                       <span class="name">{{ s.name }}</span>
                       -
                       <span v-for="ar in s.artists" :key="ar.id" class="ar">{{ ar.name }}</span>
                     </div>
-
                   </el-row>
                 </div>
 
@@ -33,8 +31,8 @@
               <el-row v-if="suggest.artists.length" class="artists">
                 <el-divider content-position="left">歌手</el-divider>
                 <div class="suggest-container">
-                  <el-row v-for="ar in suggest.artists" :key="ar.id">
-                    <div class="wrapper" @click="arClk(ar.id)">
+                  <el-row v-for="ar in suggest.artists" :key="ar.id" @click.native="arClk(ar.id)">
+                    <div class="wrapper">
                       <span>{{ ar.name }}</span>
                     </div>
                   </el-row>
@@ -43,8 +41,8 @@
               <el-row v-if="suggest.albums.length" class="albums">
                 <el-divider content-position="left">专辑</el-divider>
                 <div class="suggest-container">
-                  <el-row v-for="al in suggest.albums" :key="al.id">
-                    <div class="wrapper" @click="alClk(al.id)">
+                  <el-row v-for="al in suggest.albums" :key="al.id" @click.native="alClk(al.id)">
+                    <div class="wrapper">
                       <span>{{ al.name }}</span>
                       -
                       <span v-if="al.artist">{{ al.artist.name }}</span>
@@ -55,8 +53,8 @@
               <el-row v-if="suggest.playlists.length" class="playlists">
                 <el-divider content-position="left">歌单</el-divider>
                 <div class="suggest-container">
-                  <el-row v-for="pl in suggest.playlists" :key="pl.id">
-                    <div class="wrapper" @click="plClk(pl.id)">
+                  <el-row v-for="pl in suggest.playlists" :key="pl.id" @click.native="plClk(pl.id)">
+                    <div class="wrapper">
                       <span>{{ pl.name }}</span>
                     </div>
                   </el-row>
@@ -67,8 +65,9 @@
           <el-row class="hot-search-list">
             <el-row class="title"><h2>热搜榜</h2></el-row>
             <el-row class="hot-list">
-              <el-row v-for="(item,ind) in hotSearch" :key="ind" class="hot-item row-col-center">
-                <div class="wrapper" @click="itemClick(item.searchWord)">
+              <el-row v-for="(item,ind) in hotSearch" :key="ind" class="hot-item row-col-center"
+                      @click.native="itemClick(item.searchWord)">
+                <div class="wrapper">
                   <el-col :order="ind + 1" :span="2" class="serial-number">{{ ind + 1 }}</el-col>
                   <el-col :span="18" class="info">
                     <scoText class="name-score-icon">
@@ -113,6 +112,7 @@ export default {
       hotSearch: [],
       suggestTimer: null,
       suggestSeq: 0,
+      blurTimer: null,
     }
   },
   watch: {
@@ -140,6 +140,16 @@ export default {
   methods: {
     toggleSearch(key) {
       this.$emit('toggleSearch', key)
+    },
+    /**
+     * input 失焦不再立刻关窗。
+     * 搜索窗在 App.vue 是 v-if，点击建议项时 mousedown 先触发 blur → 组件被卸载，
+     * 后面的 mouseup/click 就落空了（表现为「只有精确点中文字才生效」）。
+     * 这里延后 120ms 再关，给 click 留出执行窗口；真正关窗时 beforeDestroy 会清掉这个定时器。
+     */
+    onBlur() {
+      clearTimeout(this.blurTimer)
+      this.blurTimer = setTimeout(() => this.toggleSearch(false), 120)
     },
     onKeydown(e) {
       if (e.key === 'Escape') {
@@ -180,21 +190,33 @@ export default {
       return tracksApi.detail(ids)
     },
     songClk(song) {
+      // 先取 bus 引用：关窗会让本组件卸载，回调里 this 不再可靠
+      const bus = this.$bus
+      this.close()
       this.getCoverUrl(song.id).then(res => {
-        this.$bus.$emit('songClk', res.data.songs[0])
+        const first = res.data && res.data.songs && res.data.songs[0]
+        if (first) bus.$emit('songClk', first)
       })
     },
     arClk(id) {
       this.$bus.$emit('arClk', id)
+      this.close()
     },
     alClk(id) {
       this.$bus.$emit('alClk', id)
+      this.close()
     },
     plClk(id) {
       this.$bus.$emit('plClk', id)
+      this.close()
     },
     itemClick(keyword) {
       this.search(keyword)
+    },
+    /** 主动关窗（点了建议项/热搜项之后），清掉挂起的 blur 定时器 */
+    close() {
+      clearTimeout(this.blurTimer)
+      this.toggleSearch(false)
     }
   },
   mounted() {
@@ -205,6 +227,7 @@ export default {
   },
   beforeDestroy() {
     clearTimeout(this.suggestTimer)
+    clearTimeout(this.blurTimer)
     toggleScrollY(true)
     window.removeEventListener('keydown', this.onKeydown)
   }

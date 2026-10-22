@@ -1,247 +1,153 @@
 <template>
-  <div :class="['multimatch', 'type-' + name]">
-    <div class="match-title">{{ title }}</div>
-    <div class="match-content">
-      <!-- 歌手 -->
-      <ul v-if="name === 'artist'" class="mm-list mm-artist">
-        <li v-for="ar in list" :key="ar.id" class="mm-card mm-artist-card" @click="$bus.$emit('arClk', ar.id)">
-          <cover-image class="mm-avatar" :src="ar.img1v1Url || ar.picUrl || ar.avatarUrl" :alt="ar.name + '的头像'"/>
-          <div class="mm-name">{{ ar.name }}</div>
-        </li>
-      </ul>
-      <!-- 歌单 -->
-      <ul v-else-if="name === 'playlist'" class="mm-list mm-playlist">
-        <li v-for="pl in list" :key="pl.id" class="mm-card mm-playlist-card" @click="$bus.$emit('plClk', pl.id)">
-          <cover-image class="mm-cover" :src="(pl.coverImgUrl || pl.picUrl) | imgParam('200y200')" :alt="pl.name + '的封面'"/>
-          <div class="mm-info">
-            <div class="mm-name">{{ pl.name }}</div>
-            <div class="mm-meta"><BaseIcon name="play"/>{{ pl.playCount | Div1w(pl.playCount) }}</div>
-          </div>
-        </li>
-      </ul>
-      <!-- 专辑 -->
-      <ul v-else-if="name === 'album'" class="mm-list mm-album">
-        <li v-for="al in list" :key="al.id" class="mm-card mm-album-card" @click="$bus.$emit('alClk', al.id)">
-          <cover-image class="mm-cover" :src="al.picUrl | imgParam('200y200')" :alt="al.name + '的封面'"/>
-          <div class="mm-info">
-            <div class="mm-name">{{ al.name }}</div>
-            <div class="mm-meta">{{ albumArtists(al) }}</div>
-          </div>
-        </li>
-      </ul>
-      <!-- MV -->
-      <ul v-else-if="name === 'new_mlog'" class="mm-list mm-mv">
-        <li v-for="mv in list" :key="mv.id" class="mm-card mm-mv-card" @click="$bus.$emit('vClk', mv.id)">
-          <cover-image class="mm-img" :src="mv.resource.mlogBaseData.coverUrl | imgParam('500y280')" :alt="mv.resource.mlogBaseData.text + '的封面'"/>
-          <div class="mm-info">
-            <div class="mm-name">{{ mv.resource.mlogBaseData.text }}</div>
-            <div class="mm-meta">
-              <span class="mm-meta-item"><BaseIcon name="play"/>{{ mv.playTime | Div1w(mv.playTime) }}</span>
-              <span class="mm-meta-item"><i class="icon-time"></i>{{ mv.resource.mlogBaseData.duration | formatDuration }}</span>
-            </div>
-          </div>
-        </li>
-      </ul>
+  <div :class="['mm-strip-group', 'type-' + name]">
+    <div v-for="item in list" :key="item.id" class="mm-item"
+         role="button" tabindex="0" :aria-label="label + '：' + titleOf(item)"
+         @click="clk(item)" @keydown.enter="clk(item)">
+      <div class="mm-media">
+        <cover-image class="mm-img" :src="coverOf(item)" :alt="titleOf(item) + '的封面'"/>
+        <span class="mm-tag">{{ label }}</span>
+      </div>
+      <div class="mm-title">{{ titleOf(item) }}</div>
     </div>
   </div>
 </template>
 
 <script>
-const titles = { artist: "歌手", playlist: "歌单", album: "专辑", new_mlog: "MV" }
+/**
+ * MultimatchLayout —— 智能匹配里的一个类型，展开成若干张「同尺寸卡片」
+ *
+ * 布局约定（外层 .mm-panel 负责横向滚动）：
+ * - 每张卡固定 240px 宽、封面固定 16:9、标题固定两行、meta 固定一行
+ *   → 所有类型的所有条目尺寸完全一致，横向排成一条，超出由面板滚动
+ * - 类型名做成封面左上角的角标，不再占用卡片内部首行，卡片高度只由内容决定
+ * - 封面统一 16:9 裁切（歌单/专辑的方图也裁），换取整条卡片高度齐平
+ */
 import CoverImage from "@/components/common/CoverImage";
+import {imgParam} from "@/utils/filters";
+
+const titles = {artist: "歌手", playlist: "歌单", album: "专辑", new_mlog: "MV"}
+const busEventOf = {artist: "arClk", playlist: "plClk", album: "alClk", new_mlog: "vClk"}
 
 export default {
   name: "MultimatchLayout",
-  components: { CoverImage },
+  components: {CoverImage},
   props: {
-    targetList: { type: Array, required: true },
-    name: { type: String, required: true }
+    targetList: {type: Array, required: true},
+    name: {type: String, required: true}
   },
   computed: {
-    title() { return titles[this.name] || "" },
+    label() { return titles[this.name] || "" },
     list() { return this.targetList }
   },
   methods: {
-    albumArtists(al) {
-      if (Array.isArray(al.artists)) return al.artists.map(a => a.name).join(" / ")
-      if (al.artist) return al.artist.name
-return ""
+    clk(item) {
+      const ev = busEventOf[this.name]
+      if (ev && item) this.$bus.$emit(ev, item.id)
+    },
+    // MV 的真实数据藏在 resource.mlogBaseData 里，逐层兜底，别让模板直接点出来
+    mlog(item) {
+      const r = item && item.resource
+      return (r && r.mlogBaseData) || {}
+    },
+    titleOf(item) {
+      if (this.name === 'new_mlog') return this.mlog(item).text || 'MV'
+      return item.name || ''
+    },
+    coverOf(item) {
+      // 封面区域是 1:1，就统一按方图请求，避免 CDN 返回与容器比例不符的图
+      if (this.name === 'new_mlog') return imgParam(this.mlog(item).coverUrl, '400y400') || ''
+      if (this.name === 'artist') return imgParam(item.img1v1Url || item.picUrl || item.avatarUrl, '300y300') || ''
+      if (this.name === 'album') return imgParam(item.picUrl, '300y300') || ''
+      return imgParam(item.coverImgUrl || item.picUrl, '300y300') || ''
     }
   }
 }
 </script>
 
-<style lang="scss">
-/* ====== multimatch 卡片（独立布局，内容自适应高度） ====== */
-.resContainer .multimatch {
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  padding: 20px;
-  border-radius: 20px;
-  background: rgba(255,255,255,.85);
-  box-shadow: 0 8px 30px rgba(0,0,0,.06);
-  transition: transform .25s ease, box-shadow .25s ease;
-  animation: mmFade .4s ease;
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 30px rgba(0,0,0,.08);
-  }
-}
+<style lang="scss" scoped>
+@import "src/assets/scss/base/variables";
 
-@keyframes mmFade { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
-
-.resContainer .match-title {
-  height: 32px;
+/* 一个类型 = 一组同尺寸卡片横向连排；宽度由卡片数决定，不参与压缩 */
+.mm-strip-group {
+  flex: none;
   display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #222;
-}
-
-.resContainer .match-content {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* ====== mm-list 基础：横向排列 ====== */
-.resContainer .mm-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
   gap: 16px;
   align-items: flex-start;
 }
 
-/* ====== 歌手：横向卡片，头像 + 名称 ====== */
-.resContainer .type-artist .mm-list {
-  justify-content: flex-start;
-}
-
-.resContainer .type-artist .mm-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.mm-item {
+  flex: 0 0 200px;
+  width: 200px;
   cursor: pointer;
-  padding: 0;
+  outline: none;
+
+  &:focus-visible {
+    outline: 2px solid $color-main;
+    outline-offset: 4px;
+    border-radius: 14px;
+  }
 }
 
-.resContainer .type-artist .mm-avatar {
-  width: 120px; height: 120px;
-  margin-bottom: 12px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: #f2f3f5;
-}
-
-.resContainer .type-artist .mm-name {
-  text-align: center;
-  font-size: 16px; font-weight: 600; color: #222;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 120px;
-}
-
-/* ====== 歌单 / 专辑：横向卡片 ====== */
-.resContainer .type-playlist .mm-card,
-.resContainer .type-album .mm-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  padding: 0;
-  width: 320px;
-}
-
-.resContainer .type-playlist .mm-cover,
-.resContainer .type-album .mm-cover {
-  width: 64px; height: 64px;
-  flex: none;
-  border-radius: 10px;
-  object-fit: cover;
-  background: #f2f3f5;
-}
-
-.resContainer .type-playlist .mm-info,
-.resContainer .type-album .mm-info {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.resContainer .type-playlist .mm-name,
-.resContainer .type-album .mm-name {
-  font-size: 15px; font-weight: 600; color: #222;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-.resContainer .type-playlist .mm-meta,
-.resContainer .type-album .mm-meta {
-  font-size: 12px; color: #999;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-.resContainer .type-playlist .mm-meta i,
-.resContainer .type-album .mm-meta i {
-  font-size: 11px; margin-right: 3px;
-}
-
-/* ====== MV：横向卡片，禁止滚动条，最多 3 个 ====== */
-.resContainer .type-new_mlog .mm-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  overflow: hidden;
-  max-width: 100%;
-}
-
-.resContainer .type-new_mlog .mm-card {
-  flex: none;
-  width: 220px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.resContainer .type-new_mlog .mm-card:nth-child(n+4) { display: none; }
-
-.resContainer .type-new_mlog .mm-img {
+/* 媒体区：固定 1:1，与站内其它封面（歌单/专辑卡片）比例一致 */
+.mm-media {
+  position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border-radius: 14px;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
   background: #f2f3f5;
+}
+
+/* 绝对定位 + inset:0 + object-fit:cover：无论原图比例如何都完整覆盖底框，不会露出灰边 */
+.mm-media ::v-deep .mm-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
+  transition: transform .35s ease;
 }
 
-.resContainer .type-new_mlog .mm-info {
-  padding-top: 10px;
+.mm-item:hover .mm-media ::v-deep .mm-img { transform: scale(1.04); }
+
+/* 类型角标：贴在封面上，不再占卡片内部的一行高度 */
+.mm-tag {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .48);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: .02em;
 }
 
-.resContainer .type-new_mlog .mm-name {
-  font-size: 14px; font-weight: 600; color: #222;
-  line-height: 1.3;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+/* 标题固定两行高度 → 每张卡等高（不再展示下方的字段信息） */
+.mm-title {
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #222;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.8em;
 }
 
-.resContainer .type-new_mlog .mm-meta {
-  display: flex;
-  gap: 12px;
-  margin-top: 6px;
-  font-size: 12px; color: #999;
+/* 歌手：圆头像居中，不跟着方图裁成硬边方框 */
+.type-artist .mm-media ::v-deep .mm-img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
 }
 
-.resContainer .type-new_mlog .mm-meta-item {
-  display: inline-flex; align-items: center; gap: 4px;
-  white-space: nowrap;
-}
-
-.resContainer .type-new_mlog .mm-meta-item i { font-size: 11px; }
-
-.resContainer .type-new_mlog .icon-time::before { content: "◷"; }
+.type-artist .mm-item:hover .mm-media ::v-deep .mm-img { transform: scale(1.06); }
 </style>

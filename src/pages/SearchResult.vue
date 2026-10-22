@@ -7,8 +7,9 @@
 
     <section v-if="multiRes.length" class="multimatch-section">
       <h2>智能匹配</h2>
-      <div class="resContainer">
-        <MultimatchLayout v-for="(res,ind) in multiRes" :key="ind" :name="res.name" :target-list="res.data"/>
+      <!-- 一块面板装所有类型，类型标题在面板内按行排（原先是每个类型一张卡并排 → 高度对不齐） -->
+      <div class="mm-panel">
+        <MultimatchLayout v-for="res in multiRes" :key="res.name" :name="res.name" :target-list="res.data"/>
       </div>
     </section>
 
@@ -67,19 +68,28 @@ export default {
   methods: {
     getMultimatch(keywords) {
       this.multiRes = []
+      if (!keywords) return
       searchApi.multimatch(keywords)
           .then(res => {
-            res.data.result.orders.map(val => {
-              if (val === "new_mlog") {
-                const mlogData = res.data.result.new_mlog || []
-                if (mlogData.length) {
-                  this.multiRes.push({name: 'new_mlog', data: mlogData.map(item => item.baseInfo)})
-                }
-              } else {
-                this.multiRes.push({name: val, data: res.data.result[val]})
+            const result = (res.data && res.data.result) || {}
+            const orders = Array.isArray(result.orders) ? result.orders : []
+            const rows = []
+            // 只认这 4 种：接口的 orders 里还可能混进 video/djprogram 等类型，
+            // 没有对应渲染分支，推进来就是一个空行 + 空标题
+            orders.forEach(val => {
+              if (val === 'new_mlog') {
+                const mlogData = Array.isArray(result.new_mlog) ? result.new_mlog : []
+                const list = mlogData.map(item => item && item.baseInfo).filter(Boolean)
+                if (list.length) rows.push({name: 'new_mlog', data: list})
+                return
               }
+              if (!['artist', 'playlist', 'album'].includes(val)) return
+              const list = result[val]
+              if (Array.isArray(list) && list.length) rows.push({name: val, data: list})
             })
+            this.multiRes = rows
           })
+          .catch(() => { this.multiRes = [] })
     }
   }
 }
@@ -101,17 +111,28 @@ export default {
 
 .multimatch-section {
   margin-bottom: 28px;
-  h2 { font-size: 18px; font-weight: 700; color: $font-black-1; margin: 0 0 16px; }
-  .resContainer {
+  h2 { font-size: 18px; font-weight: 700; color: $font-black-1; margin: 0; }
+  .mm-panel {
     display: flex;
-    flex-wrap: wrap;
     align-items: flex-start;
     gap: 24px;
     width: 100%;
-    padding: 24px;
+    padding: 24px 24px 14px;
     box-sizing: border-box;
     background: #f7f8fa;
     border-radius: 24px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, .14) transparent;
+
+    &::-webkit-scrollbar { height: 6px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, .14);
+      border-radius: 3px;
+    }
+    &::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, .24); }
   }
 }
 

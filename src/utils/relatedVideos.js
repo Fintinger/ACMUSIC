@@ -1,4 +1,5 @@
 import * as searchApi from "@/api/Search";
+import * as videoApi from "@/api/Video";
 
 /**
  * 相关视频推荐
@@ -69,4 +70,33 @@ export async function fetchRelatedVideos(title, { excludeId, numericOnly = false
         }
     }
     return []
+}
+
+/**
+ * 推荐流兜底：相关视频一条都搜不到时用（标题太具体、作者没发过别的视频、
+ * mlog 转出来的视频没有 videoGroup 标签 → candidates 只剩标题和作者名，实测双双 0 条）。
+ *
+ * 不兜底的话 VideoPlayerLayout 的 `v-if="simiVideo.length || simiLoading"` 会整块拿掉，
+ * 右侧直接空白；这里用 /video/timeline/recommend 补位。
+ *
+ * 返回结构与 /cloudsearch?type=1014 的 videos 项同构（vid / coverUrl / title / creator /
+ * playTime / durationms），上层渲染逻辑不用改。
+ *
+ * @param {Object} opts
+ * @param {String|Number} [opts.excludeId] 排除当前视频
+ * @param {Number} [opts.limit]
+ * @returns {Promise<Array>} 失败或无数据返回 []
+ */
+export async function fetchRecommendVideos({excludeId, limit = 10} = {}) {
+    try {
+        const res = await videoApi.timelineRecommend(0)
+        const datas = (res.data && res.data.datas) || []
+        return datas
+            .map(it => it && it.data)
+            .filter(v => v && v.vid)
+            .filter(v => String(v.vid) !== String(excludeId == null ? "" : excludeId))
+            .slice(0, limit)
+    } catch (e) {
+        return []
+    }
 }

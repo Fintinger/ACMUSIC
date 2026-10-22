@@ -49,7 +49,7 @@
 
       <!-- 相关推荐：有数据或仍在请求时都占位，避免列表出来后播放区被挤窄 -->
       <aside v-if="simiVideo.length || simiLoading" class="simi-sidebar" :style="sidebarStyle">
-        <h2 class="simi-title">相关推荐</h2>
+        <h2 class="simi-title">{{ simiFallback ? '为你推荐' : '相关推荐' }}</h2>
         <div class="simi-list">
           <template v-if="simiLoading && !simiVideo.length">
             <div v-for="n in 6" :key="'sk' + n" class="simi-item simi-item--skeleton">
@@ -112,6 +112,8 @@ export default {
     simiClickEvt: { type: Function, required: true },
     // 相关推荐是否在请求中（父页面传入，用于占位）
     simiLoading: { type: Boolean, default: false },
+    // 相关视频搜不到、侧栏退化成推荐流时为 true。只影响标题文案，不涉及任何样式
+    simiFallback: { type: Boolean, default: false },
     // 播放地址取不到（上游返回 null/取流失败）：不再卡在骨架屏，给出明确提示
     urlFailed: { type: Boolean, default: false },
     id: { required: true },

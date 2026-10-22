@@ -4,6 +4,7 @@
     <VideoPlayerLayout v-if="newId || id" :id="newId || id" :detail="detail" :nameConfig="nameConfig" :simi-click-evt="vClk"
                          :simi-video="simiVid"
                          :simi-loading="simiLoading"
+                         :simi-fallback="simiFallback"
                          :url-failed="urlFailed"
                          :url="url"/>
   </div>
@@ -12,7 +13,7 @@
 <script>
 import VideoPlayerLayout from "@/components/layout/VideoPlayerLayout";
 import * as videoApi from "@/api/Video";
-import { fetchRelatedVideos } from "@/utils/relatedVideos";
+import { fetchRelatedVideos, fetchRecommendVideos } from "@/utils/relatedVideos";
 
 export default {
   name: "VideoPlay",
@@ -27,6 +28,8 @@ export default {
       urlFailed: false,
       simiVid: [],
       simiLoading: false,
+      // 相关视频搜不到时是否退化成推荐流（用于侧栏标题文案）
+      simiFallback: false,
       nameConfig: {
         dt: {
           cover: "coverUrl",
@@ -61,8 +64,16 @@ export default {
       // "【好想爱这个世界啊X少年的你】"整标题搜 0 条，"好想爱这个世界啊" 9 条、"少年的你" 12 条
       const extras = (d.videoGroup || []).map(t => t && t.name).filter(Boolean).slice(0, 3)
       this.simiLoading = true
+      this.simiFallback = false
       try {
-        this.simiVid = await fetchRelatedVideos(title, { excludeId: id, fallbackKeyword: fallback, extraKeywords: extras })
+        let list = await fetchRelatedVideos(title, { excludeId: id, fallbackKeyword: fallback, extraKeywords: extras })
+        // 标题/标签/作者全部搜不到时，侧栏会因为列表为空被整个 v-if 拿掉，
+        // 这里退化成推荐流补位，保证右侧始终有内容
+        if (!list.length) {
+          list = await fetchRecommendVideos({ excludeId: id, limit: 10 })
+          this.simiFallback = list.length > 0
+        }
+        this.simiVid = list
       } finally {
         this.simiLoading = false
       }
