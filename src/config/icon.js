@@ -48,6 +48,12 @@ export default {
         stroke: 'currentColor', strokeWidth: 2,
         path: 'M16 3h5v5 M4 20l17-17 M21 16v5h-5 M15 15l6 6 M4 4l5 5',
     },
+    // 副歌模式：波形中间一段被高亮，隐喻"只播高潮段"
+    chorus: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M4 10v4 M8 7v10 M12 4v16 M16 8v8 M20 11v2',
+    },
     close: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 2,

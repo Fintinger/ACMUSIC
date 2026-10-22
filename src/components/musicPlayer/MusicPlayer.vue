@@ -46,7 +46,7 @@
             <span class="modeBtn mode-spacer"></span>
           </div>
           <div class="actionsRow">
-            <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/></button>
+            <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>喜欢</span></button>
             <button class="actionBtn" :disabled="downloading" @click="downloadSong"><BaseIcon name="download"/><span>{{ downloading ? '获取中' : '下载' }}</span></button>
             <button class="actionBtn" @click="shareSong"><BaseIcon name="share"/><span>分享</span></button>
           </div>
@@ -524,7 +524,7 @@ export default {
       }
       &:hover .progressFill .progressThumb { opacity: 1; }
     }
-    .progressTimes { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: rgba(255,255,255,0.28); font-variant-numeric: tabular-nums; }
+    .progressTimes { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11px; color: rgba(255,255,255,0.34); font-variant-numeric: tabular-nums; letter-spacing: .2px; }
   }
 
   .controlsRow {
@@ -539,21 +539,49 @@ export default {
       &:hover { background: rgba(255,255,255,0.12); transform: scale(1.1); }
       &:active { transform: scale(0.94); }
     }
+    // 与切歌按钮同尺寸、但不给底色：模式是次级控件，悬停才浮出背景
     .modeBtn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px; cursor: pointer;
-      color: rgba(255,255,255,0.4);
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid transparent;
+      cursor: pointer;
+      color: rgba(255,255,255,0.42);
       transition: all 180ms ease;
       &.mode-random, &.mode-loop { color: #8685EF; }
-      &:hover { opacity: 0.9; transform: scale(1.1); }
-      &.mode-spacer { pointer-events: none; }
+      &:hover {
+        color: rgba(255,255,255,0.9);
+        background: rgba(255,255,255,0.07);
+        border-color: rgba(255,255,255,0.06);
+      }
+      &.mode-random:hover, &.mode-loop:hover { color: #8685EF; }
+      &.mode-spacer { pointer-events: none; border-color: transparent; background: none; }
     }
-    .playBtn { width: 42px; height: 42px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 22px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
+    .playBtn { width: 44px; height: 44px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 20px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
   }
 
   .actionsRow {
-    display: flex; gap: 10px;
-    .actionBtn { display: flex; align-items: center; gap: 5px; padding: 7px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); font-size: 12px; cursor: pointer; transition: all 180ms ease; i { font-size: 14px; } &:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); } &:disabled { opacity: 0.5; cursor: not-allowed; } &.active { color: rgba(255,255,255,0.9); border-color: rgba(134,133,239,0.3); background: rgba(134,133,239,0.12); i { color: #ef4444; } } }
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    .actionBtn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      height: 32px; padding: 0 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.5);
+      font-size: 12px; line-height: 1;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 180ms ease;
+      i { font-size: 15px; }
+      &:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.82); border-color: rgba(255,255,255,0.16); }
+      &:disabled { opacity: 0.5; cursor: not-allowed; }
+      &.active {
+        color: rgba(255,255,255,0.92);
+        border-color: rgba(134,133,239,0.3);
+        background: rgba(134,133,239,0.12);
+        i { color: #ef4444; }
+      }
+    }
   }
 
   .heroRight { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; }

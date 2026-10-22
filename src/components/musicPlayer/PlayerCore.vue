@@ -10,6 +10,7 @@
     <div class="miniBar" @click="onProgressClick">
       <div class="miniTrack" ref="miniTrack">
         <div class="miniFill" :style="{ width: progress + '%' }"></div>
+        <div v-if="chorusStyle" class="miniChorus" :class="{ on: effectiveForm === 'chorus' }" :style="chorusStyle"></div>
       </div>
     </div>
     <div class="fullBar" v-show="showBar" :style="miniBgStyle ? { background: miniBgStyle } : null">
@@ -37,16 +38,29 @@
       </div>
       <div class="barCenter">
         <div class="barControls">
-          <span
-              class="modeBtn"
-              :class="'mode-' + playMode"
-              :title="playMode === 'order' ? '列表循环' : playMode === 'random' ? '随机播放' : '单曲循环'"
-              @click="togglePlayMode"
-          >
-            <BaseIcon v-if="playMode === 'order'" name="loopList" :size="18"/>
-            <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="18"/>
-            <BaseIcon v-else name="loopOne" :size="18"/>
-          </span>
+          <div class="modeWrap" ref="modeWrap">
+            <span
+                class="modeBtn"
+                :class="['mode-' + playMode, { 'is-chorus': effectiveForm === 'chorus' }]"
+                :title="modeBtnTitle"
+                @click="onModeClick"
+                @contextmenu.prevent="openModeMenu"
+                @mousedown="onModePress"
+                @mouseup="onModeRelease"
+                @mouseleave="onModeRelease"
+            >
+              <BaseIcon v-if="playMode === 'order'" name="loopList" :size="18"/>
+              <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="18"/>
+              <BaseIcon v-else name="loopOne" :size="18"/>
+              <i v-if="effectiveForm === 'chorus'" class="chorusDot"></i>
+            </span>
+            <ModeMenu
+                :visible="showModeMenu"
+                :policy="playMode"
+                :fm="isPersonalFM"
+                @select-policy="setPlayMode"
+            />
+          </div>
           <span class="miniTrackBtn" @click="preSong"><BaseIcon name="prev" :size="18"/></span>
           <div class="barPlay" @click="togglePlay">
             <i v-if="isLoading" class="player-loading-spinner"></i>
@@ -63,6 +77,12 @@
             <div class="barFill" :style="{ width: progress + '%' }">
               <div class="barThumb" ref="barThumb" @mousedown.stop="startDrag"></div>
             </div>
+            <div
+                v-if="chorusStyle"
+                class="chorusBand"
+                :class="{ on: effectiveForm === 'chorus' }"
+                :style="chorusStyle"
+            ></div>
           </div>
           <span class="barTime">{{ formatTime(timeDuration) }}</span>
         </div>
@@ -82,6 +102,21 @@
             {{ currentQualityShort }}
           </button>
           <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="config.player.level" :vip-type="vipType" @select="onQualitySelect" @need-vip="onNeedVip"/>
+        </div>
+        <div class="barItem chorusWrap">
+          <el-dropdown trigger="click" placement="top" @command="setTrackForm" @visible-change="onChorusDropdown">
+            <span class="chorusTrigger" :class="{ on: effectiveForm === 'chorus' }" :title="chorusTriggerTitle">
+              <BaseIcon name="chorus" :size="13"/>
+              <span class="chorusLabel">{{ trackForm === 'chorus' ? '副歌' : '完整' }}</span>
+            </span>
+            <el-dropdown-menu slot="dropdown" class="chorusDropdown">
+              <el-dropdown-item command="full" :class="{ 'is-active': trackForm === 'full' }">完整播放</el-dropdown-item>
+              <el-dropdown-item command="chorus" :class="{ 'is-active': trackForm === 'chorus' }">
+                只播副歌
+                <span v-if="!chorusRange" class="opt-hint">本曲无数据</span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </el-dropdown>
         </div>
         <div class="barItem playlistWrap">
           <el-dropdown v-if="currentPlaylist.length" trigger="click" placement="top" @command="handleCommand" @visible-change="onDropdownToggle">
@@ -123,7 +158,9 @@ import { normalizeTrack } from "@/utils/normalize"
 import config from "@/config"
 import { buildBackground } from "@/utils/colorExtractor"
 import QualityMenu from "@/components/musicPlayer/QualityMenu"
+import ModeMenu from "@/components/musicPlayer/ModeMenu"
 import { setAudioCache, getAudioCache, getAudioUrl, removeAudioCache } from "@/utils/audioCache"
+import { getChorus } from "@/utils/chorusCache"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
@@ -133,7 +170,7 @@ import { toHttpsUrl, imgParam } from "@/utils/filters";
 export default {
   name: "PlayCore",
   props: ["song", "isExpand"],
-  components: { QualityMenu },
+  components: { QualityMenu, ModeMenu },
   data() {
     return {
       currentSong: {},
@@ -182,6 +219,20 @@ export default {
       suppressAudioError: false,
       playMode: 'order',
       shuffleOrder: [],
+      // ---- 单曲形态（与 playMode 正交，见 ModeMenu.vue 注释）----
+      // full=完整播放 / chorus=只播副歌
+      trackForm: 'full',
+      // 副歌区间（秒）：{start,end} | null。null=本曲无可用标注
+      chorusRange: null,
+      // 当前已加载副歌数据的歌曲 id（避免同一首歌重复请求/重复 seek）
+      chorusSongId: null,
+      // 已经为哪首歌做过「起播跳到副歌」的 seek，防重复触发把进度拉回开头
+      chorusSeekSongId: null,
+      // 首次开启副歌模式的一次性提示
+      chorusHinted: false,
+      showModeMenu: false,
+      longPressTimer: null,
+      longPressed: false,
       // FM 模式标志（从 Vuex 下沉到 PlayerCore 内部，PersonalFM/HomePage/App 通过 $bus 切换）
       isPersonalFM: false,
       shufflePos: -1,
@@ -227,6 +278,44 @@ export default {
       return ''
     },
     config() { return config },
+    modeBtnTitle() {
+      const policy = this.playMode === 'order' ? '列表循环' : this.playMode === 'random' ? '随机播放' : '单曲循环'
+      return this.effectiveForm === 'chorus'
+        ? `${policy} · 只播副歌（右键切换）`
+        : `${policy}（右键切换播放模式）`
+    },
+    /**
+     * 副歌形态是否真正生效。
+     * trackForm 是用户意图，本曲没有副歌数据时回落到完整播放——
+     * 宁可"开了但这次按全曲播"，也不要让用户等一个永远不会到来的跳转。
+     */
+    effectiveForm() {
+      return this.trackForm === 'chorus' && this.chorusRange ? 'chorus' : 'full'
+    },
+    /**
+     * 副歌区间在进度条上的几何位置（百分比）。
+     * 时长优先取实际音频 duration（可能与歌曲元信息有两三秒差异），拿不到再退回 dt。
+     */
+    chorusStyle() {
+      const r = this.chorusRange
+      const dur = Number(this.timeDuration) || (this.currentSong.dt ? this.currentSong.dt / 1000 : 0)
+      if (!r || !dur || r.start >= dur) return null
+      const end = Math.min(r.end, dur)
+      const left = Math.max(0, (r.start / dur) * 100)
+      const width = Math.max(1.2, ((end - r.start) / dur) * 100)
+      return { left: left + '%', width: Math.min(width, 100 - left) + '%' }
+    },
+    /** 右侧形态切换器的提示：说明当前状态，并区分「本曲无副歌数据」的情况 */
+    chorusTriggerTitle() {
+      if (this.trackForm === 'chorus') {
+        return this.chorusRange
+          ? '当前：只播副歌（点击切换）'
+          : '当前：只播副歌 · 本曲无副歌数据，按完整播放（点击切换）'
+      }
+      return this.chorusRange
+        ? '当前：完整播放（点击切换为只播副歌）'
+        : '当前：完整播放 · 本曲无副歌数据（点击切换）'
+    },
     isVip() { return this.vipType !== 0 },
     /**
      * 显示"实际拿到的音质"，而不是用户选的档位。
@@ -276,6 +365,7 @@ export default {
     },
     currentSong(val) {
       if (val.id) {
+        this._loadChorus()
         console.log('[PlayIntent]', { songId: val.id, source: this.currentSongSource, playIntentId: this.playIntentId, playContextId: this.playContextId, requestId: this.playRequestId, action: 'start' })
         console.log('[PlayContext]', { songId: val.id, source: this.currentSongSource, contextId: this.playContextId, playlistContextId: this.playlistContextId, requestId: this.playRequestId })
         normalizeTrack(val)
@@ -376,6 +466,8 @@ export default {
     },
     timeNow(n) {
       this.isExpand && this.$emit('tUpdate', n)
+      // 副歌形态优先：到副歌终点就切歌，别等整曲自然播完
+      if (this._onChorusTick(n)) return
       if (this.sel.currentTime === this.timeDuration) this._autoNext()
       if ((this.timeDuration - n) < 0.5 && this.sel.currentTime !== this.timeDuration) {
         this._autoNext()
@@ -870,7 +962,9 @@ export default {
       return id && this.currentPlaylist.findIndex(s => s.id === id) !== -1
     },
     // 自动播放到结尾触发：loop 模式重播当前曲
-    _autoNext() {
+    // opts.skipLoop=true 时忽略单曲循环分支（副歌模式到点切歌要走这里，
+    // 否则「单曲循环 × 只播副歌」会变成整曲重播）
+    _autoNext(opts) {
       // 防止 song end 触发多次：timeNow watcher + audio 'ended' 事件都可能触发 _autoNext
       // 第一次触发后：
       // 1) 同步暂停 audio（阻止后续 timeupdate）
@@ -882,7 +976,7 @@ export default {
       setTimeout(() => {
         this.autoNextLocked = false
       }, 1000)
-      if (this.playMode === 'loop') { this._restartCurrent(); return }
+      if (this.playMode === 'loop' && !(opts && opts.skipLoop)) { this._restartCurrent(); return }
       if (this.isPersonalFM) {
         // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
         if (this.curIndex < this.currentPlaylist.length - 1) {
@@ -953,15 +1047,147 @@ export default {
     togglePlayMode() {
       const order = ['order', 'random', 'loop']
       const idx = order.indexOf(this.playMode)
-      this.playMode = order[(idx + 1) % order.length]
-      if (this.playMode === 'random') {
+      this.setPlayMode(order[(idx + 1) % order.length])
+    },
+    /** 直达选择（菜单用）：不再依赖三态滚动 */
+    setPlayMode(mode) {
+      if (['order', 'random', 'loop'].indexOf(mode) === -1) return
+      this.showModeMenu = false
+      this.playMode = mode
+      if (mode === 'random') {
         this._initShuffle()
       } else {
         this.shuffleOrder = []
         this.shufflePos = -1
       }
-      try { localStorage.setItem('acmusic_play_mode', this.playMode) } catch (e) { /* ignore */ }
-      console.log('[PlayMode]', { mode: this.playMode })
+      try { localStorage.setItem('acmusic_play_mode', mode) } catch (e) { /* ignore */ }
+      console.log('[PlayMode]', { mode })
+    },
+    /**
+     * 拉取当前歌曲的副歌区间。
+     * 与取流链路完全解耦：失败/无数据只是没有区间，不影响播放。
+     */
+    _loadChorus() {
+      const id = this.currentSong && this.currentSong.id
+      if (!id) {
+        this.chorusSongId = null
+        this.chorusRange = null
+        this.chorusSeekSongId = null
+        return
+      }
+      if (String(id) === this.chorusSongId) return
+      this.chorusSongId = String(id)
+      this.chorusRange = null
+      this.chorusSeekSongId = null
+      getChorus(id).then(r => {
+        // 期间可能已切歌：只认最新一首
+        if (String(this.currentSong.id) !== this.chorusSongId) return
+        this.chorusRange = r
+        console.log('[Chorus]', { songId: id, hasRange: !!r, start: r && r.start, end: r && r.end })
+        if (this.effectiveForm === 'chorus') this._applyChorusSeek()
+      })
+    },
+    /**
+     * 把播放位置跳到副歌起点（幂等）
+     *
+     * 三条守卫都是踩过坑的：
+     *  1. readyState < 1 时浏览器会丢弃 seek（元数据没加载出来，时长未知）；
+     *  2. 已经在区间内就不动，否则用户手动点进副歌会被拽回起点；
+     *  3. 同时清掉 hasRestoreProgress，避免恢复进度逻辑把位置改回去。
+     */
+    _applyChorusSeek(force) {
+      const r = this.chorusRange
+      const id = this.currentSong && this.currentSong.id
+      if (!r || !id) return
+      if (this.sel.readyState < 1) return
+      if (!force && this.chorusSeekSongId === String(id)) return
+      const cur = this.sel.currentTime || 0
+      if (cur >= r.start - 1 && cur < r.end) {
+        this.chorusSeekSongId = String(id)
+        return
+      }
+      this.chorusSeekSongId = String(id)
+      this.hasRestoreProgress = false
+      try {
+        this.sel.currentTime = r.start
+        this.timeNow = r.start
+      } catch (e) { /* ignore */ }
+      console.log('[Chorus]', { action: 'seek_start', songId: id, start: r.start })
+    },
+    /**
+     * 副歌形态的「到点」处理，由 timeNow watcher 每帧调用。
+     * @returns {boolean} true 表示本次已消费（调用方应停止后续的整曲结束判定）
+     */
+    _onChorusTick(n) {
+      const r = this.chorusRange
+      if (!r || this.effectiveForm !== 'chorus') return false
+      const t = Number(n)
+      if (!t || t < r.end - 0.35) return false
+      if (this.autoNextLocked) return true
+      if (this.playMode === 'loop') {
+        // 单曲循环 × 只播副歌 = 副歌段循环
+        this.autoNextLocked = true
+        setTimeout(() => { this.autoNextLocked = false }, 600)
+        try {
+          this.sel.currentTime = r.start
+          this.timeNow = r.start
+        } catch (e) { /* ignore */ }
+        return true
+      }
+      console.log('[Chorus]', { action: 'end_next', songId: this.currentSong.id, end: r.end })
+      this._autoNext({ skipLoop: true })
+      return true
+    },
+    /** 单曲形态切换（控制条右侧下拉用）：'full' | 'chorus' */
+    setTrackForm(form) {
+      const next = form === 'chorus' ? 'chorus' : 'full'
+      this.showModeMenu = false
+      if (next === this.trackForm) return
+      this.trackForm = next
+      try { localStorage.setItem('acmusic_track_form', next) } catch (e) { /* ignore */ }
+      if (next === 'chorus') {
+        if (this.chorusRange) {
+          this._applyChorusSeek(true)
+        } else {
+          this.$message.info('这首歌没有副歌数据，本次按完整播放')
+        }
+        if (!this.chorusHinted) {
+          this.chorusHinted = true
+          this.$message.success('已开启副歌模式：每首只播副歌段，到点自动切下一首')
+        }
+      }
+      console.log('[TrackForm]', { form: next, hasRange: !!this.chorusRange })
+    },
+    openModeMenu() {
+      this.onInteract()
+      this.showModeMenu = true
+    },
+    closeModeMenu() { this.showModeMenu = false },
+    /** 下拉展开时空闲隐藏要让路，否则菜单还开着 bar 先收起来了 */
+    onChorusDropdown(visible) {
+      this.isDropdownOpen = visible
+      if (visible) this.clearHideTimer()
+      else this.scheduleHide()
+    },
+    /** 长按 400ms 出菜单；长按后紧随的 click 要被吞掉，不能顺手把模式又切一档 */
+    onModePress() {
+      this.longPressed = false
+      this.clearLongPress()
+      this.longPressTimer = setTimeout(() => {
+        this.longPressed = true
+        this.showModeMenu = true
+      }, 400)
+    },
+    onModeRelease() { this.clearLongPress() },
+    clearLongPress() {
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer)
+        this.longPressTimer = null
+      }
+    },
+    onModeClick() {
+      if (this.longPressed) { this.longPressed = false; return }
+      this.togglePlayMode()
     },
     /**
      * 喜欢 / 取消喜欢当前歌曲
@@ -1188,6 +1414,10 @@ export default {
       if (this.showVolume && this._isOutside(['volumeBtn', 'volumeSlider'], t)) {
         this.showVolume = false
       }
+      // 模式菜单挂在 .modeWrap 里（含菜单本身），点外面任意处关闭
+      if (this.showModeMenu && this._isOutside(['modeWrap'], t)) {
+        this.showModeMenu = false
+      }
     },
     /** 目标是否落在若干 ref（组件或元素）之外 */
     _isOutside(refNames, target) {
@@ -1335,6 +1565,9 @@ export default {
         console.log('[PlayerLoading]', { action: 'ready', songId: this.currentSong.id, requestId: this.playRequestId })
         console.log('%c[AudioReady] %cduration=%s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', this.sel.duration)
         this.timeDuration = this.sel.duration
+        // 副歌形态要在 restore 之前定位：恢复进度可能落在歌曲前奏，
+        // 而副歌模式期望的是"一开口就是高潮段"
+        if (this.effectiveForm === 'chorus') this._applyChorusSeek()
         if (this.hasRestoreProgress && this.currentSong.id && this.currentSong.id === this.restoreSongId && this.resumeTime > 0) {
           console.log('[PlayerState] seek_restore', { songId: this.currentSong.id, currentTime: this.resumeTime })
           this.sel.currentTime = this.resumeTime
@@ -1550,6 +1783,8 @@ mounted() {
     try {
       const savedMode = localStorage.getItem('acmusic_play_mode')
       if (savedMode && ['order', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
+      const savedForm = localStorage.getItem('acmusic_track_form')
+      if (savedForm === 'chorus' || savedForm === 'full') this.trackForm = savedForm
     } catch (e) { /* ignore */ }
     this.addEventListeners()
     this._initMediaSession()
@@ -1619,6 +1854,14 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       transition: width 0.1s linear;
       box-shadow: 0 0 8px rgba($accent, 0.2);
     }
+    // 折叠态也标出副歌位置：这是「发现这个功能」的最低成本入口
+    .miniChorus {
+      position: absolute; top: 0; bottom: 0;
+      background: rgba($accent, 0.42);
+      pointer-events: none;
+      transition: background 200ms ease;
+      &.on { background: rgba($accent, 0.85); }
+    }
   }
   &:hover .miniTrack { height: 6px; }
 }
@@ -1681,7 +1924,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 .barCenter {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 200px;
   .barControls {
-    display: flex; align-items: center; gap: 16px; color: $text;
+    display: flex; align-items: center; gap: 12px; color: $text;
     .miniTrackBtn {
       display: inline-flex; align-items: center; justify-content: center;
       width: 30px; height: 30px; border-radius: 50%;
@@ -1693,21 +1936,43 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       &:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.9); transform: scale(1.08); }
       &:active { transform: scale(0.92); }
     }
+    .modeWrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    // 与前后切歌按钮同尺寸的圆形热区，但不给底色：层级上是"次级控件"，
+    // 悬停才浮出背景，避免三个按钮抢视觉
     .modeBtn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 22px; height: 22px; cursor: pointer; color: rgba(255,255,255,0.4);
-      transition: all 160ms ease; font-size: 13px;
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 1px solid transparent;
+      cursor: pointer; color: rgba(255,255,255,0.42);
+      transition: all 160ms ease; font-size: 13px; position: relative;
       i { font-style: normal; }
       &.mode-random { color: $accent; }
       &.mode-loop { color: $accent; }
-      &:hover { opacity: 0.9; transform: scale(1.1); }
+      // 副歌形态生效时补一颗小点，避免"忘了自己开着副歌模式"
+      &.is-chorus { color: $accent; }
+      .chorusDot {
+        position: absolute; right: 2px; bottom: 2px;
+        width: 6px; height: 6px; border-radius: 50%;
+        background: $accent;
+        box-shadow: 0 0 0 2px rgba(28, 29, 40, 0.95);
+      }
+      &:hover {
+        color: rgba(255,255,255,0.9);
+        background: rgba(255,255,255,0.07);
+        border-color: rgba(255,255,255,0.06);
+      }
+      &.mode-random:hover, &.mode-loop:hover, &.is-chorus:hover { color: $accent; }
     }
     .barPlay {
-      width: 28px; height: 28px; border-radius: 50%; background: $accent; color: #fff;
+      width: 32px; height: 32px; border-radius: 50%; background: $accent; color: #fff;
       display: flex; align-items: center; justify-content: center; cursor: pointer;
       box-shadow: 0 2px 12px rgba($accent, 0.3);
       transition: all 200ms cubic-bezier(0.22,0.61,0.36,1);
-      i { font-size: 17px; margin-left: 1px; }
+      i { font-size: 18px; margin-left: 1px; }
       &:hover { transform: scale(1.1); box-shadow: 0 4px 18px rgba($accent, 0.45); }
       &:active { transform: scale(0.94); }
     }
@@ -1726,7 +1991,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   }
   .barProgress {
     width: 100%; max-width: 480px; display: flex; align-items: center; gap: 9px;
-    .barTime { font-size: 11px; color: $text-ter; font-variant-numeric: tabular-nums; min-width: 34px; &:first-child { text-align: right; } }
+    .barTime { font-size: 11px; color: rgba(255,255,255,0.34); font-variant-numeric: tabular-nums; min-width: 34px; letter-spacing: .2px; &:first-child { text-align: right; } }
     .barTrack {
       flex: 1; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; cursor: pointer; position: relative;
       transition: height 160ms ease;
@@ -1742,12 +2007,25 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
         }
       }
       &:hover .barFill .barThumb { opacity: 1; }
+
+      // 副歌区间：叠在进度之上，pointer-events 关掉，
+      // 否则会把「点进度条定位」的点击吞掉（点带子本身就该等于在那一点定位）
+      .chorusBand {
+        position: absolute; top: 0; bottom: 0;
+        background: rgba($accent, 0.26);
+        border-left: 1px solid rgba($accent, 0.7);
+        border-right: 1px solid rgba($accent, 0.7);
+        border-radius: 2px;
+        pointer-events: none;
+        transition: background 200ms ease;
+        &.on { background: rgba($accent, 0.5); }
+      }
     }
   }
 }
 
 .barRight {
-  flex: 0 0 140px; width: 140px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  flex: 0 0 168px; width: 168px; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
   .barItem {
     position: relative; cursor: pointer; color: $text-sec; display: flex; align-items: center;
     transition: color 160ms cubic-bezier(0.22,0.61,0.36,1);
@@ -1789,13 +2067,16 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     .plCount { font-size: 10px; background: rgba(255,255,255,0.1); color: $text; border-radius: 8px; padding: 1px 5px; min-width: 14px; text-align: center; }
   }
   .qualityWrap .qualityBtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 22px; padding: 0 7px;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.04);
     color: $text-sec;
     font-size: 11px; font-weight: 600;
-    padding: 3px 7px; border-radius: 6px;
+    border-radius: 6px;
     cursor: pointer;
-    line-height: 1.4;
+    line-height: 1;
+    font-family: inherit;
     transition: all 180ms $ease-standard;
     &:hover { background: rgba(255, 255, 255, 0.1); color: $text; border-color: rgba(255, 255, 255, 0.18); }
     // 解灰源：第三方音源，音质与版本不可控，用琥珀色提示
@@ -1805,11 +2086,34 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       background: rgba(240, 198, 116, 0.12);
     }
   }
+
+  // 单曲形态切换（完整 / 只播副歌）：与音质按钮同一套 chip 规格，
+  // 只是多了个图标；两种状态都保持同尺寸，切换时不跳位
+  .chorusWrap .chorusTrigger {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    height: 22px; padding: 0 7px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    color: $text-sec;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    cursor: pointer;
+    transition: all 180ms $ease-standard;
+    &:hover { background: rgba(255, 255, 255, 0.1); color: $text; border-color: rgba(255, 255, 255, 0.18); }
+    &.on {
+      color: $accent;
+      background: rgba($accent, 0.1);
+      border-color: rgba($accent, 0.3);
+      &:hover { background: rgba($accent, 0.16); border-color: rgba($accent, 0.45); }
+    }
+  }
 }
 
 @media (max-width: 1024px) {
   .barLeft { flex: 0 0 180px; width: 180px; }
-  .barRight { flex: 0 0 110px; width: 110px; }
+  .barRight { flex: 0 0 146px; width: 146px; }
+  // 窄屏只留图标+箭头，避免右侧挤出可用区
+  .barRight .chorusWrap .chorusTrigger .chorusLabel { display: none; }
 }
 @media (max-width: 768px) {
   .fullBar { padding: 0 10px; gap: 6px; }
@@ -1884,6 +2188,38 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     .plEmptyIcon { font-size: 32px; margin-bottom: 12px; opacity: .5; }
     p { margin: 0; line-height: 1.6; }
     .plEmptyHint { font-size: 11px; color: rgba(255,255,255,0.1); margin-top: 4px; }
+  }
+}
+
+/* global: 单曲形态下拉（teleported to body，scoped 样式管不到） */
+.chorusDropdown {
+  background: #1c1d29 !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.55) !important;
+  border-radius: 12px !important;
+  padding: 6px !important;
+  min-width: 156px !important;
+
+  .el-dropdown-menu__item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px; border-radius: 8px;
+    font-size: 13px; color: rgba(255,255,255,0.62);
+    line-height: 1.4;
+    transition: background 160ms ease, color 160ms ease;
+
+    &:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
+    &.is-active {
+      color: #8685EF;
+      background: rgba(134,133,239,0.12);
+      font-weight: 600;
+    }
+
+    .opt-hint {
+      font-size: 10px; font-weight: 400;
+      color: rgba(255,255,255,0.28);
+      background: rgba(255,255,255,0.05);
+      border-radius: 4px; padding: 1px 5px;
+    }
   }
 }
 

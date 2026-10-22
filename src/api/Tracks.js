@@ -70,6 +70,21 @@ export function smartPlay(id, pid, sid) {
 }
 
 /**
+ * 副歌（高潮段）时间区间
+ * 说明 : 返回该曲被上游标注的高潮段起止（毫秒）
+ *   - 实测 2026-10-22 抽样 68 首覆盖 92.6%；纯音乐同样有标注（语义是"高潮段"而非人声副歌）
+ *   - **没有数据时 chorus 是空数组但 code 仍为 200**，调用方必须判空，不能只看 code
+ *   - chorus 与 data 两个字段内容相同（互为别名），取其一即可
+ *   - 每首歌只返回一段（16 首抽样 chorus.length 恒为 1），不需要处理多段合并
+ *   - 游客可用，无需登录
+ * @param id 歌曲 id
+ * @returns {chorus: Array<{id:number, startTime:number, endTime:number, ugcLocked:number}>}
+ */
+export function songChorus(id) {
+    return request('/song/chorus', {params: {id}})
+}
+
+/**
  * 喜欢音乐
  * @param id 歌曲 id
  * @param like 布尔值 , 默认为 true 即喜欢 , 若传 false, 则取消喜欢
