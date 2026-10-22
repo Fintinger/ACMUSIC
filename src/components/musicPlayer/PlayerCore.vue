@@ -37,6 +37,28 @@
         </i>
       </div>
       <div class="barCenter">
+        <!-- 四层播放模式的当前组合。绝对定位在左端：不参与 barControls 的居中计算，
+             所以文案变长变短都不会把中间那排控件推得左右晃 -->
+        <div ref="stackWrap" class="stackWrap">
+          <button
+              class="stackPill"
+              :class="{ 'is-stacked': stacked }"
+              :title="stackTitle"
+              @click="openModeMenu"
+          ><span class="stackText">{{ stackSummary }}</span></button>
+          <ModeMenu
+              :visible="showModeMenu"
+              :layers="modeLayers"
+              @select-policy="setPlayMode"
+              @toggle-heart="toggleHeartMode"
+              @select-form="setTrackForm"
+              @sleep-command="onSleepCommand"
+              @sleep-step="onSleepStep"
+              @sleep-input="onSleepInput"
+              @toggle-fade="toggleSleepFade"
+              @reset="resetModeStack"
+          />
+        </div>
         <div class="barControls">
           <div class="modeWrap" ref="modeWrap">
             <span
@@ -56,15 +78,6 @@
               <i v-if="effectiveForm !== 'full'" class="chorusDot"></i>
               <i v-else-if="heartMode" class="heartDot"></i>
             </span>
-            <ModeMenu
-                :visible="showModeMenu"
-                :policy="playMode"
-                :fm="isPersonalFM"
-                :heart="heartMode"
-                :heart-busy="heartBusy"
-                @select-policy="setPlayMode"
-                @toggle-heart="toggleHeartMode"
-            />
           </div>
           <span class="miniTrackBtn" @click="preSong"><BaseIcon name="prev" :size="18"/></span>
           <div class="barPlay" @click="togglePlay">
@@ -438,12 +451,63 @@ export default {
       const src = this.heartMode ? '心动模式' : ''
       const tail = [form, src].filter(Boolean).join(' · ')
       return tail
-        ? `${policy} · ${tail}（右键切换）`
-        : `${policy}（右键切换播放模式）`
+        ? `${policy} · ${tail}（右键打开四层总览）`
+        : `${policy}（右键打开四层总览）`
     },
     modeLabel() {
       const map = { order: '列表循环', sequence: '顺序播放', loop: '单曲循环', random: '随机播放' }
       return map[this.playMode] || '列表循环'
+    },
+    // ---------------- 四层播放模式的"当前组合" ----------------
+    /**
+     * 组合标签的文案片段。
+     *
+     * 四层散落在三处（队列+来源在模式菜单、单曲形态在进度条、定时在右下角），
+     * 之前没有任何一处能看到"我现在到底叠了什么"。这个标签把它拼成一句话：
+     * 「随机播放 · 心动 · A-B · 12:30后停」。
+     *
+     * A 层（队列策略）永远显示：它决定基准读法，少了标签就变成"只在叠了东西时才出现"，
+     * 用户反而学不到这个标签是干什么的。
+     */
+    stackSegments() {
+      const seg = [this.modeLabel]
+      if (this.heartMode) seg.push('心动')
+      else if (this.isPersonalFM) seg.push('私人FM')
+      if (this.effectiveForm === 'chorus') seg.push('副歌')
+      else if (this.effectiveForm === 'ab') seg.push('A-B')
+      if (this.sleepMode === 'song') seg.push('本首后停')
+      else if (this.sleepMode === 'count') seg.push(`${this.songsLeft}首后停`)
+      else if (this.sleepMode === 'time') seg.push(`${this.formatTime(this.sleepRemainSec)}后停`)
+      return seg
+    },
+    // 注意：stackSegments 是 computed，取的是值不是函数，不能再加 () 调用
+    stackSummary() { return this.stackSegments.join(' · ') },
+    /** 只有队列策略、其余全是默认值时，标签不该抢视觉（.is-stacked 才上主题色） */
+    stacked() { return this.stackSegments.length > 1 },
+    stackTitle() {
+      return `当前播放组合：${this.stackSummary}（点击展开四层总览，可逐层修改）`
+    },
+    /**
+     * 总览面板要的全部状态，一次传进去（避免十几条 props）。
+     * sleepSpec 是两档的取值范围/步进：数字框要在输入框里就地夹边界，所以一起给。
+     */
+    modeLayers() {
+      return {
+        policy: this.playMode,
+        fm: this.isPersonalFM,
+        heart: this.heartMode,
+        heartBusy: this.heartBusy,
+        form: this.trackForm,
+        chorusAvailable: !!this.chorusRange,
+        abHint: this.abHint,
+        abValid: this.abRangeValid,
+        sleepMode: this.sleepMode,
+        countValue: this.countValue,
+        timeValue: this.timeValue,
+        sleepFade: this.sleepFade,
+        fadeSec: this.fadeSec,
+        sleepSpec: { count: this._sleepSpec('count'), time: this._sleepSpec('time') }
+      }
     },
     /**
      * 副歌形态是否真正生效。
@@ -1439,7 +1503,7 @@ export default {
     /** 直达选择（菜单用）：不再依赖三态滚动 */
     setPlayMode(mode) {
       if (['order', 'sequence', 'random', 'loop'].indexOf(mode) === -1) return
-      this.showModeMenu = false
+      // 不关总览面板：面板是"四层一起调"的地方，选完队列策略还要能接着改别的层
       this.playMode = mode
       if (mode === 'random') {
         this._initShuffle()
@@ -1573,7 +1637,9 @@ export default {
      * @param {string} form 'full' | 'chorus' | 'ab' | 'ab-here' | 'ab-clear'
      */
     setTrackForm(form) {
-      this.showModeMenu = false
+      // 只有进入 A-B 才必须收起面板：下一步是"点击进度条选点"，
+      // 面板还浮在上面就挡着进度条了。其余形态留在原地，方便接着调别的层。
+      if (form === 'ab') this.showModeMenu = false
       if (form === 'ab-clear') { this._abClear(); return }
       if (form === 'ab-here') { this._abPickHere(); return }
       const next = form === 'chorus' ? 'chorus' : (form === 'ab' ? 'ab' : 'full')
@@ -1711,6 +1777,27 @@ export default {
       if (next === cur && this.sleepMode === kind) return
       this._applySleep(kind, next)
       console.log('[Sleep]', { action: 'input', kind, value: next })
+    },
+    /** 总览面板的 −/+ 步进（面板里只发 {kind, dir}，夹边界的活仍在 stepSleep 里） */
+    onSleepStep({ kind, dir }) {
+      this.stepSleep(kind, dir)
+    },
+    /** 总览面板的数字框：值已在面板里夹过边界，这里只管生效 */
+    onSleepInput({ kind, value }) {
+      this._applySleep(kind, value)
+    },
+    /**
+     * 总览面板的「复位」：清掉临时叠上去的三层，保留队列策略。
+     *
+     * 队列策略（列表循环/随机…）是长期偏好，跟"这次听歌想怎么听"不是一回事，
+     * 顺手一起抹掉会很烦——所以只关心动、回到完整播放、取消定时。
+     */
+    resetModeStack() {
+      if (this.heartMode) this._heartOff()
+      if (this.trackForm !== 'full') this.setTrackForm('full')
+      if (this.sleepMode !== 'off') this._clearSleep()
+      this.$message.success('已复位：完整播放 · 不定时 · 已关心动（队列策略保留）')
+      console.log('[ModeStack]', { action: 'reset', policy: this.playMode })
     },
     toggleSleepFade() {
       this.sleepFade = !this.sleepFade
@@ -2077,8 +2164,9 @@ export default {
       if (this.showVolume && this._isOutside(['volumeBtn', 'volumeSlider'], t)) {
         this.showVolume = false
       }
-      // 模式菜单挂在 .modeWrap 里（含菜单本身），点外面任意处关闭
-      if (this.showModeMenu && this._isOutside(['modeWrap'], t)) {
+      // 总览面板挂在 .stackWrap 里（含面板本身）；.modeWrap 是模式按钮，
+      // 它也列进来是因为右键/长按按钮同样会打开这个面板，点按钮本身不算"点外面"
+      if (this.showModeMenu && this._isOutside(['stackWrap', 'modeWrap'], t)) {
         this.showModeMenu = false
       }
     },
@@ -2115,8 +2203,9 @@ export default {
       }, 100)
     },
     scheduleHide() {
-      // A-B 选点中不能自动收起：一收起用户就看不见自己在选什么了
-      if (this.isDropdownOpen || this.abSetting) return
+      // A-B 选点中不能自动收起：一收起用户就看不见自己在选什么了。
+      // 四层总览同理——面板就挂在底条里，条一收面板跟着消失，正在逐层调整时被打断
+      if (this.isDropdownOpen || this.abSetting || this.showModeMenu) return
       this.clearHideTimer()
       this.hideTimer = setTimeout(() => { this.showBar = false; this.showVolume = false }, this.isPlay ? 10000 : 10000)
     },
@@ -2679,7 +2768,54 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 }
 
 .barCenter {
+  // 组合标签是绝对定位的，这里就是它的定位父级
+  position: relative;
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 200px;
+  // 组合标签：贴在这一列的左端，上下垂直居中。
+  // 用绝对定位是为了不参与 barControls 的居中计算——否则标签文案一变长，
+  // 中间那排播放控件就会整体左移，看着像抽了一下。
+  // top/bottom 都给 0：让它撑满 barCenter 的高度，再靠 align-items 居中，
+  // 而不是写死 32px 去对齐上面那排控件（那样标签会偏高、贴着控件行）。
+  .stackWrap {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .stackPill {
+    display: inline-flex;
+    align-items: center;
+    max-width: 150px;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 11px;
+    font-family: inherit;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: .2px;
+    cursor: pointer;
+    transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+
+    &:hover { background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.92); }
+    &:active { transform: scale(0.96); }
+
+    // 真的叠了东西才上主题色，全默认时不该抢视觉
+    &.is-stacked {
+      border-color: rgba(134, 133, 239, 0.45);
+      background: rgba(134, 133, 239, 0.14);
+      color: #b9b8f5;
+    }
+  }
+
+  // 省略号必须落在内层 span 上：button 是 inline-flex 容器，
+  // 直接给 button 加 text-overflow 对 flex 子项不起作用
+  .stackText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   .barControls {
     display: flex; align-items: center; gap: 12px; color: $text;
     .miniTrackBtn {
@@ -2945,6 +3081,11 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   // 窄屏只留图标+箭头，避免右侧挤出可用区
   .barRight .chorusWrap .chorusTrigger .chorusLabel { display: none; }
   .barRight .sleepWrap .sleepTrigger:not(.on) .sleepLabel { display: none; }
+  // 组合标签让出一半宽度，剩下的靠省略号收尾（完整读法在 title 里）
+  .barCenter .stackPill { max-width: 78px; }
+  // barCenter 变窄后，进度行（max-width 480）两侧的留白就没了，
+  // 垂直居中的标签会压到进度行左端的时间——这时收回成控件行高度、顶部对齐
+  .barCenter .stackWrap { bottom: auto; height: 32px; }
 }
 @media (max-width: 768px) {
   .fullBar { padding: 0 10px; gap: 6px; }
