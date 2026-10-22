@@ -51,6 +51,7 @@
             >
               <BaseIcon v-if="playMode === 'order'" name="loopList" :size="18"/>
               <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="18"/>
+              <BaseIcon v-else-if="playMode === 'sequence'" name="sequence" :size="18"/>
               <BaseIcon v-else name="loopOne" :size="18"/>
               <i v-if="effectiveForm === 'chorus'" class="chorusDot"></i>
             </span>
@@ -136,6 +137,10 @@
                 <el-dropdown-item v-for="s in currentPlaylist" :key="s.id" :class="{ active: s.curSong }" :command="s">
                   <span class="plSongName">{{ s.name }}</span>
                   <span class="plSongArtist">{{ getArtistStr(s) }}</span>
+                  <span class="plOps">
+                    <span class="plOp" title="下一首播放" @click.stop="playNext(s)"><BaseIcon name="next" :size="12"/></span>
+                    <span class="plOp" title="从队列移除" @click.stop="removeFromQueue(s)"><BaseIcon name="close" :size="12"/></span>
+                  </span>
                 </el-dropdown-item>
               </div>
               <div v-if="!currentPlaylist.length" class="plEmpty">
@@ -279,10 +284,14 @@ export default {
     },
     config() { return config },
     modeBtnTitle() {
-      const policy = this.playMode === 'order' ? '列表循环' : this.playMode === 'random' ? '随机播放' : '单曲循环'
+      const policy = this.modeLabel
       return this.effectiveForm === 'chorus'
         ? `${policy} · 只播副歌（右键切换）`
         : `${policy}（右键切换播放模式）`
+    },
+    modeLabel() {
+      const map = { order: '列表循环', sequence: '顺序播放', loop: '单曲循环', random: '随机播放' }
+      return map[this.playMode] || '列表循环'
     },
     /**
      * 副歌形态是否真正生效。
@@ -954,7 +963,9 @@ export default {
         return
       }
       if (!this._inPlaylist()) return
-      this.curIndex = this.getNextIndex()
+      const next = this.getNextIndex()
+      if (next < 0) { this._onQueueEnd(); return }
+      this.curIndex = next
     },
     // 当前歌曲是否在播放列表中（用于切歌判断，不依赖 source）
     _inPlaylist() {
@@ -989,7 +1000,18 @@ export default {
         return
       }
       if (!this._inPlaylist()) return
-      this.curIndex = this.getNextIndex()
+      const nextIdx = this.getNextIndex()
+      if (nextIdx < 0) { this._onQueueEnd(); return }
+      this.curIndex = nextIdx
+    },
+    /**
+     * 顺序播放走到队尾：停下并说明原因。
+     * 不把 currentTime 归零，保留最后一首的进度，用户再点播放能接着听。
+     */
+    _onQueueEnd() {
+      this.pauseSong()
+      this.$message.info('队列已播完（顺序播放）')
+      console.log('[PlayMode]', { action: 'queue_end', mode: this.playMode })
     },
     getNextIndex() {
       // FM 模式：保持推荐算法给出的顺序，不走 shuffle（shuffle 会破坏 NetEase /personal_fm 的推荐排序）
@@ -997,6 +1019,8 @@ export default {
         return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
       }
       if (this.playMode === 'random') return this._nextShuffleIndex()
+      // 顺序播放：走到底返回 -1，由调用方负责停播（区别于列表循环的回绕）
+      if (this.playMode === 'sequence' && this.curIndex >= this.currentPlaylist.length - 1) return -1
       return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
     },
     getPrevIndex() {
@@ -1045,13 +1069,13 @@ export default {
       }
     },
     togglePlayMode() {
-      const order = ['order', 'random', 'loop']
+      const order = ['order', 'sequence', 'loop', 'random']
       const idx = order.indexOf(this.playMode)
       this.setPlayMode(order[(idx + 1) % order.length])
     },
     /** 直达选择（菜单用）：不再依赖三态滚动 */
     setPlayMode(mode) {
-      if (['order', 'random', 'loop'].indexOf(mode) === -1) return
+      if (['order', 'sequence', 'random', 'loop'].indexOf(mode) === -1) return
       this.showModeMenu = false
       this.playMode = mode
       if (mode === 'random') {
@@ -1508,6 +1532,55 @@ export default {
       if (startIndex >= this.currentPlaylist.length) return
       this.curIndex = startIndex
     },
+    /**
+     * 队列就地改写：统一走 REPLACE_PLAYLIST，改完把 curIndex 对齐回当前曲
+     * （watcher 里有"目标与当前同 id 就跳过"的守卫，所以对齐不会触发重新播放）
+     */
+    _commitQueue(list) {
+      this.$store.commit('TracksAbout/REPLACE_PLAYLIST', list)
+      this.$nextTick(() => {
+        const i = list.findIndex(t => t.id === this.currentSong.id)
+        if (i !== -1 && i !== this.curIndex) this.curIndex = i
+      })
+    },
+    /** 下一首播放：把歌曲挪到当前曲之后（拖拽排序的轻量替代） */
+    playNext(s) {
+      if (!s || !s.id) return
+      const list = this.currentPlaylist.slice()
+      const from = list.findIndex(t => t.id === s.id)
+      if (from === -1) return
+      const [item] = list.splice(from, 1)
+      const cur = list.findIndex(t => t.id === this.currentSong.id)
+      const target = cur === -1 ? 0 : cur + 1
+      if (from === target) return
+      list.splice(target, 0, item)
+      this._commitQueue(list)
+      this.$message.success(`已设为下一首：${s.name || ''}`)
+      console.log('[Queue]', { action: 'play_next', songId: s.id, from, target })
+    },
+    /** 从队列移除单曲；移除的是当前曲则顺延播下一首 */
+    removeFromQueue(s) {
+      if (!s || !s.id) return
+      const list = this.currentPlaylist.slice()
+      const idx = list.findIndex(t => t.id === s.id)
+      if (idx === -1) return
+      const isCurrent = this.currentSong.id === s.id
+      list.splice(idx, 1)
+      if (!list.length) {
+        this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [])
+        this.pauseSong()
+        this.$message.info('播放列表已清空')
+        return
+      }
+      this._commitQueue(list)
+      if (isCurrent) {
+        // 顺延到原位置（此时该位置已经是原来的下一首）
+        this.currentSongSource = 'playlist'
+        this.playlistContextId = this.playContextId
+        this.curIndex = Math.min(idx, list.length - 1)
+      }
+      console.log('[Queue]', { action: 'remove', songId: s.id, index: idx, isCurrent })
+    },
     clearPlaylist() {
       this.$confirm('确定清空全部播放歌曲？', '提示', {
         confirmButtonText: '确定',
@@ -1728,7 +1801,7 @@ export default {
           this.$store.commit('TracksAbout/REPLACE_PLAYLIST', deduped)
           console.log('[PlaylistPersist]', { action: 'restore', count: deduped.length })
         }
-        if (data.playMode && ['order', 'random', 'loop'].indexOf(data.playMode) !== -1) {
+        if (data.playMode && ['order', 'sequence', 'random', 'loop'].indexOf(data.playMode) !== -1) {
           this.playMode = data.playMode
         }
         if (data.song && data.song.id) {
@@ -1782,7 +1855,7 @@ mounted() {
     this._restoreState()
     try {
       const savedMode = localStorage.getItem('acmusic_play_mode')
-      if (savedMode && ['order', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
+      if (savedMode && ['order', 'sequence', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
       const savedForm = localStorage.getItem('acmusic_track_form')
       if (savedForm === 'chorus' || savedForm === 'full') this.trackForm = savedForm
     } catch (e) { /* ignore */ }
@@ -2160,7 +2233,8 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 
     .el-dropdown-menu__item {
       display: flex; flex-direction: column; gap: 2px;
-      padding: 10px 18px; color: rgba(255,255,255,0.55); font-size: 13px;
+      position: relative;
+      padding: 10px 64px 10px 18px; color: rgba(255,255,255,0.55); font-size: 13px;
       transition: all 180ms ease; line-height: 1.3;
       overflow: hidden; min-width: 0;
 
@@ -2179,6 +2253,21 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
         border-left: 2px solid #8685EF;
         .plSongArtist { color: rgba(134,133,239,0.5); }
       }
+    }
+
+    // 每行的快捷操作：默认隐形，悬停浮出，避免列表看起来很吵
+    .plOps {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      display: flex; align-items: center; gap: 2px;
+      opacity: 0; transition: opacity 140ms ease;
+    }
+    .el-dropdown-menu__item:hover .plOps { opacity: 1; }
+    .plOp {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 6px;
+      color: rgba(255,255,255,0.42);
+      transition: background 140ms ease, color 140ms ease;
+      &:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.92); }
     }
   }
 

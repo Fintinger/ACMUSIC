@@ -54,6 +54,12 @@ export default {
         stroke: 'currentColor', strokeWidth: 2,
         path: 'M4 10v4 M8 7v10 M12 4v16 M16 8v8 M20 11v2',
     },
+    // 顺序播放：向右走到底线就停（区别于"循环"的闭合箭头）
+    sequence: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M4 12h12 M12 8l4 4-4 4 M5 19h15',
+    },
     close: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 2,

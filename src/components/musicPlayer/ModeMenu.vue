@@ -38,6 +38,7 @@ export default {
     return {
       policies: [
         { key: 'order', label: '列表循环' },
+        { key: 'sequence', label: '顺序播放' },
         { key: 'loop', label: '单曲循环' },
         { key: 'random', label: '随机播放' }
       ]

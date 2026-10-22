@@ -38,6 +38,7 @@
             >
               <BaseIcon v-if="playMode === 'order'" name="loopList" :size="20"/>
               <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="20"/>
+              <BaseIcon v-else-if="playMode === 'sequence'" name="sequence" :size="20"/>
               <BaseIcon v-else name="loopOne" :size="20"/>
             </span>
             <span class="trackBtn prevBtn" @click="prevTrack"><BaseIcon name="prev" :size="20"/></span>
