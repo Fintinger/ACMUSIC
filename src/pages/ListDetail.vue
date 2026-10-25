@@ -15,7 +15,7 @@
               By <span class="name" @click="uClk(creator.userId)">{{ creator.nickname }}</span>
             </el-row>
                       <el-row class="listTag">
-                        <span class="listCount">{{ listInfo.trackCount }}首</span> | <span class="play-count">播放{{ listInfo.playCount | div1w(listInfo.playCount) }}</span>
+                        <span class="listCount">{{ listInfo.trackCount }}首</span> | <span class="play-count">播放{{ listInfo.playCount | Div1w(listInfo.playCount) }}</span>
                       </el-row>
             <el-row class="listTime">创建于{{ listInfo.createTime |formatMs("YYYY年MM月DD日") }}，最后更新于{{ listInfo.updateTime|fromNow }}</el-row>
             <el-row class="listDescription">

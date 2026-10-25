@@ -128,6 +128,34 @@ export default {
     .content { color: $font-black-1 !important; }
     .time-ribbon .ribbon > span { color: $font-black-2 !important; }
     .comment-delete .el-button { color: $font-black-2 !important; }
+    // 楼层（楼中楼）：公用样式是按深色底写的白色系文字，浅色评论区里必须逐项换色
+    .floor-wrap {
+      background: rgba(0,0,0,.03) !important;
+      box-shadow: inset 2px 0 0 rgba(0,0,0,.08) !important;
+    }
+    .floor-item + .floor-item { border-top-color: rgba(0,0,0,.06) !important; }
+    .floor-name {
+      .nickname { color: $font-black-1 !important; &:hover { color: $color-main !important; } }
+      .reply-to, .time-tag { color: $font-black-2 !important; }
+    }
+    .floor-content { color: $font-black-1 !important; }
+    .floor-ribbon > span {
+      color: $font-black-2 !important;
+      &:hover { color: $font-black-1 !important; }
+    }
+    .floor-ribbon .comment-delete .el-button {
+      color: $font-black-2 !important;
+      &:hover { color: #ef4444 !important; }
+    }
+    .floor-tip { color: $font-black-2 !important; }
+    .floor-more {
+      background: #fff !important;
+      border-color: rgba(0,0,0,.08) !important;
+      color: $font-black-2 !important;
+      &:hover:not(:disabled) { background: #f7f7f9 !important; color: $font-black-1 !important; }
+    }
+    // 展开态高亮：必须比上面的 "> span" 更具体，否则同带 !important 时会被它压掉
+    .ribbon > .comment-reply.open { color: $color-main !important; }
   }
 }
 

@@ -32,6 +32,62 @@
       // 点赞请求中：视觉降权，避免重复点击
       .comment-like .like.pending { opacity: 0.5; cursor: wait; }
       .comment-delete .el-button { color: rgba(255,255,255,.35); font-size: 13px; padding: 0; transition: color .2s; &:hover { color: #ef4444; } }
+      // 楼层展开态：文案与箭头一起高亮，提示"再点会收起"
+      .comment-reply.open { color: $color-main; }
+      // BaseIcon 渲染的 <i> 自身就带 floor-arrow 类；这里必须比 "> span i" 更具体才盖得住
+      // 注意：已经嵌在 .ribbon 里，别再写 .ribbon >，否则会编译成 .ribbon .ribbon > 永不匹配
+      > .comment-reply .floor-arrow { font-size: 12px; }
+    }
+
+    // ---- 楼中楼 ----
+    // 用左侧细描边 + 更暗底色表示层级，不额外缩进父级，避免窄屏下正文被挤成一条竖线
+    .floor-wrap {
+      margin-top: 14px; padding: 12px 16px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.03);
+      box-shadow: inset 2px 0 0 rgba(255,255,255,.08);
+    }
+
+    .floor-item {
+      display: flex; gap: 12px; padding: 10px 0;
+      & + .floor-item { border-top: 1px solid rgba(255,255,255,.05); }
+    }
+
+    .floor-avatar {
+      flex-shrink: 0; width: 32px; height: 32px;
+      border-radius: 50%; overflow: hidden;
+      img { width: 100%; height: 100%; object-fit: cover; }
+    }
+
+    .floor-main {
+      flex: 1; min-width: 0;
+      .floor-name {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;
+        .nickname { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.72); cursor: pointer; transition: color .2s; &:hover { color: $color-main; } }
+        .reply-to { font-size: 13px; color: rgba(255,255,255,.35); }
+        .time-tag { font-size: 12px; color: rgba(255,255,255,.28); }
+      }
+      .floor-content { font-size: 14px; line-height: 1.7; color: rgba(255,255,255,.62); word-break: break-word; margin-bottom: 6px; }
+      .floor-ribbon {
+        display: flex; align-items: center; gap: 16px;
+        > span { display: flex; align-items: center; gap: 4px; font-size: 13px; color: rgba(255,255,255,.35); cursor: pointer; transition: color .2s; i { font-size: 14px; } &:hover { color: $color-main; } }
+        .comment-like .like i.ac-likefill { color: #ef4444; }
+        .comment-like .like.pending { opacity: 0.5; cursor: wait; }
+        .comment-delete .el-button { color: rgba(255,255,255,.35); font-size: 12px; padding: 0; transition: color .2s; &:hover { color: #ef4444; } }
+      }
+    }
+
+    .floor-tip { font-size: 13px; color: rgba(255,255,255,.35); padding: 6px 0; }
+
+    .floor-more {
+      margin-top: 10px; width: 100%; padding: 9px 0;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 10px;
+      color: rgba(255,255,255,.6); font-size: 13px; cursor: pointer;
+      transition: background .2s, color .2s;
+      &:hover:not(:disabled) { background: rgba(255,255,255,.09); color: #fff; }
+      &:disabled { opacity: .5; cursor: wait; }
     }
   }
 
