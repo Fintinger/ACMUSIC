@@ -32,6 +32,14 @@ export default {
         },
         SET_HEART_MODE(state, val) { state.heartMode = !!val },
         SET_HEART_BUSY(state, val) { state.heartBusy = !!val },
+        /**
+         * FM 是否**真的**在接管队列（由 PlayerCore 的 isPersonalFM 镜像过来）。
+         * 和 fmMode 是两件事：fmMode 是"选了哪个模式"（长期偏好，持久化），
+         * fmActive 是"这个模式现在是否在放"（会话态）。
+         * 首页卡片用它们区分「选中」和「播放中」，否则换到心动/普通歌单后
+         * 漫游卡还挂着"播放中"，会和心动卡同时亮。
+         */
+        SET_FM_ACTIVE(state, val) { state.fmActive = !!val },
         //playList中添加歌曲
         PUSH_PLAYLIST(state, val) {
             //添加多首
@@ -67,6 +75,8 @@ export default {
         fmMode: 'DEFAULT',
         // SCENE_RCMD 时生效的场景键（运动/专注/助眠…）
         fmSubmode: 'EXERCISE',
+        // FM 当前是否在放：由 PlayerCore 的 isPersonalFM 单向镜像（见 SET_FM_ACTIVE）
+        fmActive: false,
         // 心动模式是否接管队列来源（与私人 FM 互斥，两者都要决定"下一首从哪来"）
         // 放在 store 而不是 PlayerCore 的 data：首页的入口卡片要读它显示状态
         heartMode: false,

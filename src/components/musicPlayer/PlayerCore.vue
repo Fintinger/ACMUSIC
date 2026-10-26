@@ -778,8 +778,13 @@ export default {
     /**
      * 退出 FM 模式时（如 App.vue 跳到非 FM 歌单）清空播放列表，只留当前歌曲
      * currentPlaylist 仍在 Vuex，所以走 commit
+     *
+     * 顺带把"FM 是否在放"镜像进 store：首页漫游卡的「播放中」徽标读它。
+     * 不镜像的话卡片只能看 fmMode（选了哪个模式），于是心动模式/普通歌单接管队列后
+     * 漫游卡仍然亮着"播放中"，和心动卡一起显示两个正在播放。
      */
     isPersonalFM(val) {
+      this.$store.commit('TracksAbout/SET_FM_ACTIVE', val)
       if (!val) this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [this.currentSong])
     },
     /**
@@ -2641,6 +2646,9 @@ mounted() {
     this.$bus.$on('heart-toggle', this._heartToggleHandler)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
+    // 播放器重建时 isPersonalFM 会回到 false，但 store 里的镜像值可能还是上次的 true，
+    // 挂载时对齐一次，避免漫游卡凭空显示"播放中"
+    this.$store.commit('TracksAbout/SET_FM_ACTIVE', this.isPersonalFM)
     // 登录态启动后拉取一次 /likelist 填充 likedSongIds
     if (this.isLogin) {
       this._initLikedSet()

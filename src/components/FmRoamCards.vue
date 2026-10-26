@@ -15,7 +15,7 @@
             v-for="c in cards"
             :key="c.key"
             class="roam-card"
-            :class="{ active: isActive(c) }"
+            :class="{ active: isSelected(c) }"
             @click="pick(c)"
         >
           <div class="card-media" :style="{ background: c.grad }">
@@ -24,7 +24,7 @@
               <span class="card-name">{{ c.name }}</span>
               <span class="card-sub">{{ c.sub }}</span>
             </div>
-            <span v-if="isActive(c)" class="card-playing">播放中</span>
+            <span v-if="isPlaying(c)" class="card-playing">播放中</span>
           </div>
           <div class="card-caption">{{ c.caption }}</div>
         </div>
@@ -128,6 +128,14 @@ export default {
   computed: {
     fmMode() { return this.$store.state.TracksAbout.fmMode },
     fmSubmode() { return this.$store.state.TracksAbout.fmSubmode },
+    /**
+     * FM 是否真的在放（会话态，由 PlayerCore 的 isPersonalFM 镜像进 store）。
+     * 和 fmMode 不是一回事：fmMode 是"选了哪个模式"，会持久化；
+     * 这个只在 FM 真接管队列时为 true。
+     */
+    fmActive() { return this.$store.state.TracksAbout.fmActive },
+    /** 心动模式开着时它才接管队列，漫游卡要让位（两者互斥） */
+    heartMode() { return this.$store.state.TracksAbout.heartMode },
     /** 滚动区宽度：吸附到"整数张卡片"，末尾不再露出半张 */
     scrollerStyle() {
       return this.fittedWidth ? { width: this.fittedWidth + 'px' } : null
@@ -229,10 +237,26 @@ export default {
       host.style.setProperty('--roam-line-gap', Math.max(12, mg) + 'px')
       host.style.setProperty('--roam-lane', lane + 'px')
     },
-    isActive(c) {
+    /**
+     * 选中态：这张卡是当前生效的 FM 模式。
+     *
+     * 必须排掉心动模式——两套内容来源互斥，心动接管后 FM 已经不在队列里了，
+     * 漫游卡再亮就是"两个都在播"。之前这里只看 fmMode，于是出现
+     * 「私人漫游 播放中」和「心动模式 播放中」同屏的 BUG。
+     */
+    isSelected(c) {
+      if (this.heartMode) return false
       if (c.mode !== this.fmMode) return false
       if (c.mode === 'SCENE_RCMD') return c.submode === this.fmSubmode
       return true
+    },
+    /**
+     * 播放中 = 选中 + FM 真的在放。
+     * 分两层是因为 fmMode 会被持久化：用户选了「运动」之后去听普通歌单，
+     * 卡片可以保留"选中"提示，但不该声称自己在放歌。
+     */
+    isPlaying(c) {
+      return this.fmActive && this.isSelected(c)
     },
     updateArrows() {
       const el = this.$refs.scroller
@@ -259,7 +283,7 @@ export default {
       } catch (e) { /* ignore */ }
     },
     pick(c) {
-      if (this.isActive(c)) {
+      if (this.isSelected(c)) {
         // 已选中：再点等于重新要一批（时间窗可能已经换过）
         this.$bus.$emit('fm-roam')
         return
