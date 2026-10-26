@@ -1781,3 +1781,38 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - 播放器重建时 `isPersonalFM` 回 false，`mounted` 已做一次对齐，不会有残留高亮
 - 回滚：三个文件均为独立小改，`git revert` 该 commit 即可恢复原行为（会回到双高亮 bug）
 - 未改 `_saveState` / `_restoreState` 字段结构，也未动播放状态机守卫
+
+### 2026-10-26 — 评论时间补上年份（跨年才显示）
+
+### 修改内容
+1. `src/utils/filters.js` 新增 `formatCommentTime`：今年 → `10月26日 12:54`，往年 → `2019年03月15日 20:11`；时间缺失/非法返回空串
+2. `src/main.js` 注册全局过滤器 `formatCommentTime`
+3. `CommentContentLayout.vue` 主评论和楼中楼的时间戳都换成新过滤器（原来是硬写的 `formatMs("MM月DD日 HH:mm")`）
+
+### 修改文件
+- `src/utils/filters.js`
+- `src/main.js`
+- `src/components/layout/CommentContentLayout.vue`
+
+### 修改原因
+评论区时间固定 `MM月DD日 HH:mm`，几年前的评论和今天的长得一模一样，分不清 3 月 15 日是今年还是 2019 年。
+热评里老评论占比很高，这是实打实的误读来源。
+
+用「跨年才补年」而不是全部带年，是为了不让今年这大批新评论每行都多出 4 个字符——
+信息密度和可读性两边都要。要改成恒定带年，只需把 `formatCommentTime` 里的三元判断去掉。
+
+实现细节：`dayjs(undefined)` 等于"此刻"且 `isValid()` 为 true，所以必须显式判空，
+否则缺 `time` 字段的评论会被渲染成当前时间（比不显示年份更误导）。
+
+### 测试结果
+- ESLint（三个改动文件）✅ 0 error
+- `vue-cli-service build` ✅ Build complete
+- 格式化输出核对：
+  - `Date.now()` → `10月26日 12:54`
+  - `2019-03-15 20:11` → `2019年03月15日 20:11`
+  - `undefined` / `null` / `"abc"` → 空串
+
+### 注意事项
+- 只在 `CommentContentLayout` 生效；`UserDetailLayout` 的「最近登录」仍是 `M月D日 HH:mm`（未在本次范围内）
+- 判断依据是本机时间，用户改系统时间会跟着变
+- 不影响其他 `formatMs` 调用点（专辑/歌单/MV 发布时间本来就是完整年月日）
