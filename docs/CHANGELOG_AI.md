@@ -1743,3 +1743,41 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 ### 注意事项
 - 删除范围严格限定 `/root/music.www.bak.*`，且保留最近 5 份
 - 若希望长期保留某个版本，改名移出该前缀即可
+
+### 2026-10-26 — 修复漫游卡与心动卡同时显示「播放中 + 选中」
+
+### 修改内容
+1. `TracksAbout` 新增 `fmActive`（FM 是否**真的**在接管队列）+ `SET_FM_ACTIVE` mutation，与 `fmMode`（选了哪个模式，持久化）彻底分开
+2. `PlayerCore` 的 `isPersonalFM` watcher 把值单向镜像进 store；`mounted` 时对齐一次，防止播放器重建后 store 残留旧值
+3. `FmRoamCards` 把原来的 `isActive(c)` 拆成两层：
+   - `isSelected(c)` = 当前生效的 FM 模式，且**心动模式开启时一律返回 false**
+   - `isPlaying(c)` = `isSelected(c) && fmActive`，只有它才渲染「播放中」徽标
+   - `pick()` 改用 `isSelected()`
+
+### 修改文件
+- `src/store/modules/Tracks.js`
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/FmRoamCards.vue`
+
+### 修改原因
+首页那一排里，漫游卡的选中/播放态只看 `fmMode`，而 `fmMode` 是持久化偏好、进页面就默认 `DEFAULT`。
+心动模式开启后 `heartMode=true`，但 `fmMode` 不变，于是「私人漫游」卡和「心动模式」卡同时带描边和「播放中」徽标（见用户截图）。
+同类问题还有：选过某个模式后去听普通歌单/点别的歌，漫游卡依旧声称自己「播放中」。
+
+根因是**把「选中」和「正在放」混成了一个布尔**。`fmMode` 是长期偏好，`isPersonalFM` 才是会话态，
+而后者只在 `PlayerCore` 内部，首页卡片读不到，才退化成拿 `fmMode` 顶替。
+按项目既有做法（`heartMode` 当初也是因为首页要读才放进 store）把会话态镜像进 store，卡片就能分辨这两件事。
+
+### 测试结果
+- ESLint（三个改动文件）✅ 0 error
+- `vue-cli-service build` ✅（Build complete，11.9s）
+- 逻辑核查（未起浏览器，人工核对状态流）：
+  - 心动开启：`heartMode=true` → 漫游卡 `isSelected` 全 false → 只剩心动卡带描边 +「播放中」
+  - FM 开启：`fm-mode(true)` → `isPersonalFM=true` → watcher → `fmActive=true` → 对应漫游卡出现「播放中」，同时 `heartMode` 被置 false
+  - 播普通歌单：`fm-mode(false)`（App.vue 点歌）或心动接管 → `fmActive=false` → 漫游卡最多保留「选中」描边，不再谎称播放中
+
+### 注意事项
+- `fmActive` 是会话态，不持久化；刷新后 FM 队列本来就重置，两边一致
+- 播放器重建时 `isPersonalFM` 回 false，`mounted` 已做一次对齐，不会有残留高亮
+- 回滚：三个文件均为独立小改，`git revert` 该 commit 即可恢复原行为（会回到双高亮 bug）
+- 未改 `_saveState` / `_restoreState` 字段结构，也未动播放状态机守卫
