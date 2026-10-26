@@ -6,7 +6,7 @@
         <div class="name">
           <span class="nickname" @click="uClk(cm.user.userId)">{{ cm.user.nickname }}</span>
           <span v-if="cm.user.avatarDetail" class="identityIcon"><cover-image :src="cm.user.avatarDetail.identityIconUrl" :alt="cm.user.nickname + '的身份标识'"/></span>
-          <span class="time-tag">{{ cm.time | formatMs("MM月DD日 HH:mm") }}</span>
+          <span class="time-tag">{{ cm.time | formatCommentTime }}</span>
         </div>
         <div class="content">{{ cm.content }}</div>
         <div class="time-ribbon">
@@ -50,7 +50,7 @@
                 <span class="nickname" @click="uClk(fc.user.userId)">{{ fc.user.nickname }}</span>
                 <!-- 楼层只能平铺, "回复某人"只能靠 beReplied 表达; 被回复内容常为 null, 只取昵称 -->
                 <span v-if="replyToName(fc)" class="reply-to">回复 @{{ replyToName(fc) }}</span>
-                <span class="time-tag">{{ fc.time | formatMs("MM月DD日 HH:mm") }}</span>
+                <span class="time-tag">{{ fc.time | formatCommentTime }}</span>
               </div>
               <div class="floor-content">{{ fc.content }}</div>
               <div class="floor-ribbon">

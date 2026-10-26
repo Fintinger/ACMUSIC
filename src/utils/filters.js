@@ -34,6 +34,25 @@ export function formatMs(ms, rule = 'YYYY.MM.DD') {
 }
 
 /**
+ * 评论时间：今年的只给「月日」，往年的补上年份。
+ *
+ * 原来评论区固定 `MM月DD日 HH:mm`，几年前的老评论和今天的长得一模一样，
+ * 分不清是"3月15日"还是"2019年3月15日"。按当前年份判断：
+ *   今年 → 03月15日 20:11
+ *   往年 → 2019年03月15日 20:11
+ * 时间缺失 / 非法返回空串，避免模板里渲染出 Invalid Date。
+ * 注意不能只靠 isValid()：`dayjs(undefined)` 等于"此刻"且有效，缺字段会被渲染成当前时间。
+ * @param{Number} ms
+ */
+export function formatCommentTime(ms) {
+    if (ms === undefined || ms === null || ms === '') return ''
+    const d = dayjs(ms)
+    if (!d.isValid()) return ''
+    const rule = d.year() === dayjs().year() ? 'MM月DD日 HH:mm' : 'YYYY年MM月DD日 HH:mm'
+    return d.format(rule)
+}
+
+/**
  * 专门用于处理更新时间，创建时间的函数
  * @param{Number} ms
  * @param rule

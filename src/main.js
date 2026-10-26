@@ -39,6 +39,8 @@ Vue.filter('Div1w', filters.formatCount)
 Vue.filter('formatMs', filters.formatMs)
 Vue.filter('formatS', filters.format_s)
 Vue.filter('fromNow', filters.fromNow)
+// 评论时间：今年只给月日，往年补上年份（见 filters.formatCommentTime）
+Vue.filter('formatCommentTime', filters.formatCommentTime)
 Vue.filter('formatDuration', filters.formatDurationMs)
 Vue.filter('imgParam', filters.imgParam)
 // http → https（只对网易云 CDN 域名生效），用于不走 imgParam 的原图/头像
