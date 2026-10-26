@@ -2281,3 +2281,50 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - **月报聚合结果缓存在 localStorage**（`acmusic_annual_agg_v1`）：想重新算需清掉该 key
 - **接口纯逆向**：`songItems[].artists` 是对象数组（年报同名字段却是字符串），已做双形态兼容；上游随时可能改
 - 回滚：删除三个新文件 + 去掉路由与 hero 入口即可，无副作用
+
+---
+
+### 2026-10-26 — fix(user): 他人主页不显示关注按钮 / 自己主页误显示关注按钮
+
+### 修改内容
+1. **布局裁切**（他人主页看不到按钮的直接原因）
+   - `.hero-info` 补 `flex: 1; min-width: 0`，`.hero-name` 补省略号
+   - 原来 `.hero-info` 是 `flex: 0 1 auto` 且未设 `min-width: 0`，长昵称/长签名时 min-content 撑开，
+     把 `margin-left: auto` 的 `.hero-side` 顶出容器，再被 `.user-hero` 的 `overflow: hidden` 裁掉
+2. **`isSelf` 误判**（自己主页也出现「关注」按钮的根因）
+   - `loginInfo` 改为「state 优先 + localStorage 兜底」：只读 state 时首屏拿不到 userId（refreshLogin 未完成）；
+     只读 getter 时因 getter 命中 localStorage 后不再依赖 state，补资料后不重算
+   - 新增 `ensureLoginProfile()`：有登录态但 `userId` 缺失时用 `/login/status` 补一次并
+     `dispatch UserAbout/initProfileInfo` 写回 store + localStorage，**并在 `mounted` 里等它完成再 `loadPage()`**
+   - 顺带修复 `v-if="uid===loginInfo.userId"`（string 与 number 严格比较恒 false，「云盘与收藏」整块此前不显示）→ `v-if="isSelf"`
+3. **登录态读取改为本地求值**
+   - `UserDetailLayout` / `UserListLayout` 不再用 `UserAbout/isLogin` getter：该 getter 内部直接调
+     `isLoggedIn()`、没有任何响应式依赖，Vue 会永久缓存 —— 会话中途登录后仍返回 false，按钮永远不出现
+   - 改为 `mounted` 时 `isLoggedIn()` 赋值给 `loggedIn`，`isLogin` 读它
+4. **关注按钮补全四态**：`互相关注`（followed+mutual）/ `已关注`（followed）/ `回关`（!followed+followMe）/ `关注`
+   - 状态来自 `/user/detail` 的 `profile.followed / mutual / followMe`，不额外请求
+   - 互关态加小圆点样式；已关注/互关点击仍走「仍然取消 / 继续关注」确认，互关时文案补充「互相关注状态会被解除」
+   - 关注成功后 `mutual = followMe`，取关后 `mutual = false`
+
+### 修改文件
+- `src/components/layout/UserDetailLayout.vue`
+- `src/components/layout/UserListLayout.vue`
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+用户反馈：只有在自己的详情页看得到关注/取关，打开别人主页看不到。两个缺陷叠加：
+
+1. **别人的主页按钮被裁掉了**：`.user-hero` 是 flex + `overflow:hidden`，`.hero-info` 未设 `min-width:0`，
+   内容一长（别人昵称/签名通常更长）就把右侧按钮挤出可视区，视觉上等于"没有按钮"。
+2. **自己的主页反而有按钮**：`state.profile` 可能为 `{}`（只有 cookie、没有 user-profile 的旧会话），
+   `loginInfo.userId` 为 undefined → `isSelf` 永假 → `canFollow = isLogin && !isSelf` 成立，能关注自己。
+
+### 测试结果
+- `npx eslint`（2 文件）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- 布局与按钮显隐**未做浏览器实测**（需登录态 + 长昵称账号才能复现裁切场景）
+
+### 注意事项
+- `ensureLoginProfile()` 只在「有登录态但缺 userId」时发一次 `/login/status`，正常会话不会多请求
+- 它会在 `mounted` 里阻塞 `loadPage()`（Promise.finally），正常情况下是同步 resolve，无感
+- 四态里的「回关」依赖 `profile.followMe`；若网关某版本不返回该字段，会退化为「关注」（不会误显示回关）

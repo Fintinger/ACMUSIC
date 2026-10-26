@@ -27,11 +27,12 @@
           </div>
           <!-- 关注 / 已关注：仅登录且非本人时出现，初始状态取 /user/detail 的 profile.followed -->
           <div class="hero-side" v-if="canFollow">
-            <button class="followBtn" :class="{ 'is-followed': followed }" :disabled="followPending"
-                    :title="followed ? '点击取消关注' : '关注 TA'" @click="toggleFollow">
+            <button class="followBtn" :class="{ 'is-followed': followed, 'is-mutual': followState === 'mutual' }"
+                    :disabled="followPending"
+                    :title="followed ? '点击取消关注' : (followState === 'followBack' ? 'TA 也关注了你，点击回关' : '关注 TA')"
+                    @click="toggleFollow">
               <i v-if="followPending" class="el-icon-loading"></i>
-              <template v-else-if="followed">已关注</template>
-              <template v-else>关注</template>
+              <template v-else>{{ followBtnText }}</template>
             </button>
           </div>
         </div>
@@ -43,7 +44,7 @@
           </el-tabs>
           <p v-else class="empty-text">未公开</p>
         </section>
-        <section v-if="uid===loginInfo.userId" class="ud-section ud-card">
+        <section v-if="isSelf" class="ud-section ud-card">
           <h2>云盘与收藏</h2>
           <el-tabs v-model="favorsAcName">
             <el-tab-pane label="云盘" name="cloud"><TracksLayout :list="cloudTracks"/></el-tab-pane>
@@ -126,6 +127,7 @@ import * as authApi from "@/api/auth";
 import { getAreaName, getCityName } from "@/utils/areaCode";
 import { formatMs, followSpanText } from "@/utils/filters";
 import { getIpLocation, maskIP } from "@/utils/ipLocation";
+import { isLoggedIn } from "@/utils/auth";
 import coverLight from "@/mixins/coverLight";
 
 // 关注/粉丝列表每页数量：/user/follows 默认 30，/user/followeds 网关默认 20，这里统一显式传 30
@@ -170,12 +172,26 @@ export default {
       mixedSeq: 0,
       // 关注状态（本人不可关注自己，故只在他人页面出现）
       followed: false,
+      mutual: false,
+      followMe: false,
       followPending: false,
+      // 登录态：mounted 时读一次 cookie（不使用会被永久缓存的 getter）
+      loggedIn: false,
     }
   },
   computed: {
     profile() { return this.userInfo.profile },
-    loginInfo() { return this.$store.state.UserAbout.profile },
+    /**
+     * 登录用户信息：state 优先，localStorage 兜底。
+     * 两条都要 —— 只读 state 会让首屏（refreshLogin 未完成）拿不到 userId；
+     * 只读 getter 则因为 getter 命中 localStorage 后不再依赖 state，
+     * 补完资料也不会重算，isSelf 卡在 false。
+     */
+    loginInfo() {
+      const st = this.$store.state.UserAbout.profile
+      if (st && st.userId) return st
+      return this.$store.getters["UserAbout/userProfile"] || {}
+    },
     // 注意 userId 是 number，而 /user-detail?uid=xxx 路由里拿到的是 string，
     // 用 === 会导致「从他人主页跳到自己主页」时误判为非本人 → 统一转字符串比较
     isSelf() { return this.uid != null && this.loginInfo.userId != null && String(this.uid) === String(this.loginInfo.userId) },
@@ -204,8 +220,18 @@ export default {
     useMixedFollow() {
       return this.isSelf
     },
+    // 登录态自己读，不用 UserAbout/isLogin getter：那个 getter 内部直接调 isLoggedIn()，
+    // 没有任何响应式依赖，Vue 会把它永久缓存 —— 会话中途登录后仍然返回 false。
     isLogin() {
-      return this.$store.getters["UserAbout/isLogin"]
+      return this.loggedIn
+    },
+    // 关注按钮四态：互相关注 / 已关注 / 回关（对方已关注我）/ 关注
+    followState() {
+      if (this.followed) return this.mutual ? 'mutual' : 'followed'
+      return this.followMe ? 'followBack' : 'none'
+    },
+    followBtnText() {
+      return { mutual: '互相关注', followed: '已关注', followBack: '回关', none: '关注' }[this.followState]
     },
     // 关注按钮：登录后、且不是自己主页才显示
     canFollow() {
@@ -220,6 +246,24 @@ export default {
     }
   },
   methods: {
+    /**
+     * 补齐登录用户资料。
+     * 背景：state.profile 只在 setLogin / initProfileInfo 时写入，而建站早期的会话
+     * 可能只写了 cookie、没写 user-profile（localStorage 里是 {}）。
+     * 这时 loginInfo.userId 为 undefined → isSelf 永假 → 自己主页也会渲染「关注」按钮，
+     * 还能把自己关注上；本人专属区块（云盘/导入歌单/年度报告）也全都不显示。
+     * 有登录态但拿不到 userId 时，用 /login/status 补一次并写回 store / localStorage。
+     */
+    ensureLoginProfile() {
+      if (!this.loggedIn) return Promise.resolve()
+      if (this.loginInfo && this.loginInfo.userId) return Promise.resolve()
+      return authApi.loginStatus()
+        .then(res => {
+          const pf = res && res.data && res.data.data && res.data.data.profile
+          if (pf && pf.userId) return this.$store.dispatch('UserAbout/initProfileInfo', pf)
+        })
+        .catch(() => {})
+    },
     getUserInfo(uid) {
       return userDetailApi.detail(uid).then(res => {
         this.userInfo = res.data
@@ -227,6 +271,9 @@ export default {
           const p = res.data.profile
           // 关注状态直接取自详情接口，省一次额外请求
           this.followed = !!p.followed
+          this.mutual = !!p.mutual
+          // followMe：对方是否关注我（回关的判定依据）
+          this.followMe = !!p.followMe
           const prov = getAreaName(p.province)
           const city = getCityName(p.city||p.province)
           this.locationName = [prov,city].filter(Boolean).join(' · ')
@@ -247,6 +294,8 @@ export default {
           if (code === 200) {
             const on = t === 1
             this.followed = on
+            // mutual ⇔ 我关注 TA 且 TA 关注我；关注后能否算互关取决于 followMe
+            this.mutual = on ? this.followMe : false
             // 粉丝数做本地即时反馈（服务端为准，刷新后会校正）
             const p = this.profile
             if (p && p.followeds != null) this.$set(p, 'followeds', Math.max(0, p.followeds + (on ? 1 : -1)))
@@ -279,7 +328,8 @@ export default {
         }
       }
       const message = h('div', { style: 'line-height:1.7' }, [
-        h('p', { style: 'margin:0' }, `取消后你将不再关注「${name}」。`),
+        h('p', { style: 'margin:0' },
+          this.mutual ? `取消后你将不再关注「${name}」，互相关注状态会被解除。` : `取消后你将不再关注「${name}」。`),
         ...rows,
       ])
       this.$confirm(message, '取消关注', {
@@ -495,7 +545,12 @@ export default {
     }
   },
   mounted() {
-    if (this.uid) this.loadPage()
+    // 登录态在这里取一次：cookie 是同步可读的，且这个组件每次进详情页都会重新挂载
+    this.loggedIn = isLoggedIn()
+    // 先把登录用户资料补齐，再加载页面 —— 否则 isSelf 会误判（见 ensureLoginProfile）
+    this.ensureLoginProfile().finally(() => {
+      if (this.uid) this.loadPage()
+    })
     // 歌单详情页删歌单后广播：本页被 keep-alive 缓存，返回时不会重新 mounted，只能靠事件刷新
     this.$bus.$on('playlistDeleted', this.onPlaylistDeleted)
   },
@@ -553,7 +608,10 @@ export default {
     box-shadow: 0 8px 28px rgba(0,0,0,.15);
     img { width: 100%; height: 100%; object-fit: cover; }
   }
-  .hero-name { font-size: 28px; font-weight: 700; color: $font-black; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; i { display: inline-block; font-size: 18px; line-height: 1; flex-shrink: 0; } i.el-icon-male { color: #47a1ce; } i.el-icon-female { color: #ff86b6; } }
+  // 关键：hero-info 必须可压缩。原来没有 flex，内容一宽就把右侧按钮顶出容器，
+  // 再被 .user-hero 的 overflow:hidden 裁掉 —— 表现为「别人主页看不到关注按钮」
+  .hero-info { flex: 1; min-width: 0; }
+  .hero-name { font-size: 28px; font-weight: 700; color: $font-black; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; i { display: inline-block; font-size: 18px; line-height: 1; flex-shrink: 0; } i.el-icon-male { color: #47a1ce; } i.el-icon-female { color: #ff86b6; } }
   .hero-sig { font-size: 14px; color: $font-black-1; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 460px; }
   .hero-meta { display: flex; gap: 20px; font-size: 13px; color: $font-black-1; margin: 0; }
   // 关注/粉丝可点，跳转到页面底部的关注与粉丝区块
@@ -606,6 +664,23 @@ export default {
       border-color: rgba(0,0,0,.15);
 
       &:hover { color: #f56c6c; border-color: #f56c6c; background: rgba(245,108,108,.06); }
+    }
+
+    // 互相关注：加一个小圆点区分「已关注」与「互关」，语义更强
+    &.is-mutual {
+      border-color: rgba($color-main, .45);
+      color: $color-main;
+
+      &::before {
+        content: '';
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin-right: 6px;
+        border-radius: 50%;
+        background: $color-main;
+        vertical-align: middle;
+      }
     }
 
     &:disabled { opacity: .6; cursor: default; }

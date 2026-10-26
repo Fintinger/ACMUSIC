@@ -49,6 +49,7 @@
 import CoverImage from "@/components/common/CoverImage";
 import { followDaysText, followSpanText, formatMs } from "@/utils/filters";
 import { followUser, followMixed } from "@/api/User";
+import { isLoggedIn } from "@/utils/auth";
 
 // 找「我关注 TA 的时长」时最多翻几页 /user/follow/mixed，防关注过多时无限拉
 const SPAN_MAX_PAGES = 8;
@@ -73,18 +74,27 @@ export default {
       pending: {},
       // uid → { followDay, mutualFollowDay }：从 /user/follow/mixed 查到后缓存，避免重复翻页
       spanCache: {},
+      // 登录态：mounted 时读一次 cookie。不用 UserAbout/isLogin getter ——
+      // 它内部直接调 isLoggedIn()、无响应式依赖，会被 Vue 永久缓存，会话中途登录后仍是 false
+      loggedIn: false,
     }
   },
   computed: {
     isLogin() {
-      return this.$store.getters["UserAbout/isLogin"]
+      return this.loggedIn
     },
+    // state 优先、getter（localStorage）兜底，兼顾首屏与补资料后的重算
     myId() {
-      return (this.$store.state.UserAbout.profile || {}).userId
+      const st = this.$store.state.UserAbout.profile
+      if (st && st.userId) return st.userId
+      return (this.$store.getters["UserAbout/userProfile"] || {}).userId
     },
     showAction() {
       return this.mode === 'followeds' && this.isLogin
     },
+  },
+  mounted() {
+    this.loggedIn = isLoggedIn()
   },
   methods: {
     followDaysText,
