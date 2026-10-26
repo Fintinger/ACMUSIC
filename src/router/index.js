@@ -22,6 +22,7 @@ const VideoPlay = () => import(/* webpackChunkName: "page-video" */ "@/pages/Vid
 const SearchResult = () => import(/* webpackChunkName: "page-search" */ "@/pages/SearchResult");
 const DailySongs = () => import(/* webpackChunkName: "page-daily-songs" */ "@/pages/DailySongs");
 const UserDetail = () => import(/* webpackChunkName: "page-user-detail" */ "@/pages/UserDetail");
+const AnnualReport = () => import(/* webpackChunkName: "page-annual" */ "@/pages/AnnualReport");
 const NotFound = () => import(/* webpackChunkName: "page-not-found" */ "@/pages/NotFound");
 
 // 发现页子路由：合并成一个 chunk，进「发现」时一次取回，切 tab 不再等
@@ -190,6 +191,8 @@ const router = new VueRouter({
             },
         },
         {path: '/daily-songs', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2, title: '每日推荐'}},
+        // 年度听歌报告：本人数据，页面内部自行判断登录态
+        {path: '/annual', name: "annualReport", component: AnnualReport, meta: {level: 2, title: '年度听歌报告'}},
         // 兜底：history 模式下任何未匹配的 URL 都落到这里，避免 router-view 空转白屏。
         // 必须放最后 —— vue-router 3 按定义顺序匹配，'*' 会吃掉后面所有路由。
         {path: '*', name: "notFound", component: NotFound, meta: {level: 1, title: '页面不存在'}},

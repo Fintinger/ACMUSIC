@@ -109,6 +109,52 @@ export function detail(id) {
 }
 
 /**
+ * 歌单导入 - 元数据/文字/链接导入（需登录）
+ * 说明 : 三种方式**互斥**只能传一个；上游模块内部按 if(local)/else{text|link} 分支，
+ *   同时传 local 和 text/link 时 local 胜出，同时传 text 和 link 时 link 覆盖 text（静默，不报错）。
+ * 参数形态（前端传原始值即可，axios 会自动 URL 编码一次，**不要**再手动 encodeURIComponent，
+ *   否则到了服务端 decode 一次后仍是 %XX，会被再 encode 一遍 → 二次编码）：
+ *   - local : 对象数组 [{name, artist, album}] → 内部 map 成 {songName, artistName, albumName} 的 multiSongs
+ *   - text  : 纯文本，如 "歌名 歌手" 换行分隔 → 内部包成 rpc://playlist/import?text=xxx
+ *   - link  : 字符串数组（外部歌单链接）
+ * 注意 : local 走 multiSongs 分支，**不接受 playlistName**（服务端自己起名）；
+ *   只有 text / link 分支才会带 playlistName。
+ * @param {Object} payload
+ * @param {Array|string} [payload.local] 元数据数组（或已 stringify 的 JSON 串）
+ * @param {string} [payload.text] 导入文字
+ * @param {Array|string} [payload.link] 歌单链接数组（或已 stringify 的 JSON 串）
+ * @param {string} [payload.playlistName] 生成的歌单名（text/link 生效）
+ * @param {boolean} [payload.importStarPlaylist] 是否导入「我喜欢的音乐」（为 true 则不生成新歌单）
+ */
+export function importTaskCreate(payload = {}) {
+    const {local, text, link, playlistName, importStarPlaylist} = payload
+    const params = {}
+    // 三种方式互斥：优先级与上游一致 —— local > link > text
+    if (local) {
+        params.local = typeof local === 'string' ? local : JSON.stringify(local)
+    } else if (link) {
+        params.link = typeof link === 'string' ? link : JSON.stringify(link)
+    } else if (text) {
+        params.text = text
+    }
+    // 只有 text/link 分支认歌单名；local 传了也没用，直接不发，避免误导
+    if (playlistName && !params.local) params.playlistName = playlistName
+    // 只在 true 时下发：上游是 importStarPlaylist || false，传字符串 "false" 会被判为真值
+    if (importStarPlaylist === true) params.importStarPlaylist = true
+    // 链接导入需要服务端抓取外部歌单，默认 10s 超时不够
+    return request('/playlist/import/name/task/create', {params, timeout: 30000})
+}
+
+/**
+ * 歌单导入 - 任务状态
+ * 说明 : 上游转发到 /api/playlist/import/task/status/v2，把入参包成 {taskIds: JSON.stringify([id])}
+ * @param {string|number} id 任务 id
+ */
+export function importTaskStatus(id) {
+    return request('/playlist/import/task/status', {params: {id}})
+}
+
+/**
  * 歌单分类（全部分类）
  */
 export function catlist() {

@@ -27,6 +27,10 @@
               <button class="actBtn" :class="{ active: manageMode }" @click="toggleManage">
                 {{ manageMode ? '完成管理' : '管理歌曲' }}
               </button>
+              <!-- 「我喜欢的音乐」是账号自带的系统歌单，删不掉，直接不给入口 -->
+              <button v-if="!isFavPlaylist" class="actBtn danger" :disabled="saving || deleting"
+                      @click="deletePlaylist">删除歌单
+              </button>
               <span v-if="manageMode" class="actHint">
                 {{ allLoaded ? '可调整顺序与移出歌曲' : '还有歌曲未加载，顺序调整需先加载全部' }}
               </span>
@@ -119,6 +123,8 @@ export default {
       manageMode: false,
       editVisible: false,
       saving: false,
+      // 删除歌单单独一个 loading：删除成功会跳走，不能和 saving 混用
+      deleting: false,
       editForm: { name: '', desc: '' },
     }
   },
@@ -145,6 +151,13 @@ export default {
       const uid = this.profile && this.profile.userId
       const owner = this.listInfo && this.listInfo.userId
       return !!uid && this.$store.getters["UserAbout/isLogin"] && String(owner) === String(uid)
+    },
+    /**
+     * 「我喜欢的音乐」：账号自带系统歌单，specialType 实测为 5（`/user/playlist` 首条），
+     * 删除接口对它必然报错，所以入口直接不渲染。
+     */
+    isFavPlaylist() {
+      return Number(this.listInfo && this.listInfo.specialType) === 5
     },
     /**
      * 歌曲是否已全部加载。排序接口要求提交**完整** id 序列，
@@ -230,6 +243,44 @@ export default {
       this.manageMode = !this.manageMode
       if (this.manageMode && !this.allLoaded) {
         this.$message.info('还有歌曲未加载，调整顺序前请先把列表加载到底')
+      }
+    },
+    /**
+     * 删除歌单（仅创建者）：
+     * - 不可恢复，二次确认里写清「删的是歌单不是歌曲」
+     * - 成功后广播 playlistDeleted，让被 keep-alive 缓存的用户主页重拉歌单区
+     *   （UserDetailLayout 只在 mounted 取数，不广播就会继续显示已删的歌单）
+     * - 然后跳回「我的」，否则当前页会停在一个已经不存在的歌单上
+     */
+    async deletePlaylist() {
+      if (this.saving || this.deleting) return
+      const name = this.listInfo.name || '这个歌单'
+      const count = this.listInfo.trackCount || 0
+      try {
+        await this.$confirm(
+            `删除后无法恢复。《${name}》以及其中的 ${count} 首歌会从你的账号里移除（歌曲本身不会被删除）。`,
+            '删除歌单',
+            {
+              type: 'warning',
+              confirmButtonText: '确认删除',
+              cancelButtonText: '取消',
+              confirmButtonClass: 'el-button--danger'
+            })
+      } catch (e) {
+        return // 用户取消
+      }
+      this.deleting = true
+      try {
+        const res = await playlistApi.del(this.id)
+        const r = this._writeResult(res, '删除失败')
+        if (!r.ok) throw new Error(r.message)
+        this.$message.success('歌单已删除')
+        this.$bus.$emit('playlistDeleted', this.id)
+        this.$router.push('/user')
+      } catch (e) {
+        this.$message.error('删除失败：' + (e.message || '请稍后重试'))
+      } finally {
+        this.deleting = false
       }
     },
     /** 上移/下移：先本地交换，提交成功才落地，失败保持原顺序 */
@@ -343,6 +394,18 @@ export default {
     background: #8685EF;
     border-color: #8685EF;
     color: #fff;
+  }
+
+  /* 破坏性操作：常态就带红，悬停加深；比 .actBtn:hover 优先级高，不会被紫色覆盖 */
+  &.danger {
+    border-color: rgba(220, 38, 38, .3);
+    color: #dc2626;
+  }
+
+  &.danger:hover:not(:disabled) {
+    border-color: #dc2626;
+    background: rgba(220, 38, 38, .08);
+    color: #dc2626;
   }
 
   &:disabled {

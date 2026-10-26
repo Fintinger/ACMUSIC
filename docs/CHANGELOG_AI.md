@@ -1816,3 +1816,468 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - 只在 `CommentContentLayout` 生效；`UserDetailLayout` 的「最近登录」仍是 `M月D日 HH:mm`（未在本次范围内）
 - 判断依据是本机时间，用户改系统时间会跟着变
 - 不影响其他 `formatMs` 调用点（专辑/歌单/MV 发布时间本来就是完整年月日）
+
+---
+
+### 2026-10-26 — feat(user): 用户详情页新增「关注 / 粉丝」列表
+
+### 修改内容
+1. `src/api/UserDetail.js` 新增两个封装：`follows(uid, limit=30, offset=0)` → `/user/follows`、`followeds(uid, limit=30, offset=0)` → `/user/followeds`
+2. 新增 `src/components/layout/UserListLayout.vue`：用户卡片网格（头像 / 昵称 / 性别 / 签名 / 粉丝数关注数），点击只发 `$bus.$emit('uClk')`，跳转交给 `App.vue`
+3. `src/components/layout/UserDetailLayout.vue`：
+   - 页面底部新增「关注与粉丝」区块，`el-tabs` 两个 pane（`lazy`），各自独立分页（每页 30）
+   - 关注 tab 随页面加载取第一页；粉丝 tab 首次切换时才请求（避免每次进用户页多打一个接口）
+   - hero 上的「N 关注 / N 粉丝」变成可点击，点了切到对应 tab 并平滑滚动到该区块
+   - tab 标题带计数，数字取 `profile.follows / profile.followeds`（列表是分页的，长度不能当总数）
+
+### 修改文件
+- `src/api/UserDetail.js`
+- `src/components/layout/UserListLayout.vue`（新增）
+- `src/components/layout/UserDetailLayout.vue`
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+两个端点此前未封装（`docs/API_INDEX.md` 里 `/user/follows`、`/user/followeds` 封装列均为空），用户详情页只能看到「N 关注 / N 粉丝」数字，点不进去。
+
+**翻页为什么要「无新增即终止」**：网关 v4.39.0 的 `module/user_followeds.js` 走的是 `/api/user/getfolloweds/{uid}` 原始接口，实测 **`limit` 与 `offset` 完全被上游忽略** ——
+`limit=1`、`limit=60`、`offset=0/1/29/30` 全部返回同一批 30 条，且 `more` 恒为 `true`。
+只认 `more` 会导致「加载更多」无限可点、列表里塞满重复用户（同 key 还会触发 Vue 警告）。
+所以以「本页没带回任何新 userId」作为终止条件，并用 `cap` 标记在 UI 上如实说明「只返回最近前 30 位粉丝」，不假装加载完了。
+`/user/follows` 则走 `weapi`，`limit/offset` 正常生效（实测 106 个关注分 4 页取完、0 重复）。
+
+### 测试结果
+- `npx eslint`（三个改动文件）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- `vue-cli-service serve` ✅ Compiled successfully（dev server 8080）
+- 分页逻辑 Node 实测（复刻 `loadSocial` 逐行逻辑，直连生产网关 `music.archai.space/api`）：
+  - `/user/follows` uid=40613965：4 页累计 106 位，去重后唯一 106 位，页新增 30/26/25/25，`more` 恒 true ✅
+  - `/user/follows` uid=32953014：22 位一页取完，`more=false` ✅
+  - `/user/followeds` uid=32953014：第 1 页 30 条 → 第 2 页新增 0 条 → `noMore=true`、`cap=true`，累计 30 位且无重复 ✅（证明不会死循环）
+- 浏览器手动核查：❌ 未做（本机无 headless 环境，dev server 已起在 http://localhost:8080 ，待人工过一眼 UI）
+
+### 注意事项
+- 粉丝列表受网关缺陷限制，**只能看到最近 30 位**；要完整翻页需上游把 `limit/offset` 透传给 `/api/user/getfolloweds`（或改用 `lasttime` 游标），届时删掉 `cap` 提示即可
+- 关注列表翻页用 `offset = 已加载条数`。关注关系会变动，边翻边关注/取关时可能少量漏项，属 offset 分页的固有特性
+- 对方设置了隐私时会话 4xx → 显示「列表不可见（对方可能设置了隐私）」
+- 新增 1 个文件，未引入任何依赖
+
+---
+
+### 2026-10-26 — feat(user): 粉丝卡片显示「关注时长」
+
+### 修改内容
+1. `src/utils/filters.js` 新增 `followDaysText(ms)`：把粉丝项的 `time` 转成「今天关注 / 昨天关注 / 关注 N 天 / 关注 N 年 M 个月」，无效值（0 / undefined / 未来时间）返回空串
+2. `src/components/layout/UserListLayout.vue`：meta 行追加主题色小字，`title` 悬停显示具体日期（`YYYY.MM.DD 关注`）；`time` 为 0 时自动不渲染
+3. meta 行改 `flex-wrap: wrap`，长昵称/长文案时不再挤成一行
+
+### 修改文件
+- `src/utils/filters.js`
+- `src/components/layout/UserListLayout.vue`
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+需求是「粉丝列表有没有关注天数」。实测结论：**没有现成的天数/日期字段，但 `/user/followeds` 每项的 `time` 就是关注时间**（13 位毫秒时间戳），可以算。
+
+字段语义的证据（容易被误判成「注册时间」，所以刻意验证过）：
+- 三个账号抽样 `time > 0` 覆盖率 **30/30、30/30、5/5**，且全部**严格降序**
+- 大 V `uid=416608258`（347 万粉）：30 条 `time` 全落在当天 12:45–13:13 的 28 分钟内，间隔几分钟一条 —— 不可能是注册时间，只能是「最新粉丝」的流入节奏
+- 同一被关注者的粉丝里存在 `time` 相差 209ms 的两条（两个不同账号几乎同时关注）—— 若是注册时间绝无可能
+
+**`/user/follows` 拿不到这个数据**：该接口每项 `time` 恒为 0（30/30 全为 0），没有关注时间可用，所以关注 tab 不显示时长（`v-if="u.time > 0"` 自然跳过）。
+
+天数按**日历日**相减，不是 `(now - time) / 86400000` 取整：昨晚 23:50 关注、今天 00:10 看，按毫秒只有 0.01 天会显示「0 天」，按日历日才是「昨天关注」。
+
+### 测试结果
+- `npx eslint`（filters.js + UserListLayout.vue）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- dev server HMR ✅ Compiled successfully，`.dev-serve.log` 中 `Failed to compile / ERROR in` 计数为 0
+- 直接抽取 `filters.js` 里的真实函数源码跑边界（非复制实现）：
+  - 3 分钟前 / 今天 00:05 → `今天关注`
+  - 昨天 23:50 → `昨天关注`
+  - 2 天 → `关注 2 天`；35 天 → `关注 35 天`
+  - 365 天 → `关注 1 年`；400 天 → `关注 1 年 1 个月`；1161 天 → `关注 3 年 2 个月`；3554 天 → `关注 9 年 8 个月`
+  - `0`（follows 接口）/ `undefined` / 未来 5 天 → `''`（不渲染）
+- 浏览器手动核查：❌ 未做（dev server 在 8080，人工过一眼即可）
+
+### 注意事项
+- 天数只能对 `/user/followeds`（粉丝）显示；关注 tab 没这个字段，是接口能力差异，不是漏写
+- 粉丝列表本身仍受「网关只返回最近 30 位」限制，所以关注时长也只覆盖这 30 人
+- 时区取浏览器本地时间；改系统时间会让天数跟着漂
+
+### 2026-10-26 — FEAT-vip-info 接入 /vip/info 与 /vip/info/v2，昵称后展示会员徽章
+
+### 修改内容
+1. **`src/api/User.js`**：
+   - `vipInfo(uid)` 增加可选 `uid` 参数（原实现无参，只能查当前登录态）
+   - 新增 `vipInfoV2(uid)` 封装 App 端接口 `/vip/info/v2`
+2. **新增 `src/components/userPage/VipBadge.vue`**：昵称后面的会员小徽章（**不做独立板块**）
+   - 徽章三种形态：黑胶有效（暗底金字「黑胶VIP V7」）/ 黑胶已过期（灰底「黑胶VIP 已过期」）/ 仅有音乐包（紫底「音乐包」）
+   - 细节收进 hover 提示：黑胶到期时间 + 剩余天数、音乐包、有声书VIP 各自状态；非本人不显示到期时间
+   - 三种都没有时不渲染，昵称行保持干净
+3. **`src/components/layout/UserDetailLayout.vue`**：徽章挂在 `.hero-name` 里、昵称与性别图标之后；顺手修 `isSelf` 的 `number` vs `string` 严格比较（路由 query 里的 `uid` 是字符串）
+4. 更新 `docs/API_GAPS.md`「会员信息」一行的现状描述
+
+### 修改文件
+- `src/api/User.js`
+- `src/components/userPage/VipBadge.vue`（新增）
+- `src/components/layout/UserDetailLayout.vue`
+- `docs/API_GAPS.md`
+
+### 修改原因
+- **为什么两个接口都要接**：实测 `uid=32953014`，
+  - `/vip/info` 的 `data` 只有 `redVipLevel` / `redVipAnnualCount` / `redVip*Icon`，**没有任何权益与到期时间**
+  - `/vip/info/v2` 才有 `associator`(100) / `musicPackage`(220) / `voiceBookVip`(500) 三段权益，各带 `vipCode`、`vipLevel`、`expireTime`
+  只接 v1 只能显示"等级 7"这种没法解释的数字，只接 v2 则丢掉官方文档里最基础的 `redVipLevel` 兜底，所以两条都接、v2 优先、v1 兜底。
+- **为什么 `vipCode > 0` 不能直接当"有效"**：实测该账号 `voiceBookVip.vipCode=500` 但 `expireTime=1693756799000`（2023-09-03，早已过期）。只看权益码会把过期权益标成「有效」，所以有效性必须和 `expireTime` 再比一次，黑胶过期的徽章直接降级成灰底「已过期」。
+- **为什么非本人隐藏到期时间**：接口对任意 `uid` 都返回到期时间，但官方 App 里看别人主页只展示徽章。展示他人付费信息属于越界，所以非本人只给等级，提示里写"到期时间仅本人可见"。
+- **为什么只做徽章不做卡片**：会员信息在用户主页上属于"标签级"信息，一块独立板块会挤占听歌排行/歌单的首屏空间；徽章 + hover 提示既能在第一眼给出身份标签，又不改变页面信息层级。
+- **为什么不复用 PlayerCore 已有的 vipInfo 逻辑**：`PlayerCore._loadVipInfo()` 是为音质门控服务的（含"未知放行"的容错），语义是"三态判定"，和页面展示的需求不同，强行共用会把门控的容错逻辑泄漏到 UI。本次只把 `vipInfo` 加上可选 `uid`，`PlayerCore` 的调用方式（无参）不受影响。
+- **`isSelf` 的严格比较是真 Bug**：`/user` 页传的 `uid` 是 number，`/user-detail?uid=xxx` 传的是 string，`this.uid === this.loginInfo.userId` 在后者恒为 false → 从别人主页点进自己主页时，云盘/听歌排行/收藏计数全部不加载。改为 `String()` 比较。
+
+### 测试结果
+- `npx eslint --ext .js,.vue src/` ✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- 无头 Edge + CDP 实测 `http://localhost:8080/user-detail?uid=32953014`：
+  - 昵称右侧渲染「黑胶VIP V7」徽章，与性别图标同一行、无错位/无重叠，`console` 无异常
+  - hover 提示内容：`黑胶VIP 到期时间仅本人可见 / 音乐包 有效 / 有声书VIP 已过期`
+  - 切到本人视角（临时改 `isSelf`）：提示变为「黑胶VIP 到期 2027.06.12（剩余 230 天）/ 音乐包 到期 2027.06.12 / 有声书VIP 已于 2023.09.03 过期」
+
+### 注意事项
+- `/vip/info/v2` 里的 `redVipAnnualCount = -1` 表示"未开通年费/数据不可得"，不是负数天数，代码里不再展示该字段
+- 徽章在 `/user`（本人）和 `/user-detail`（任意人）两个入口都会渲染，非本人不显示到期时间
+- 无会员的账号不渲染徽章，昵称行与改动前完全一致
+- 音质门控仍走 `PlayerCore` 原有逻辑，本次未改动，行为不变
+- 本次构建会把 `dist/` 覆盖为新产物（该目录未纳入 git）
+
+---
+
+### 2026-10-26 — feat(user): 粉丝列表「回关 / 互相关注」按钮 + 取消关注确认
+
+### 修改内容
+1. `src/api/User.js` 新增 `mutualFollow(uid)` → `/user/mutualfollow/get`、`followMixed(scene, size, cursor)` → `/user/follow/mixed`（`followUser` 原本已有）
+2. `src/utils/filters.js` 拆出 `followSpanText(ms)`（纯时长：今天/昨天/N 天/N 年 M 个月），`followDaysText` 复用它并补「关注」二字
+3. `src/components/layout/UserListLayout.vue`：
+   - 新增 `mode` prop：`'followeds'` 时右侧渲染操作按钮，`'list'` 时（关注列表）不渲染
+   - 未互关 → 「回关」按钮，点击 `followUser(uid, 1)`；已互关 → 「互相关注」按钮，hover 变红提示可取消
+   - 点「互相关注」先弹确认：显示对方昵称 +「对方已关注你：N 年 M 个月」，按钮为「仍然取消 / 继续关注」
+   - 成功后只翻本地状态（`mutual`/`followed`），不做乐观更新；失败/网络错误只提示不改 UI
+   - 头像+信息包进 `.hitArea`，按钮 `@click.stop`，避免点按钮误跳转
+4. `src/components/layout/UserDetailLayout.vue`：粉丝 tab 传 `mode="followeds"`
+
+### 修改文件
+- `src/api/User.js`
+- `src/utils/filters.js`
+- `src/components/layout/UserListLayout.vue`
+- `src/components/layout/UserDetailLayout.vue`
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+需求：粉丝列表每人显示「互相关注 / 回关」两种状态，互关点击走取消关注并带时长确认。
+
+实测约束（决定了实现方式）：
+- `/user/follow/mixed` **必须登录**，游客 `{"code":400,"message":"not login"}`；且它只取「当前账号」的关注，不接受 uid
+- `/user/mutualfollow/get` 游客态也返回 `{code:200,data:false}`，不能用来判断登录态
+- `/user/follows` 每项 `time` 恒为 0 → **「我关注 TA 的时间」没有数据源**
+
+因此按钮状态直接用 `/user/followeds` 列表项自带的 `mutual` 字段（与 mutualfollow 同源），
+不逐条请求 `mutualfollow/get`（30 条就是 30 次往返）。
+确认弹窗里的时长只用「对方已关注你：N 年 M 个月」（来自列表项 `time`，即 TA 关注我的时间），
+「已关注 / 互相关注时长」等 `/user/follow/mixed` 的真实字段确认后补。
+
+取消关注**不清空** `time`：它是「TA 关注我」的时间，取关不影响对方关注我这件事。
+
+### 测试结果
+- `npx eslint`（4 个改动文件）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- 时长函数边界（抽取源码直接跑）：今天/昨天/2 天/35 天/365 天→`1 年`/400 天→`1 年 1 个月`/1161 天→`3 年 2 个月`/3554 天→`9 年 8 个月`；`0`/`undefined`/未来时间 → 空串 ✅
+- 登录态接口（`mixed`）与写操作（`/follow`）**未做端到端验证**：本机无登录态，且 `/follow` 会真实改动关注关系，留待人工
+
+### 注意事项
+- 「全部/用户/歌手」分类条尚未接入，等 `/user/follow/mixed` 的真实返回结构确认后实现
+- `/follow` 是写操作：取消关注会真实影响账号，测试时别拿真实好友试
+
+---
+
+### 2026-10-26 — feat(user): 关注列表「全部/用户/歌手」分类 + 混排卡片
+
+### 修改内容
+1. 新增 `src/components/layout/FollowMixedLayout.vue`：渲染 `/user/follow/mixed` 的 records，用户卡与歌手卡在同一个 grid 里混排
+   - 用户卡：头像/昵称/性别/签名 +「关注 2年77天」+「互关 2年77天」
+   - 歌手卡：圆形头像/名字 +「歌手」标签/别名 + 关注时长 + 乐迷等级（`fansGroupInfo.segment + level`）
+   - 点击分别发 `$bus` 的 `uClk` / `arClk`，与现有跳转体系一致
+   - grid key 用 `type + '-' + followId`：用户 id 与歌手 id 空间独立，可能同号
+2. `UserDetailLayout.vue`：
+   - 关注 tab 在**本人页面**加 `el-radio-group`：全部(0) / 用户(2) / 歌手(1)，默认「用户」
+   - 混排走 cursor 游标分页（`data.page.cursor` + `data.page.more`），与 offset 分页的 `social.follows` 分开维护
+   - 加 `mixedSeq` 并发令牌：快速切分类时丢弃在途的旧响应，避免串数据
+   - 他人页面按约定**不显示分类条**，仍走 `/user/follows`（只有用户，且 `time` 恒为 0，无时长）
+3. `UserListLayout.vue`：取消关注的确认弹窗改用时长的官方文案
+   - `findFollowSpan(uid)`：游标翻 `/user/follow/mixed?scene=2` 找到该 uid，取 `followDay` / `mutualFollowDay`
+   - 最多翻 8 页（240 人），命中后写入 `spanCache`；未命中降级为「对方已关注你 N 天」（来自 followeds 的 `time`）
+   - 点击按钮期间按钮显示 loading，避免弹窗内容先空后填
+   - 回关/取关成功后 `$delete` 掉该 uid 的时长缓存 —— 关系重建时长要重新算
+
+### 修改文件
+- `src/components/layout/FollowMixedLayout.vue`（新增）
+- `src/components/layout/UserDetailLayout.vue`
+- `src/components/layout/UserListLayout.vue`
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+`/user/follow/mixed` 的真实结构（登录态实测，2026-10-26）：
+
+```json
+{ "code": 200, "data": {
+  "records": [{
+    "type": 1,                                  // 1 用户 / 2 歌手
+    "followId": 477531493,
+    "userProfile": { "userId":..., "nickname":..., "mutual": true },   // type=1
+    "artistInfo":  { "id":..., "name":..., "alias":[...] },            // type=2
+    "followTime": 1792993091283,                // 我关注它的时间
+    "mutualFollowTime": 1792993091283,          // 互关时间（未互关为 null）
+    "followDay": "1天",                         // 官方算好的时长文案
+    "mutualFollowDay": "1天"
+  }],
+  "page": { "size": 3, "cursor": "3", "more": true }
+}}
+```
+
+这就是此前缺的两块：
+- **分类**靠 `type` 区分，不必再拼 `follows + sublist`
+- **时长**靠 `followDay` / `mutualFollowDay`，且是网易云自己的口径（"2年77天"），比前端自己按毫秒算更贴近 App
+
+注意实测 **`size=2` 却返回 3 条且 `cursor="3"`**：服务端会多回一条。因此渲染时**不切片**，全部消费返回的 records，下一页用返回的 cursor —— 切掉最后一条会导致该条永远取不到。已用真实返回 + 人造重复页验证：翻页无重复、无丢失。
+
+### 测试结果
+- `npx eslint`（3 个改动文件）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- 分页/去重/混排逻辑 Node 实测（喂真实第一页 JSON + 人造第二页，其中故意重复一条）：
+  - 第 1 页渲染 3 条，cursor 0→`3`，more 正确
+  - 第 2 页新增 2 条（重复的那条被过滤），cursor `6`，`noMore=true`
+  - 5 条 key 全唯一 ✅；混排顺序「用户|用户|用户|歌手|用户」按接口原序
+  - 时长解析 `323008512` → `{followDay:"2年77天", mutualFollowDay:"2年77天"}`
+- 登录态下的真实渲染、`/follow` 写操作**未端到端验证**（本机无登录态；且取关会真实改动账号）
+
+### 注意事项
+- 分类条只在本人页面出现；他人页面拿不到「关注的歌手」，这是接口能力限制（`mixed` 不接受 uid）
+- `findFollowSpan` 最坏情况翻 8 页（约 240 人）；关注数超过这个量级时，弹窗会降级只显示「对方已关注你 N 天」。需要更准的话得让网关提供按 uid 查关注关系的接口
+- `followDay` 是服务端算好的文案，跨年/跨月口径以它为准；`followSpanText`（前端算的）只用于粉丝侧没有官方文案的场景
+
+### 2026-10-26 — FEAT-vip-svip 会员徽章区分黑胶SVIP 与普通黑胶VIP
+
+### 修改内容
+1. **`src/components/userPage/VipBadge.vue`**：
+   - 徽章文案由固定「黑胶VIP」改为按 `redplus` 判定：「黑胶SVIP V7」/「黑胶VIP V7」/「黑胶VIP 已过期」
+   - SVIP 徽章多一圈金色描边 + 偏金底（`is-svip`），与普通黑胶一眼可分
+   - hover 提示重排：SVIP 生效时只列 SVIP 一行（已含 VIP 权益），失效时才单独补一行「黑胶SVIP 已过期」；数字专辑权益、音乐包、有声书 VIP 各自成行
+   - 新增 `expireLine()` 统一到期口径：**他人的日期不展示，但「有效/已过期」这个事实照常说**（此前会把已过期权益显示成"到期时间仅本人可见"，读起来像状态未知）
+2. `docs/API_GAPS.md`「会员信息」行补充 SVIP 区分能力
+
+### 修改文件
+- `src/components/userPage/VipBadge.vue`
+- `docs/API_GAPS.md`
+
+### 修改原因
+- **SVIP 只能靠 `redplus` 判**，实测排除了三条看似可行的路：
+  1. `associator.vipCode` 恒为 100 —— 40 个账号抽样，VIP 与 SVIP 完全一样
+  2. `/user/detail` 的 `profile.vipType` —— 两者都返回 11
+  3. `redVipLevel` —— SVIP 与 VIP **共用同一套等级体系**（官方口径），只能给档位给不出品类
+  所以 `/vip/info/v2` 里那个 `redplus`（`vipCode` 300）是唯一可用的信号。
+- **判定依据（40 个真实账号抽样 + 逐字段比对）**：
+  - `redplus` 与 `albumVip`(400)、`voiceBookVip`(500) **永远同时出现**（28/28），且三者 `expireTime` 完全相同 → 同一次 SVIP 订单打包下发，内容正好对应官方对 SVIP 的定义（黑胶VIP 权益 + 畅听数字专辑 + 付费有声书 + 多终端）
+  - `uid=16629617`：`associator` 到 2026-09-18，`redplus/albumVip/voiceBookVip` 都停在 2025-05-09 → SVIP 到期后回落普通 VIP，`redplus` 的到期时间独立于黑胶VIP，符合「SVIP 与 VIP 是两个独立商品、各自管理续费」
+  - `uid=1344710603` / `318398276`：只有 `associator` + 一个早已过期的 `voiceBookVip`，没有 `redplus` → 有声书可以单独买，但不能反过来推成 SVIP
+  - `vipCode` 是权益类型码不是等级：100 associator / 220 musicPackage / 300 redplus / 400 albumVip / 500 voiceBookVip
+- **为什么他人的到期时间仍然不展示**：`/vip/info/v2` 对任意 `uid` 都返回到期时间，但那是付费信息；徽章只呈现身份（SVIP/VIP/已过期），日期留给本人。
+
+### 测试结果
+- `npx eslint --ext .js,.vue src/` ✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- 无头 Edge + CDP 三账号对照实测（改前/改后各跑一轮）：
+  | uid | 数据 | 徽章 | hover |
+  | --- | --- | --- | --- |
+  | 418679942 | associator+musicPackage+redplus+albumVip+voiceBookVip 均有效 | 黑胶SVIP V7（金边） | 黑胶SVIP 有效 / 数字专辑权益 有效 / 音乐包 有效 / 有声书VIP 有效 |
+  | 32953014 | 只有 associator+musicPackage，voiceBookVip 2023 已过期 | 黑胶VIP V7（纯黑） | 黑胶VIP 有效 / 音乐包 有效 / 有声书VIP 已过期 |
+  | 16629617 | 全部过期（redplus 停在 2025-05-09） | 黑胶VIP 已过期（灰） | 黑胶VIP 已过期 / 黑胶SVIP 已过期 / 有声书VIP 已过期 |
+
+### 注意事项
+- `redplus` 的语义是**推断**（依据是它与数字专辑/有声书权益的强绑定 + 到期时间独立性 + 官方 SVIP 权益清单），不是官方字段文档。若后续拿到 SVIP 账号登录态，可再核一次 `/vip/info/v2` 的 `redplus.expireTime` 是否与 App 内 SVIP 到期日一致。
+- 徽章只做身份标识，不参与音质门控；臻音/高清臻音目前仍按原有 `vipType` 逻辑判断，未把 SVIP 纳入（那是另一件事，需要单独确认 SVIP 是否解锁 hires）。
+
+---
+
+### 2026-10-26 — FEAT-playlist-import 歌单导入（链接导入外部平台歌单）
+
+#### 修改内容
+
+接入「歌单导入」接口，在本人主页的歌单区加「导入外部歌单」入口，当前只做**链接导入**（QQ 音乐等平台的歌单/专辑/主页链接），支持一次贴多个链接合并成一个新歌单，提交后轮询任务状态。
+
+#### 修改文件
+
+- `src/api/Playlist.js`（新增 `importTaskCreate` / `importTaskStatus`）
+- `src/components/common/PlaylistImportDialog.vue`（新增）
+- `src/components/layout/UserDetailLayout.vue`（歌单区标题加按钮 + 挂弹窗 + `reloadPlaylists`）
+
+#### 修改原因
+
+- **三种导入方式互斥且有优先级**（读上游 `module/playlist_import_name_task_create.js` 确认）：
+  - `local` 走 `multiSongs` 分支，把 `{name, artist, album}` map 成 `{songName, artistName, albumName}`，**不接受 playlistName**（服务端自己起名）
+  - `text` / `link` 走 `songs[]` 分支，每项是 `{name: playlistName, type: '', url: encodeURI(...)}`——文字被包成 `rpc://playlist/import?text=xxx` 这种伪 url，链接直接当伪 url 传
+  - `if (query.local)` 是 if/else：同时传 local 和 text/link 时 **local 胜出**；`text` 写在前面 `link` 写在后面且都能覆盖 `songs`，所以同时传 text + link 时 **link 静默覆盖 text**，不报错
+- **链接导入是唯一能跨平台搬歌单的方式**：`local` 要求自己先有一份歌名/歌手/专辑清单（前端得先扫外部歌单），`text` 靠服务端按「歌名 歌手」逐行模糊匹配、精度最差，只有 `link` 由服务端自己去抓外部歌单详情；用户需求正是「通过链接导入其他平台」
+- **不做手动 encodeURIComponent**：文档示例里的 `encodeURIComponent` 是给手拼 URL 用的。走 axios `params` 时 axios 会编码一次、服务端 decode 一次，`text` 分支内部还会再 `encodeURI` 一遍——前端再手动编一次就会二次编码，服务端拿到的 `text` 是 `%E3%82...` 字面量
+- **`importStarPlaylist` 只在 true 时下发**：上游写的是 `query.importStarPlaylist || false`，传字符串 `"false"` 会被判成真值
+- **入口只放本人主页**：接口要登录态，他人主页没有写入权限
+- **完成后只重拉歌单区**：`loadPage` 是 push 不 clear 的写法，直接复用会渲染出重复歌单
+
+#### 测试结果
+
+- `npx eslint --ext .js,.vue`（3 个改动文件）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete（11.2s）
+- 网关连通性实测（`https://music.archai.space`，未登录）：
+  | 请求 | 返回 |
+  | --- | --- |
+  | `/playlist/import/task/status?id=123834369` | `{"code":200,"data":{"tasks":[],"taskProcess":null}}` ✅ 路由存在 |
+  | `/playlist/create?name=x`（对照组） | `{"code":301,"msg":"需要登录"}` |
+  | `/playlist/import/name/task/create`（local / text / link 各一次） | `{"code":302,"message":"系统错误"}` |
+  | 同上 + `realIP` / `randomCNIP=true` | 仍是 302（与出口 IP 无关） |
+- 浏览器手动核查：❌ **未做**——需要登录态，当前没有可用账号 cookie
+
+#### 注意事项
+
+- **302 未定性**：未登录时 `/playlist/create` 返回的是 301「需要登录」，而导入接口返回 302「系统错误」且无 msg。两种可能：(1) 上游内部接口 `/api/playlist/import/name/task/create` 把未登录也报成 302；(2) 该接口在当前网关的加密/设备参数下不可用。**登录后第一次调用请先看 console 里的响应体**，弹窗内「查看原始返回」也能直接看到
+- **`taskId` 字段位置未文档化**：`pickTaskId` 按 `data.taskId → data.id → data.tasks[0].id/taskId → body.taskId` 逐个兜底。若全部落空，弹窗会显示「已提交，稍后刷新歌单查看」，不会假装成功
+- **任务状态字段未文档化**：只知道返回 `{tasks, taskProcess}`。状态文案做了 success/fail/process 关键字映射，映射不到就原样显示 `状态 N`，并提供原始 JSON 折叠区，不猜
+- **轮询**：2s 一次、上限 25 次（约 50s），单次失败不终止；超时提示「任务仍在处理中」，不清空界面
+- **回滚**：三个文件独立，删除 `PlaylistImportDialog.vue` + 去掉 `UserDetailLayout` 里的按钮/挂载/import 即回到原状；`api/Playlist.js` 只新增两个函数，不影响既有调用
+- 未提交 commit，等确认
+
+---
+
+### 2026-10-26 — feat(user/artist): 用户与歌手详情页增加关注/取关
+
+### 修改内容
+1. `src/api/Artist.js` 新增 `subArtist(id, t = 1)` → `/artist/sub`（`t=1` 关注，其他取消）
+2. `src/components/layout/UserDetailLayout.vue`：hero 右侧加关注按钮
+   - 初始状态取 `/user/detail` 的 `profile.followed`（不额外请求）
+   - 仅「已登录 + 不是自己主页」时渲染
+   - 关注直接执行；取消关注先弹确认（`仍然取消 / 继续关注`）
+   - 成功后本地增减 `profile.followeds`，做即时反馈
+   - 若 `profile.followTime` 是合理的毫秒时间戳，确认框里附一行「已关注：N 年 M 个月」；不像就算了，不猜单位
+3. `src/pages/artist/ArtistDetail.vue`：深色 hero 右侧加关注按钮
+   - 初始状态取 `/artists?id=` 的 `artist.followed`
+   - 取消关注同样弹确认
+4. 三处写操作（回关/取关、用户关注、歌手关注）统一补登录态失效提示：网关对未登录回 `301 未登录` 或 `302 系统错误`，命中这两个码提示「登录态已失效，请重新登录后再试」，而不是笼统的「操作失败」
+
+### 修改文件
+- `src/api/Artist.js`
+- `src/components/layout/UserDetailLayout.vue`
+- `src/pages/artist/ArtistDetail.vue`
+- `src/components/layout/UserListLayout.vue`
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+两个详情接口本来就带关注状态，不需要额外查询：
+- `/artists?id=9272` → `artist.followed`（Boolean）
+- `/user/detail?uid=...` → `profile.followed` / `profile.mutual` / `profile.followTime`
+
+游客态实测：`/artist/sub?id=&t=1` → `{"code":301,"message":"未登录"}`；
+`/follow?id=&t=1` → `{"code":302,"message":"系统错误"}`（不是 301，所以两个码都要认）。
+
+### 测试结果
+- `npx eslint`（4 个改动文件）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete
+- 接口探测（游客态，无副作用）：`/artist/sub` 301 未登录、`/follow` 302 系统错误、`/artists` 的 `followed` 可读 ✅
+- 登录态下真实关注/取关**未端到端验证**：写操作会真实改动账号
+
+### 注意事项
+- 用户页关注按钮不处理「互相关注」状态，只区分「关注 / 已关注」；互关时长仍走粉丝列表那套弹窗
+- `profile.followTime` 的单位没有文档说明，代码里只在 `> 1e12`（毫秒量级）且不在未来时才用来算时长，否则整行不显示
+- 歌手页用了 keep-alive（`activated`），关注状态每次进页面都按接口返回值重置，不会留脏状态
+
+---
+
+### 2026-10-26 — FEAT-playlist-delete 歌单删除（仅创建者）
+
+#### 修改内容
+
+歌单详情页的创建者操作区新增「删除歌单」：二次确认后调 `/playlist/delete`，成功后广播事件并跳回「我的」；「我喜欢的音乐」不显示该入口。
+
+#### 修改文件
+
+- `src/pages/ListDetail.vue`（按钮 + `deletePlaylist` + `isFavPlaylist` + 危险按钮样式）
+- `src/components/layout/UserDetailLayout.vue`（监听 `playlistDeleted` → 只重拉歌单区）
+
+#### 修改原因
+
+- **入口放详情页**：已有的「编辑信息 / 管理歌曲」就在 `ownerActions`，删除同属创建者操作，放一起不需要新 UI 结构；列表卡片上没有删除按钮，避免误触
+- **`specialType === 5` 不给入口**：`/playlist/detail` 实测「我喜欢的音乐」`specialType=5`，普通自建歌单为 `0`。系统歌单删不掉，留着按钮只会让用户点了吃一个报错
+- **必须二次确认**：不可恢复。确认文案写清「删的是歌单，歌曲本身不会被删除」，并把 `trackCount` 带进去，避免用户以为会连带删歌
+- **确认按钮标红**：`confirmButtonClass: 'el-button--danger'`，和「取消」在视觉上分开
+- **成功后广播 `playlistDeleted`**：页面是 `keep-alive` + `:key="$route.fullPath"`，用户主页组件只在 `mounted` 取数，删除后返回主页不会重新挂载 → 会继续显示已删的歌单。`UserDetailLayout` 现在监听该事件并调 `reloadPlaylists()`（只重拉歌单区，排行榜/云盘/关注没变，不做全量 `loadPage`）
+- **跳回 `/user`**：不跳的话当前页停在一个已经不存在的歌单上，`/playlist/detail` 会返回空 playlist
+- **`deleting` 独立于 `saving`**：删除成功会 `$router.push` 走人，和编辑/排序的 loading 不是一条生命周期
+
+#### 测试结果
+
+- `npx eslint --ext .js,.vue`（3 个改动文件）✅ 0 error
+- `npx vue-cli-service build` ✅ Build complete（11.9s）
+- 接口契约核对（上游 `module/playlist_delete.js`）：入参 `id`，内部转成 `ids: '[' + id + ']'`，走 weapi；返回 `{code:200}` 视为成功，`_writeResult` 已兼容 `code`/`status` 两种形态
+- 数据源核对（网关实测）：
+  | 歌单 | id | specialType | trackCount |
+  | --- | --- | --- | --- |
+  | binaryify喜欢的音乐 | 24381616 | 5 | 1267 |
+  | 异形工厂（普通自建） | 12529334864 | 0 | 6 |
+- 浏览器手动核查：❌ **未做** —— 入口只对创建者（登录态）渲染，当前没有可用账号 cookie
+
+#### 注意事项
+
+- **未验证真实删除**：`/playlist/delete` 需要登录，返回码可能是 `401`（登录态失效）或 `403`（非本人）。`_writeResult` 会把 `message` 透到 `$message.error`，不会静默失败。登录后第一次删请留意提示文案
+- **`specialType` 只挡了 5**：实测还看到 `20`（年度歌单，也是系统生成）。年度歌单是否可删未验证，暂不拦——真删不掉时服务端会返回错误提示，不会误删
+- **keep-alive 缓存页**：如果被删歌单的详情页实例还在缓存里（同一 `fullPath`），再点进去会重新 `activated()` 清空并重取，拿到空 `playlist` 走骨架/空态，不会白屏
+- **不做连带处理**：若播放器正从这个歌单播放，队列照旧（内存里的列表不受影响），这是有意为之，避免删歌单把正在放的歌打断
+- **回滚**：`ListDetail.vue` 去掉按钮 + `deletePlaylist` + `isFavPlaylist`，`UserDetailLayout.vue` 去掉监听即可；`api/Playlist.js` 的 `del()` 是既有函数，本次未改动
+- 未提交 commit，等确认
+
+---
+
+### 2026-10-26 — FEAT-annual-report 年度听歌报告（8→10 年时间线）
+
+#### 修改内容
+
+新增 `/annual` 页面：把 2016–2025 年的「年度之歌 / 年度歌手 / 播放量」串成一条时间轴；「我的」页 hero 区加入口（仅本人可见）。2025 年因官方接口缺位，改为按需用月报聚合补一份近似值。
+
+#### 修改文件
+
+- `src/api/Summary.js`（新增：`annual(year)` / `listenYearReport()` / `listenSongRank()`）
+- `src/utils/annualReport.js`（新增：解析与合并的纯函数层）
+- `src/pages/AnnualReport.vue`（新增：时间轴页）
+- `src/router/index.js`（新增 `/annual` 路由）
+- `src/components/layout/UserDetailLayout.vue`（hero 区入口按钮）
+- `.gitignore`（忽略 `.dev-serve.log`）
+
+#### 修改原因
+
+- **只发 3 次请求**：`/listen/data/year/report` 一次给全 2017–2025 的播放次数与时长（统一秒）；`/summary/annual?year=2024` 给 2020–2024 年度歌手；`?year=2023` 给 2016–2022 年度之歌（藏在 `yuncunFootprintPage.footprintItems`）与 2019–2023 年度歌手。拼起来就是 10 年，不必逐年请求
+- **避开单位坑**：年报里「总时长」三种单位（2017 毫秒 / 2023 分钟 / 其余秒），而 `year/report` 统一秒。交叉校验过：2024=2603185s 与年报 `meetTimeOverview.playTime` 相等，2023=1178534s 等于年报分钟值×60
+- **`playNum` 口径不稳**：2018 是「1350 次 / 798 小时」＝35 分钟/次，明显不是播放次数。用「单次时长 20s–1800s」做可信度判据，越界就只显示时长并标注「播放次数口径异常」
+- **2025 只能聚合**：`/summary/annual` 传 2025 返回 `{"code":404,"message":"接口未找到！"}`，直接打 `music.163.com/yearly/2025` 也是同一份 JSON → 是上游兜底 404，不是网关白名单；`module/summary_annual.js` 最后提交停在 2024-07。改用 `listen/data/song/play/rank` 逐月（`endTime` 必须月末 23:59:59.999）拉 TOP20 再聚合
+- **频控**：0 间隔连打多请求会整批返回伪 `301 需要登录`（实测间隔 3s 全恢复），所以全程串行 + 间隔 + 重试；月报聚合 12 次请求做成按需按钮而非首屏加载
+- **登录态判据**：用 `utils/auth.isLoggedIn()`（cookie）而不是 `store.state.UserAbout.IS_LOGIN`——后者要进过「我的」页才置 true，直开 `/annual` 会误判未登录
+
+#### 测试结果
+
+- `npx eslint`（5 个改动文件）✅ 0 error 0 warning
+- dev server 编译 ✅
+- 真实数据核对 ✅：用黑胶 VIP 账号跑通，时间线 10 行 / 累计 5512 小时 / 4 位年度歌手；2016–2025 每年年度之歌齐全（2025 为聚合值）
+- 无头 Edge + CDP 实机渲染 ✅：`window.__acmusicErrors` 为空，截图确认布局无错位
+- 月报聚合实机点击 ✅：12/12 月，156 首歌，ζ(α·Pav) 104 次 / α·Pav 1252 次
+
+#### 注意事项
+
+- **2025 的年度之歌是估算**：每月只有 TOP20，掉出月榜的播放量丢失，聚合值必然偏小。UI 上打了「月报聚合」标签，note 明确写「非官方年报」
+- **2016 只有年度之歌**：`year/report` 从 2017 起，2016 无播放量
+- **2017–2018 无年度歌手**：`annualSingerComparePage` 只覆盖 2019 起
+- **月报聚合结果缓存在 localStorage**（`acmusic_annual_agg_v1`）：想重新算需清掉该 key
+- **接口纯逆向**：`songItems[].artists` 是对象数组（年报同名字段却是字符串），已做双形态兼容；上游随时可能改
+- 回滚：删除三个新文件 + 去掉路由与 hero 入口即可，无副作用

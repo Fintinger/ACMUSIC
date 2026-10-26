@@ -59,3 +59,13 @@ export function videos(params) {
 export function songs(id, limit = 50, offset = 0) {
     return request('/artist/songs', { params: { id, limit, offset } })
 }
+
+/**
+ * 收藏/取消收藏歌手（关注歌手）(登录)
+ * 说明: /artists?id= 返回的 artist.followed 即当前关注状态
+ * @param id 歌手 id
+ * @param t 1-关注, 其他-取消关注
+ */
+export function subArtist(id, t = 1) {
+    return request('/artist/sub', { params: { id, t } })
+}

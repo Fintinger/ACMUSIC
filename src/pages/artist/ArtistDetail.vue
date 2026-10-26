@@ -30,6 +30,15 @@
           <p class="hero-stats">{{ arBasicInfo.musicSize }} 首歌 · {{ arBasicInfo.albumSize }} 张专辑 · {{ arBasicInfo.mvSize }} 个 MV</p>
           <p class="hero-desc" v-if="arBasicInfo.briefDesc" :title="arBasicInfo.briefDesc">{{ arBasicInfo.briefDesc }}</p>
         </div>
+        <!-- 关注歌手：/artists?id= 返回的 artist.followed 即初始状态 -->
+        <div class="hero-actions" v-if="isLogin">
+          <button class="followBtn" :class="{ 'is-followed': followed }" :disabled="followPending"
+                  :title="followed ? '点击取消收藏' : '收藏该歌手'" @click="toggleFollow">
+            <i v-if="followPending" class="el-icon-loading"></i>
+            <template v-else-if="followed">已关注</template>
+            <template v-else>关注</template>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -108,7 +117,15 @@ export default {
       vidParams: { id: this.id, cursor: 0, order: 1 },
       loading: true,
       showCount: { songs: 5, albums: 8, mvs: 8, videos: 8, simi: 8 },
-      expanded: {}
+      expanded: {},
+      // 关注歌手（收藏歌手）状态
+      followed: false,
+      followPending: false,
+    }
+  },
+  computed: {
+    isLogin() {
+      return this.$store.getters["UserAbout/isLogin"]
     }
   },
   methods: {
@@ -117,6 +134,39 @@ export default {
     arAsClk(id) { this.$bus.$emit('arAsClk', id) },
     songClk(song) { this.$bus.$emit('songClk', song) },
     mvClick(id) { this.$bus.$emit('mvClk', id) },
+    /** 关注 / 取消关注该歌手 */
+    toggleFollow() {
+      if (this.followPending || !this.isLogin) return
+      if (!this.followed) return this.setFollow(1)
+      this.$confirm(`取消后你将不再收藏「${this.arBasicInfo.name}」，其新歌也不会出现在你的关注动态里。`, '取消关注', {
+        confirmButtonText: '仍然取消',
+        cancelButtonText: '继续关注',
+        type: 'warning',
+        distinguishCancelAndClose: true,
+      })
+        .then(() => this.setFollow(0))
+        .catch(() => { /* 继续关注 */ })
+    },
+    setFollow(t) {
+      this.followPending = true
+      artistApi.subArtist(this.id, t)
+        .then(res => {
+          const code = res && res.data && res.data.code
+          if (code === 200) {
+            const on = t === 1
+            this.followed = on
+            this.$set(this.arBasicInfo, 'followed', on)
+            this.$message.success(on ? '已关注该歌手' : '已取消关注')
+          } else if (code === 301 || code === 302) {
+            // 未登录时 /artist/sub 返回 301「未登录」
+            this.$message.warning('登录态已失效，请重新登录后再试')
+          } else {
+            this.$message.error('操作失败，请稍后重试')
+          }
+        })
+        .catch(() => this.$message.error('网络错误，操作失败'))
+        .finally(() => { this.followPending = false })
+    },
     getAtDetail() { return artistApi.detail(this.id) },
     getTop50() { return artistApi.topSongs(this.id) },
     getAlbum() { return artistApi.albums(this.id) },
@@ -138,6 +188,7 @@ export default {
     this.$axios.all([this.getAtDetail(), this.getTop50(), this.getAlbum(), this.getMVs(), this.getSimiAt(), this.getVid()])
         .then(this.$axios.spread((AtDetail, Top50, Album, MVs, SimiAt, video) => {
           this.arBasicInfo = AtDetail.data.artist
+          this.followed = !!this.arBasicInfo.followed
           this.top50songs = Top50.data.songs; this.hotAlbums = Album.data.hotAlbums
           this.mvs = MVs.data.mvs; this.simiArtists = SimiAt.data.artists
           this.videos = video.data.data.records; this.vidParams.cursor = video.data.data.page.cursor
@@ -172,6 +223,33 @@ export default {
   .hero-alias { font-size: 15px; opacity: .7; margin: 0 0 12px; }
   .hero-stats { font-size: 14px; opacity: .65; margin: 0 0 8px; }
   .hero-desc { font-size: 13px; opacity: .5; margin: 0; max-width: 600px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  // 关注按钮贴右侧（hero 是深色磨砂底，用白底/半透明描边两态）
+  .hero-actions { margin-left: auto; flex-shrink: 0; padding-left: 24px; }
+  .followBtn {
+    min-width: 104px;
+    height: 38px;
+    padding: 0 26px;
+    border-radius: 19px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    background: rgba(255,255,255,.95);
+    color: #1a1a1a;
+    transition: all .2s;
+
+    &:hover { background: #fff; transform: translateY(-1px); }
+
+    &.is-followed {
+      background: rgba(255,255,255,.14);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.55);
+
+      &:hover { background: rgba(245,108,108,.25); border-color: rgba(255,255,255,.85); }
+    }
+
+    &:disabled { opacity: .6; cursor: default; transform: none; }
+  }
 }
 
 .ar-section {

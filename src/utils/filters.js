@@ -53,6 +53,48 @@ export function formatCommentTime(ms) {
 }
 
 /**
+ * 关注时长的纯时长部分：今天 / 昨天 / N 天 / N 年 M 个月。
+ * 供「对方已关注你：3 年 2 个月」这类需要自己拼句子的场景使用；
+ * 卡片上直接显示请用 followDaysText（自带「关注」二字）。
+ * @param{Number} ms 关系建立时间（毫秒时间戳）
+ * @returns{String} 无效时间返回空串
+ */
+export function followSpanText(ms) {
+    const t = Number(ms)
+    if (!t || t <= 0) return ''
+    const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+    const days = Math.round((startOfDay(new Date()) - startOfDay(new Date(t))) / 86400000)
+    if (!isFinite(days) || days < 0) return ''
+    if (days === 0) return '今天'
+    if (days === 1) return '昨天'
+    // 超过一年给「年 + 月」，纯天数（如 3554 天）没有可读性
+    if (days < 365) return days + ' 天'
+    const years = Math.floor(days / 365)
+    const months = Math.floor((days % 365) / 30)
+    return years + ' 年' + (months > 0 ? ' ' + months + ' 个月' : '')
+}
+
+/**
+ * 粉丝列表卡片上的「关注时长」文案。
+ *
+ * 数据来源：`/user/followeds` 每项的 `time` 是**该粉丝关注 TA 的时间**（13 位毫秒时间戳，
+ * 列表严格按它降序，大 V 的新粉丝会集中在几小时内，据此确认为关系建立时间，不是注册时间）。
+ * 注意 `/user/follows` 的 `time` 恒为 0，那条链路没有关注时间，调用方需自行判空。
+ *
+ * 用日历日相减而不是 ms/86400000 取整：昨晚 23:50 关注、今天 00:10 查看，
+ * 按毫秒算只有 0.01 天会显示「0 天」，按日历日算才是「昨天关注」。
+ * @param{Number} ms 关注时间（毫秒时间戳）
+ * @returns{String} 今天关注 / 昨天关注 / 关注 N 天 / ''（无有效时间）
+ */
+export function followDaysText(ms) {
+    const span = followSpanText(ms)
+    if (!span) return ''
+    if (span === '今天') return '今天关注'
+    if (span === '昨天') return '昨天关注'
+    return '关注 ' + span
+}
+
+/**
  * 专门用于处理更新时间，创建时间的函数
  * @param{Number} ms
  * @param rule
