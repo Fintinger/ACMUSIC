@@ -2328,3 +2328,80 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
 - `ensureLoginProfile()` 只在「有登录态但缺 userId」时发一次 `/login/status`，正常会话不会多请求
 - 它会在 `mounted` 里阻塞 `loadPage()`（Promise.finally），正常情况下是同步 resolve，无感
 - 四态里的「回关」依赖 `profile.followMe`；若网关某版本不返回该字段，会退化为「关注」（不会误显示回关）
+
+### 2026-10-29 — PERSIST-refresh 刷新后的播放状态补全（心动模式 / 音量 / 队列窗口 / 定时停止 / 滚动 / 大播放器）
+
+### 修改内容
+1. **心动模式刷新后丢失（用户报的 bug）**：`heartMode` 原来只活在 Vuex 内存（`Tracks.js:82` 初始 `false`），
+   全项目没有任何 localStorage 读写。现在 `_saveState` 写入 `heartMode`，`_restoreState` 的 `$nextTick`
+   里（`isRestoring = false` 之后）恢复，并加两层门控：`isLoggedIn()` + `user-profile.userId`。
+2. **音量持久化**：新增独立 key `acmusic_volume`（400ms 防抖，`fadeStarted` 期间不写），
+   `mounted` → `_restoreVolume()` 恢复并同步 `fadeBase`。
+3. **队列 200 → 800 + 窗口裁剪**：原 `slice(0, 200)` 但 `currentIndex` 原样保存，
+   当前曲在 200 名之外时恢复出来的下标指向队列以外。改为以 `curIndex` 为中心取窗口并扣掉 `playlistOffset`；
+   恢复时若当前曲不在列表里，把 `curIndex` 夹回合法区间。`QuotaExceededError` 时对半砍队列重试一次。
+4. **保存时机**：补 `visibilitychange(hidden)` + `pagehide`（`beforeunload` 在移动端不可靠）；
+   点击/拖动进度条结束立即 `_saveState()`（原来最多丢 5 秒进度）。
+5. **定时停止持久化**：`sleepMode / sleepValue / songsLeft / sleepDeadline` 随 `player_state` 一起存，
+   新增 `_restoreSleep()`：只认 12 小时内的；time 档按绝对截止时间重建并重启 ticker，已过期静默丢弃。
+6. **大播放器展开 + 右侧 tab**：sessionStorage `acmusic_player_ui`（刷新保留、关标签页即忘）。
+7. **刷新后滚动位置**：新增 `src/utils/scrollMemory.js`（sessionStorage，10 分钟内有效，
+   内容异步加载时重试最多 14 次 × 180ms，用户一滚就放手），`App.vue` 在挂载时恢复一次。
+8. **附带修正**：
+   - `playMode` 双写收敛：`_restoreState` 恢复过就标记 `_playModeRestored`，`mounted` 不再用
+     `acmusic_play_mode` 无条件覆盖；
+   - 恢复的当前曲补 `al.name`（原来只存封面，刷新后大播放器专辑行是空的）；
+   - 新增 `_artistText()`：`ar/artists` 是字符串时原来 `.map` 会抛错，而 `_saveState` 每 5 秒调一次，
+     抛一次等于持久化整体失效；队列 `filter(Boolean)` 同理。
+
+### 修改文件
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+- `src/App.vue`
+- `src/utils/scrollMemory.js`（新增）
+- `docs/CHANGELOG_AI.md`
+
+### 修改原因
+用户测试反馈：刷新后心动模式丢失。排查发现这不是单点问题 —— 四层播放模式里只有 A 层（队列策略）
+和 C 层的副歌形态被持久化，B 层（内容来源：心动 / FM）与 D 层（定时停止）全部只在内存里；
+音量、滚动位置、大播放器展开同样缺失。逐项对齐"长期偏好 / 会话连续性 / 应当丢弃"三层归属后统一补上。
+
+心动模式的关键不在布尔值本身：队列能从 localStorage 恢复，但"谁来续批"只存在于 `heartMode`，
+丢失后 `_autoNext` 走普通 `getNextIndex()`，播到队尾绕回第一首，续批能力（`_heartExtend`）彻底消失。
+所以恢复点必须放在 `isRestoring` 解除之后 —— 放在恢复过程中会立刻触发 `heartShouldPrefetch` 拉一批，
+与正在恢复的队列打架。
+
+门控为什么不用 `UserAbout/isLogin` getter：该 getter 无响应式依赖、Vue 永久缓存
+（`UserDetailLayout` 已有同样的修复记录，见上一条 CHANGELOG），这里直接用 `isLoggedIn()`。
+另外游客登录也会写 `MUSIC_U`（`main.js` 的 `anonymousLogin`），只看登录态会让未登录用户刷新后
+也点亮心动卡和"播放中"，所以再叠一层 `user-profile.userId`。
+
+### 测试结果
+- `npx eslint`（4 文件）✅ 0 error
+- `yarn serve` ✅ 编译通过（HMR 多次热更新无报错）
+- `yarn build` ⚠️ 环境限制：`vue-cli-service build` 清空 `dist/` 时被 safe-delete 守卫拦下
+  （`SAFE_DELETE_BULK_CONFIRM_REQUIRED`，50 文件批量删除），与代码无关；
+  改用 `npx vue-cli-service build --no-clean` ✅ `Compiled with 2 warnings`（均为 asset/entrypoint
+  size limit，改动前就存在）
+- 浏览器实测 ✅（Edge headless + CDP 自动化，脚本在临时目录，未入库）
+  1. 播种 `player_state`（1000 首 / 当前第 900 首 / 音量 66 / 心动 / 定时 30 分钟）后刷新：
+     `volume=66`、`curIndex=900`、`playlistLen=1000`、`albumName=专辑X`、`resumeTime=42`、
+     `sleepMode=time`（剩余 1496s）、`rightTab=tracks`、`window.__acmusicErrors` 为空
+  2. 恢复后再 `_saveState()`：`len=800 / offset=200 / curIndex=700`，且 `playlist[700].id = 1900`
+     （窗口确实围绕当前曲，旧实现在这里会丢队列尾巴 + 下标错位）
+  3. 心动恢复分支：有 `MUSIC_U` + `user-profile.userId` → 恢复后 `heartMode=true`；
+     移除 cookie 后 → `heartMode=false`（门控生效）
+  4. `playMode` 收敛：`player_state.playMode=random` 与 `acmusic_play_mode=order` 同时存在时取 `random`
+
+### 注意事项
+- **心动模式的真实登录态未被自动化覆盖**：自动化只能用假 cookie 走通"恢复分支"，
+  真实账号下"刷新 → 心动卡亮起 → 播到队尾继续续批"仍需手动确认一次。
+- `heartMode` 恢复依赖 `user-profile.userId`：老会话若只有 cookie 没有 profile，
+  刷新后不会恢复心动（退化为修复前的行为，不会报错），`UserDetailLayout.ensureLoginProfile()`
+  会在访问他人主页时顺手把 profile 补上。
+- 队列上限从 200 提到 800：单条约 180 字节，满队列约 150KB，仍在 localStorage 5MB 预算内；
+  真的写满时会自动对半砍并保留当前曲附近。
+- 滚动恢复只在"刷新/重新打开"这条路径生效，SPA 内部导航仍由 `router.scrollBehavior` 负责，
+  两者不重叠；若页面内容迟迟加载不出来，最多重试 2.5 秒后放弃（不会把用户卡在中间态）。
+- 回滚策略：本次改动集中在 4 个文件，`git revert` 即可；localStorage 新增 key
+  （`acmusic_volume`、`acmusic_player_ui`）旧版本会忽略，无兼容问题。

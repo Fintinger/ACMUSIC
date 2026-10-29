@@ -168,8 +168,12 @@ export default {
     isLiked() { return this.likeMirror },
   },
   watch: {
-    isExpand(val) { val ? this.expanded() : this.minified() },
+    isExpand(val) {
+      val ? this.expanded() : this.minified()
+      this._rememberUi()
+    },
     timeNow(val) { this.needUpdate(val) },
+    rightTab() { this._rememberUi() },
     coverUrl(url) { if (url) this.$nextTick(() => this.updateBackground()) },
     '$route'() { if (this.isExpand) this.isExpand = false },
   },
@@ -209,6 +213,29 @@ export default {
     },
     onCommentModalOpen() { this.isModalOpen = true },
     onCommentModalClose() { this.isModalOpen = false },
+
+    /**
+     * 大播放器的界面状态用 sessionStorage：刷新要保留（"我刚在看歌词"），
+     * 关掉标签页就该忘掉（下次打开不该凭空弹一个全屏播放器）。
+     * 不用 localStorage —— 那是长期偏好，全屏展开属于这一次的会话状态。
+     */
+    _rememberUi() {
+      try {
+        sessionStorage.setItem('acmusic_player_ui', JSON.stringify({ expand: this.isExpand, rightTab: this.rightTab }))
+      } catch (e) { /* ignore */ }
+    },
+    _restoreUi() {
+      let saved = null
+      try { saved = JSON.parse(sessionStorage.getItem('acmusic_player_ui') || 'null') } catch (e) { saved = null }
+      if (!saved) return
+      if (['lyric', 'tracks', 'playlist'].indexOf(saved.rightTab) !== -1) this.rightTab = saved.rightTab
+      const pg = this.$refs.pgPanel
+      // 没有在播的歌别硬撑全屏；PlayerCore 是子组件，mounted 顺序保证它的队列已恢复完
+      if (saved.expand && pg && pg.currentSong && pg.currentSong.id) {
+        this.currentSong = pg.currentSong
+        this.isExpand = true
+      }
+    },
 
     setupScrollObserver() {
       if (this.scrollObserver) this.scrollObserver.disconnect()
@@ -417,6 +444,7 @@ export default {
     if (this.$refs.pgPanel.currentSong && this.$refs.pgPanel.currentSong.id) {
       this.likeMirror = !!this.$refs.pgPanel.isLiked
     }
+    this._restoreUi()
   },
   beforeDestroy() {
     if (this.scrollObserver) this.scrollObserver.disconnect()

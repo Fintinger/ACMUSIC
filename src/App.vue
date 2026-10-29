@@ -92,6 +92,7 @@ import DoSearch from "@/components/DoSearch";
 import PageBack from "@/components/common/PageBack";
 import AppFooter from "@/components/common/AppFooter";
 import {doLogout} from "@/utils/auth";
+import { saveScroll, restoreScroll } from "@/utils/scrollMemory";
 import config from "./config"
 
 export default {
@@ -227,6 +228,33 @@ export default {
     //清空播放列表
     //emit in PlayerCore.vue
     this.$bus.$on("clearPlaylist", this.clearAll)
+
+    /**
+     * 滚动位置记忆：只在"刷新/重新打开"这条路径上补 —— SPA 内部导航由
+     * router.scrollBehavior 处理（新页面回顶部、前进后退回原位），两者不重叠。
+     * 300ms 节流是为了不在滚动时写爆 sessionStorage。
+     */
+    this._scrollTimer = null
+    this._onScroll = () => {
+      if (this._scrollTimer) return
+      this._scrollTimer = setTimeout(() => {
+        this._scrollTimer = null
+        saveScroll(this.$route.fullPath)
+      }, 300)
+    }
+    this._onPageHide = () => saveScroll(this.$route.fullPath)
+    window.addEventListener('scroll', this._onScroll, { passive: true })
+    window.addEventListener('pagehide', this._onPageHide)
+    // 等首屏渲染完再开始找位置；内容异步到达由 restoreScroll 内部重试兜住
+    const initialPath = this.$route.fullPath
+    this.$nextTick(() => {
+      restoreScroll(initialPath, { stopIf: () => this.$route.fullPath !== initialPath })
+    })
+  },
+  beforeDestroy() {
+    window.removeEventListener('scroll', this._onScroll)
+    window.removeEventListener('pagehide', this._onPageHide)
+    if (this._scrollTimer) { clearTimeout(this._scrollTimer); this._scrollTimer = null }
   }
 }
 </script>

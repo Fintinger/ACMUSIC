@@ -267,6 +267,9 @@ import ModeMenu from "@/components/musicPlayer/ModeMenu"
 import { setAudioCache, getAudioCache, getAudioUrl, removeAudioCache } from "@/utils/audioCache"
 import { getChorus } from "@/utils/chorusCache"
 import { fetchHeartBatch, resetHeartPlaylistId } from "@/utils/heartMode"
+// 直接用 isLoggedIn() 而不是 UserAbout/isLogin getter：后者没有响应式依赖，
+// Vue 会永久缓存（见 CHANGELOG 2026-10 关于该 getter 的修复记录）
+import { isLoggedIn } from "@/utils/auth"
 import { setSongTitle, clearSongTitle, BASE } from "@/utils/title";
 import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
@@ -427,7 +430,9 @@ export default {
      * 心动模式是"追加到队尾"，提前一首才来得及在切过去之前把队列补上。
      */
     heartShouldPrefetch() {
-      if (!this.heartMode) return false
+      // 登录态没就绪时续批必然失败（fetchHeartBatch 拿不到 uid → NO_UID），
+      // 刷新恢复心动模式后尤其容易出现这种"flag 已置位、请求还发不出去"的空转
+      if (!this.heartMode || !isLoggedIn()) return false
       const len = this.currentPlaylist.length
       return len > 0 && this.curIndex >= len - 2
     },
@@ -774,7 +779,12 @@ export default {
         this._autoNext()
       }
     },
-    volume(val) { this.sel.volume = val / 100 },
+    volume(val) {
+      if (this.sel && typeof this.sel.volume === 'number') this.sel.volume = val / 100
+      // 渐弱淡出会把音量一路压到 0：那不是用户设定，不能记进长期偏好
+      // （fadeStarted 期间的所有 volume 变化都跳过，取消淡出时 _cancelFade 会还原 fadeBase）
+      if (!this.fadeStarted) this._rememberVolume(val)
+    },
     /**
      * 退出 FM 模式时（如 App.vue 跳到非 FM 歌单）清空播放列表，只留当前歌曲
      * currentPlaylist 仍在 Vuex，所以走 commit
@@ -2228,6 +2238,10 @@ export default {
       // A-B 选点中：这一下是"选点"，不是"定位"——必须吃掉，否则选完 A 播放位置也跑了
       if (this.abSetting) { this._abPickPoint(t); return }
       this.sel.currentTime = t
+      this.timeNow = t
+      // 定位后立刻落盘：否则要等 timeupdate 的 5 秒节流或一次暂停，
+      // 这期间刷新就退回旧位置（用户刚拖到副歌，一刷新又回开头）
+      this._saveState()
     },
     startDrag(evt) {
       this.onInteract()
@@ -2240,7 +2254,12 @@ export default {
         this.sel.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * this.timeDuration
       }
       document.addEventListener('mousemove', onMove)
-      document.addEventListener('mouseup', () => { document.removeEventListener('mousemove', onMove); this.scheduleHide() }, { once: true })
+      document.addEventListener('mouseup', () => {
+        document.removeEventListener('mousemove', onMove)
+        this.scheduleHide()
+        // 拖动结束再落一次盘：拖动过程是逐帧改 currentTime，不适合每次都写
+        this._saveState()
+      }, { once: true })
       evt.preventDefault()
     },
     handleCommand(s) { this.onInteract(); this.showPlayerPending = true; this.isLoading = true; console.trace('[HandleCommandCall]'); console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.playIntentId++; this.playContextId++; this.currentSongSource = 'playlist'; this.currentPlaySourceLocked = true; this.playlistContextId = this.playContextId; console.log('[SourceChange]', { to: 'playlist', songId: s && s.id, trigger: 'handleCommand' }); console.trace('[CurrentSongSet] handleCommand', s && s.id); this.currentSong = s },
@@ -2483,37 +2502,169 @@ export default {
       if (src && src.indexOf('/api/audio-proxy') !== -1) return src
       return location.origin + '/api/audio-proxy?url=' + encodeURIComponent(src)
     },
+    /**
+     * 曲目歌手文案。
+     * ar / artists 在这套数据里可能是数组、空数组、也可能是字符串（本地恢复出来的
+     * 条目就是字符串），直接 `.map` 会在"字符串 + 无 ar"的组合上抛 TypeError，
+     * 而 _saveState 是被 timeupdate 每 5 秒调一次的，抛一次就等于持久化整体失效。
+     */
+    _artistText(track) {
+      const pick = v => {
+        if (!v) return ''
+        if (typeof v === 'string') return v
+        if (Array.isArray(v)) {
+          return v.map(a => (a && a.name) || (typeof a === 'string' ? a : '')).filter(Boolean).join(' / ')
+        }
+        return ''
+      }
+      if (!track) return ''
+      return pick(track.ar) || pick(track.artists) || ''
+    },
+    /**
+     * 队列持久化：围绕当前曲取窗口，最多 800 首。
+     *
+     * 原来写死 `slice(0, 200)` 且 currentIndex 原样保存，队列一长就出两个毛病：
+     *   1) 第 200 首之后的队列刷新后凭空消失（"下一首"放到第 200 首就断了）
+     *   2) 当前曲在 200 名之外时，恢复出来的 currentIndex 指向队列以外的下标，
+     *      当前曲不在队列里 → 列表高亮丢失、`currentPlaylist[ind]` 为 undefined
+     * 现在改为以 curIndex 为中心取窗口，并把窗口偏移从 currentIndex 里扣掉。
+     */
     _saveState() {
       const s = this.currentSong
       if (!s || !s.id) return
+      const MAX_TRACKS = 800
+      const lite = t => ({
+        id: t.id,
+        name: t.name || '',
+        artists: this._artistText(t),
+        album: (t.al && t.al.name) || (t.album && t.album.name) || '',
+        picUrl: (t.al && t.al.picUrl) || (t.album && t.album.picUrl) || '',
+        duration: t.dt || t.duration || 0,
+        source: t.source || ''
+      })
+      // filter(Boolean)：队列里理论上不该有空元素，但一个 null 就能让整次保存抛错
+      let playlist = this.currentPlaylist.filter(Boolean).map(lite)
+      let offset = 0
+      if (playlist.length > MAX_TRACKS) {
+        offset = Math.max(0, Math.min(this.curIndex - Math.floor(MAX_TRACKS / 2), playlist.length - MAX_TRACKS))
+        playlist = playlist.slice(offset, offset + MAX_TRACKS)
+      }
+      const payload = {
+        song: {
+          id: s.id,
+          name: s.name || '',
+          // 专辑名要一起存：否则刷新后大播放器的专辑行是空的（原来只存了封面）
+          album: (s.al && s.al.name) || (s.album && s.album.name) || '',
+          cover: (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || '',
+          artists: this._artistText(s)
+        },
+        playlist,
+        playlistOffset: offset,
+        currentIndex: Math.max(0, this.curIndex - offset),
+        currentTime: (this.timeNow * 1) || this.sel.currentTime || 0,
+        duration: this.sel.duration || 0,
+        quality: this.currentQuality,
+        source: this.currentSongSource,
+        playMode: this.playMode,
+        // 心动模式是"队列来源"而不是单纯开关：不存的话刷新后队列虽在，但播到队尾
+        // 不会再向红心歌单续批（见 _autoNext → _heartAdvance 分支）
+        heartMode: !!this.heartMode,
+        // 定时停止：time 档存绝对截止时间戳，刷新后能接着倒计时（见 _restoreSleep）
+        sleepMode: this.sleepMode,
+        sleepValue: this.sleepValue,
+        songsLeft: this.songsLeft,
+        sleepDeadline: this.sleepDeadline,
+        timestamp: Date.now()
+      }
+      if (this._writePlayerState(payload)) {
+        console.log('[PlaylistPersist]', { action: 'save', count: playlist.length, offset })
+      }
+    },
+    /**
+     * 写 player_state，QuotaExceededError 时把队列对半砍再试一次。
+     * localStorage 被别的 key 占满时，宁可丢队列尾巴也不能整条保存失败——
+     * 失败会把进度、模式、定时一起丢掉。
+     */
+    _writePlayerState(payload) {
       try {
-        const playlist = this.currentPlaylist.slice(0, 200).map(t => ({
-          id: t.id,
-          name: t.name || '',
-          artists: (t.ar || t.artists || []).map(a => a.name).join(' / '),
-          album: (t.al && t.al.name) || (t.album && t.album.name) || '',
-          picUrl: (t.al && t.al.picUrl) || (t.album && t.album.picUrl) || '',
-          duration: t.dt || t.duration || 0,
-          source: t.source || ''
-        }))
-        localStorage.setItem('acmusic_player_state', JSON.stringify({
-          song: {
-            id: s.id,
-            name: s.name || '',
-            cover: (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || '',
-            artists: (s.ar || s.artists || []).map(a => a.name).join(' / ')
-          },
-          playlist,
-          currentIndex: this.curIndex,
-          currentTime: (this.timeNow * 1) || this.sel.currentTime || 0,
-          duration: this.sel.duration || 0,
-          quality: this.currentQuality,
-          source: this.currentSongSource,
-          playMode: this.playMode,
-          timestamp: Date.now()
-        }))
-        console.log('[PlaylistPersist]', { action: 'save', count: playlist.length })
+        localStorage.setItem('acmusic_player_state', JSON.stringify(payload))
+        return true
+      } catch (e) {
+        const list = payload.playlist
+        if (!Array.isArray(list) || list.length <= 50) return false
+        const half = list.slice(0, Math.max(50, Math.floor(list.length / 2)))
+        try {
+          localStorage.setItem('acmusic_player_state', JSON.stringify(Object.assign({}, payload, {
+            playlist: half,
+            playlistOffset: 0,
+            currentIndex: Math.min(payload.currentIndex, half.length - 1)
+          })))
+          return true
+        } catch (e2) {
+          console.warn('[PlaylistPersist]', { action: 'quota_fail', message: e2 && e2.message })
+          return false
+        }
+      }
+    },
+    /**
+     * 音量写盘（400ms 防抖：拖 slider 时 @input 是逐像素触发的）。
+     * 单独一个 key 而不是塞进 player_state —— 清空播放列表会删掉 player_state，
+     * 但音量是长期偏好，不该被这次操作带走。
+     */
+    _rememberVolume(v) {
+      if (this._volumeTimer) clearTimeout(this._volumeTimer)
+      this._volumeTimer = setTimeout(() => {
+        this._volumeTimer = null
+        try { localStorage.setItem('acmusic_volume', String(v)) } catch (e) { /* ignore */ }
+      }, 400)
+    },
+    _restoreVolume() {
+      try {
+        const raw = localStorage.getItem('acmusic_volume')
+        if (raw === null) return
+        const v = Number(raw)
+        if (!isFinite(v) || v < 0 || v > 100) return
+        this.volume = v
+        // 淡出结束要还原到"用户设的那个音量"，基线必须一起改
+        this.fadeBase = v
+        console.log('[PlayerState] restore_volume', { volume: v })
       } catch (e) { /* ignore */ }
+    },
+    /**
+     * 恢复定时停止。
+     * 只认 12 小时内设的（player_state 的 7 天 TTL 对"定时"太长了）。
+     * time 档按绝对截止时间戳重建，已过期的直接丢弃 —— 刷新完立刻"已停止播放"
+     * 比丢一个定时更让人困惑。
+     */
+    _restoreSleep(data) {
+      const age = Date.now() - (Number(data.timestamp) || 0)
+      if (!data.sleepMode || data.sleepMode === 'off' || age > 12 * 60 * 60 * 1000) return
+      const mode = data.sleepMode
+      if (mode === 'time') {
+        const deadline = Number(data.sleepDeadline) || 0
+        if (deadline - Date.now() < 5000) return
+        this.sleepMode = 'time'
+        this.sleepValue = Number(data.sleepValue) || 0
+        this.timeDraft = this.sleepValue
+        this.sleepDeadline = deadline
+      } else if (mode === 'count') {
+        const left = Number(data.songsLeft) || 0
+        if (left <= 0) return
+        this.sleepMode = 'count'
+        this.sleepValue = Number(data.sleepValue) || left
+        this.countDraft = this.sleepValue
+        this.songsLeft = left
+        this.sleepDeadline = 0
+      } else if (mode === 'song') {
+        this.sleepMode = 'song'
+        this.sleepValue = 0
+        this.sleepDeadline = 0
+      } else {
+        return
+      }
+      this.sleepNow = Date.now()
+      this._startSleepClock()
+      console.log('[Sleep]', { action: 'restore', mode: this.sleepMode, remain: this.sleepRemainSec })
     },
     _preloadNext() {
       if (this.currentSongSource !== 'playlist') return
@@ -2568,6 +2719,9 @@ export default {
         }
         if (data.playMode && ['order', 'sequence', 'random', 'loop'].indexOf(data.playMode) !== -1) {
           this.playMode = data.playMode
+          // 标记"已从 player_state 恢复"，mounted 里就不再读 acmusic_play_mode，
+          // 避免两个来源谁后跑谁说了算（原来 mounted 无条件覆盖）
+          this._playModeRestored = true
         }
         if (data.song && data.song.id) {
           this.isRestoring = true
@@ -2581,7 +2735,7 @@ export default {
           this.currentSong = {
             id: data.song.id,
             name: data.song.name,
-            al: { picUrl: data.song.cover },
+            al: { name: data.song.album || '', picUrl: data.song.cover },
             ar: [{ name: data.song.artists }]
           }
           this.showBar = true
@@ -2595,6 +2749,8 @@ export default {
         }
         if (data.duration) this.timeDuration = data.duration
         if (data.quality) this.currentQuality = { requested: data.quality.requested || '', actual: data.quality.actual || '', isUnblock: data.quality.actual === 'match' }
+        // 定时停止：不恢复的话刷新等于静默取消，用户以为到点会停、结果整晚在放
+        this._restoreSleep(data)
 
         // 【关键修复】恢复完成后，同步 curIndex 到正确歌曲位置，再解除守卫
         // 原因：恢复时直接赋值 currentSong（不触发 watcher），但 curIndex 默认为 0，
@@ -2606,11 +2762,34 @@ export default {
             if (savedIdx !== -1) {
               this.curIndex = savedIdx
               console.log('[RestoreSync] curIndex aligned to', savedIdx)
+            } else if (this.currentPlaylist.length) {
+              // 队列窗口裁剪 / 去重后当前曲可能不在列表里：夹回合法区间，
+              // 否则 curIndex 越界会让 currentPlaylist[ind] 变成 undefined
+              this.curIndex = Math.max(0, Math.min(this.curIndex, this.currentPlaylist.length - 1))
+              console.warn('[RestoreSync]', { action: 'clamp_index', curIndex: this.curIndex, count: this.currentPlaylist.length })
             }
           }
           this.isRestoring = false
           this.currentSongSource = 'playlist'
           if (this.playMode === 'random') this._initShuffle()
+          /**
+           * 心动模式：必须在 isRestoring 解除之后恢复。
+           * 这里是"接着从红心歌单续批"的唯一入口 —— 队列本身能从 localStorage 恢复，
+           * 但"谁来续批"这个来源信息只在 heartMode 里，丢了就退化成普通歌单
+           * （播到队尾绕回第一首，见 _autoNext → _heartAdvance）。
+           *
+           * 门控两层：
+           *  1) isLoggedIn() —— fetchHeartBatch 拿不到 uid 必失败，未登录恢复只会空转
+           *  2) user-profile.userId —— 游客登录同样会写 MUSIC_U（main.js 的 anonymousLogin），
+           *     所以只看登录态会让"没登录的人"刷新后也点亮心动卡和"播放中"，
+           *     而点进去必然报 NO_UID。
+           */
+          let profile = {}
+          try { profile = this.$store.getters['UserAbout/userProfile'] || {} } catch (e) { profile = {} }
+          if (data.heartMode && isLoggedIn() && profile.userId && this.currentSong && this.currentSong.id) {
+            this.heartMode = true
+            console.log('[Heart]', { action: 'restore', songId: this.currentSong.id })
+          }
         })
       } catch (e) { /* ignore */ }
     },
@@ -2618,9 +2797,13 @@ export default {
   beforeMount() { this.sel = new Audio() },
 mounted() {
     this._restoreState()
+    this._restoreVolume()
     try {
-      const savedMode = localStorage.getItem('acmusic_play_mode')
-      if (savedMode && ['order', 'sequence', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
+      // playMode 已经由 _restoreState 从 player_state 恢复时，不再读第二个来源
+      if (!this._playModeRestored) {
+        const savedMode = localStorage.getItem('acmusic_play_mode')
+        if (savedMode && ['order', 'sequence', 'random', 'loop'].indexOf(savedMode) !== -1) this.playMode = savedMode
+      }
       const savedForm = localStorage.getItem('acmusic_track_form')
       // 'ab' 不会被写入（按歌临时设定），这里防御一下：区间不在了就回落完整播放
       if (savedForm === 'chorus') this.trackForm = 'chorus'
@@ -2646,6 +2829,17 @@ mounted() {
     this.$bus.$on('heart-toggle', this._heartToggleHandler)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
+    /**
+     * beforeunload 并不可靠：移动端 Safari 切后台 / 被系统回收时不触发，
+     * 桌面端也有"关闭标签页直接杀进程"的情况。visibilitychange 是其中
+     * 唯一在移动端稳定触发的时机，pagehide 兜 iOS 的老版本。
+     */
+    this._onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') this._saveState()
+    }
+    this._onPageHide = () => { this._saveState() }
+    document.addEventListener('visibilitychange', this._onVisibilityChange)
+    window.addEventListener('pagehide', this._onPageHide)
     // 播放器重建时 isPersonalFM 会回到 false，但 store 里的镜像值可能还是上次的 true，
     // 挂载时对齐一次，避免漫游卡凭空显示"播放中"
     this.$store.commit('TracksAbout/SET_FM_ACTIVE', this.isPersonalFM)
@@ -2659,6 +2853,9 @@ mounted() {
     // 定时器的 setInterval 不随组件销毁消失，必须显式清
     this._clearSleepClock()
     window.removeEventListener('beforeunload', this._onBeforeUnload)
+    document.removeEventListener('visibilitychange', this._onVisibilityChange)
+    window.removeEventListener('pagehide', this._onPageHide)
+    if (this._volumeTimer) { clearTimeout(this._volumeTimer); this._volumeTimer = null }
     window.removeEventListener('keydown', this._onGlobalKeydown)
     document.removeEventListener('mousedown', this._onDocMouseDown, true)
     this._saveState()
