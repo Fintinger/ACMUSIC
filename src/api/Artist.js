@@ -18,6 +18,8 @@ export function topSongs(id) {
 
 /**
  * 歌手专辑列表
+ * 按 popularity/publishTime 倒序，offset 分页，返回 { artist, hotAlbums, more }；
+ * more=false 即到底，总数可用 artist.albumSize 参考。
  * @param id 歌手 id
  * @param limit
  * @param offset
@@ -28,10 +30,14 @@ export function albums(id, limit = 50, offset = 0) {
 
 /**
  * 歌手相关 MV
+ * 注意: 不传 limit 时接口只返回 10 条（大牌歌手动辄几百个 MV），
+ * 需要「更多」时必须显式带 limit/offset 续拉，返回里的 hasMore 表示还有没有下一页。
  * @param id 歌手 id
+ * @param limit 每页数量
+ * @param offset 偏移
  */
-export function mvs(id) {
-    return request('/artist/mv', { params: { id } })
+export function mvs(id, limit = 50, offset = 0) {
+    return request('/artist/mv', { params: { id, limit, offset } })
 }
 
 /**

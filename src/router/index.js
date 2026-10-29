@@ -17,6 +17,7 @@ const ListDetail = () => import(/* webpackChunkName: "page-list-detail" */ "@/pa
 const AlbumDetail = () => import(/* webpackChunkName: "page-album-detail" */ "@/pages/AlbumDetail");
 const ArtistDetail = () => import(/* webpackChunkName: "page-artist-detail" */ "@/pages/artist/ArtistDetail");
 const ArtistAllSongs = () => import(/* webpackChunkName: "page-artist-songs" */ "@/pages/artist/ArtistAllSongs");
+const ArtistAllAlbums = () => import(/* webpackChunkName: "page-artist-albums" */ "@/pages/artist/ArtistAllAlbums");
 const mvPlay = () => import(/* webpackChunkName: "page-mv" */ "@/pages/mvPlay");
 const VideoPlay = () => import(/* webpackChunkName: "page-video" */ "@/pages/VideoPlay");
 const SearchResult = () => import(/* webpackChunkName: "page-search" */ "@/pages/SearchResult");
@@ -107,6 +108,15 @@ const router = new VueRouter({
             name: 'artistAllSongs',
             component: ArtistAllSongs,
             meta: {level: 2, title: '全部歌曲'},
+            props($route) {
+                return {id: $route.query.id}
+            }
+        },
+        {
+            path: '/artistAllAlbums',
+            name: 'artistAllAlbums',
+            component: ArtistAllAlbums,
+            meta: {level: 2, title: '全部专辑'},
             props($route) {
                 return {id: $route.query.id}
             }

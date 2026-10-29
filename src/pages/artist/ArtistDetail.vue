@@ -46,52 +46,55 @@
     <section class="ar-section">
       <div class="section-head">
         <h2>热门歌曲</h2>
-        <span class="section-more" @click="expanded.songs=!expanded.songs">
-          {{ expanded.songs ? '收起' : '全部' }} <BaseIcon :name="expanded.songs ? 'arrowUp' : 'arrowRight'"/>
+        <!-- 热门只到 50 首（/artist/top/song 上限），全部歌曲走独立页分页 -->
+        <span class="section-more" @click="arAsClk(id)" title="查看该歌手的全部歌曲">
+          全部 <BaseIcon name="arrowRight"/>
         </span>
       </div>
-      <TracksLayout v-if="top50songs.length" :list="expanded.songs ? top50songs : top50songs.slice(0,5)"/>
+      <TracksLayout v-if="top50songs.length" :list="top50songs.slice(0, SONG_PREVIEW)"/>
     </section>
 
     <section class="ar-section">
       <div class="section-head">
-        <h2>专辑</h2>
-        <span v-if="hotAlbums.length>8" class="section-more" @click="expanded.albums=!expanded.albums">
-          {{ expanded.albums ? '收起' : '更多' }} <BaseIcon :name="expanded.albums ? 'arrowUp' : 'arrowRight'"/>
+        <h2>专辑<em v-if="arBasicInfo.albumSize" class="section-count">{{ arBasicInfo.albumSize }} 张</em></h2>
+        <!-- 详情页只展示前 8 张，全量走 /artistAllAlbums 独立页（offset 分页） -->
+        <span v-if="hasMoreAlbums" class="section-more" @click="arAlClk(id)" title="查看该歌手的全部专辑">
+          更多 <BaseIcon name="arrowRight"/>
         </span>
       </div>
-      <AlbumLayout v-if="hotAlbums.length" :list="expanded.albums ? hotAlbums : hotAlbums.slice(0,8)"/>
+      <AlbumLayout v-if="hotAlbums.length" :list="hotAlbums.slice(0, CARD_PREVIEW)"/>
     </section>
 
     <section class="ar-section ar-mv-section">
       <div class="section-head">
-        <h2>MV</h2>
-        <span v-if="mvs.length>8" class="section-more" @click="expanded.mvs=!expanded.mvs">
-          {{ expanded.mvs ? '收起' : '更多' }} <BaseIcon :name="expanded.mvs ? 'arrowUp' : 'arrowRight'"/>
+        <h2>MV<em v-if="arBasicInfo.mvSize" class="section-count">{{ arBasicInfo.mvSize }} 个</em></h2>
+        <span v-if="mvToggleable" class="section-more" :class="{ 'is-loading': mvPaging.loading }"
+              @click="toggleMvs">
+          <template v-if="mvPaging.loading"><i class="el-icon-loading"/> 加载中…</template>
+          <template v-else>{{ expanded.mvs ? '收起' : '更多' }} <BaseIcon :name="expanded.mvs ? 'arrowUp' : 'arrowRight'"/></template>
         </span>
       </div>
-      <MvLayout v-if="mvs.length" :list="expanded.mvs ? mvs : mvs.slice(0,8)" pic-name="imgurl16v9"/>
+      <MvLayout v-if="mvs.length" :list="expanded.mvs ? mvs : mvs.slice(0, CARD_PREVIEW)" pic-name="imgurl16v9"/>
     </section>
 
     <section class="ar-section ar-video-section">
       <div class="section-head">
         <h2>视频</h2>
-        <el-button size="small" @click="loadMoreVid" style="margin-right:8px">换一批</el-button>
-        <span v-if="videos.length>8" class="section-more" @click="expanded.videos=!expanded.videos">
-          {{ expanded.videos ? '收起' : '更多' }}
-        </span>
+        <!-- /artist/video 是 cursor 分页、一次一批，所以这里只能"换一批"而不是累计展开 -->
+        <el-button size="small" :loading="vidLoading" @click="loadMoreVid" style="margin-right:8px">换一批</el-button>
       </div>
-      <VideoLayout v-if="videos.length" :list="expanded.videos ? videos : videos.slice(0,8)" :is-mlog="true"/>
+      <VideoLayout v-if="videos.length" :list="videos" :is-mlog="true"/>
     </section>
 
     <section class="ar-section ar-simi-section">
       <div class="section-head">
         <h2>相似歌手</h2>
-        <span v-if="simiArtists.length>8" class="section-more" @click="expanded.simi=!expanded.simi">
-          {{ expanded.simi ? '收起' : '更多' }}
+        <!-- /simi/artist 固定返回 20 个，没有分页参数，所以最多只能展开到 20 -->
+        <span v-if="simiArtists.length > CARD_PREVIEW" class="section-more" @click="expanded.simi = !expanded.simi">
+          {{ expanded.simi ? '收起' : '更多' }} <BaseIcon :name="expanded.simi ? 'arrowUp' : 'arrowRight'"/>
         </span>
       </div>
-      <ArtistLayout v-if="simiArtists.length" :list="expanded.simi ? simiArtists : simiArtists.slice(0,8)"/>
+      <ArtistLayout v-if="simiArtists.length" :list="expanded.simi ? simiArtists : simiArtists.slice(0, CARD_PREVIEW)"/>
     </section>
     </template>
   </div>
@@ -106,6 +109,11 @@ import VideoLayout from "@/components/layout/VideoLayout";
 import CoverImage from "@/components/common/CoverImage";
 import * as artistApi from "@/api/Artist";
 
+// 首屏各区块只渲染 CARD_PREVIEW 张，专辑多取几张做缓冲（点「更多」是整页跳转，不再续拉）
+const ALBUM_INIT = 12;
+const MV_INIT = 16;
+const MV_PAGE = 50;
+
 export default {
   name: "ArtistDetail",
   props: ["id"],
@@ -115,9 +123,22 @@ export default {
       arBasicInfo: {},
       top50songs: [], hotAlbums: [], mvs: [], simiArtists: [], videos: [],
       vidParams: { id: this.id, cursor: 0, order: 1 },
+      vidLoading: false,
       loading: true,
-      showCount: { songs: 5, albums: 8, mvs: 8, videos: 8, simi: 8 },
-      expanded: {},
+      // 展示数量常量（模板里要用，必须挂在实例上）
+      SONG_PREVIEW: 5,
+      CARD_PREVIEW: 8,
+      /**
+       * 展开状态必须在这里一次性声明全。
+       * 原实现写成 `expanded: {}`（空对象）再靠 `expanded.mvs = !expanded.mvs` 赋值 ——
+       * Vue 2 侦测不到对象新增属性，赋值没有 setter，视图不会重渲染，
+       * 表现就是「【更多】点了完全没反应」。改成预声明后才是响应式的。
+       */
+      expanded: { mvs: false, simi: false },
+      // 专辑还有没有下一页（只用来判断是否显示【更多】，真正的分页在 ArtistAllAlbums 页里做）
+      albumMore: false,
+      // /artist/mv 是 offset 分页（返回 hasMore），用游标对象记录，展开时按页续拉
+      mvPaging: { offset: 0, more: false, loading: false },
       // 关注歌手（收藏歌手）状态
       followed: false,
       followPending: false,
@@ -126,14 +147,54 @@ export default {
   computed: {
     isLogin() {
       return this.$store.getters["UserAbout/isLogin"]
+    },
+    /** 专辑区块是否显示【更多】（跳转全部专辑页） */
+    hasMoreAlbums() {
+      return this.arBasicInfo.albumSize > this.CARD_PREVIEW
+        || this.albumMore
+        || this.hotAlbums.length > this.CARD_PREVIEW
+    },
+    mvToggleable() {
+      return this.expanded.mvs || this.mvPaging.more || this.mvs.length > this.CARD_PREVIEW
     }
   },
   methods: {
     alClk(id) { this.$bus.$emit('alClk', id) },
     arClk(id) { this.$bus.$emit('arClk', id) },
+    /** 跳到「该歌手全部歌曲」页（App.vue 里监听 arAsClk 做路由跳转） */
     arAsClk(id) { this.$bus.$emit('arAsClk', id) },
+    /** 跳到「该歌手全部专辑」页（App.vue 里监听 arAlClk 做路由跳转） */
+    arAlClk(id) { this.$bus.$emit('arAlClk', id) },
     songClk(song) { this.$bus.$emit('songClk', song) },
     mvClick(id) { this.$bus.$emit('mvClk', id) },
+
+    /** MV：【更多】= 展开并自动续拉到最后一页；展开后点击变【收起】 */
+    toggleMvs() {
+      if (this.mvPaging.loading) return
+      this.expanded.mvs = !this.expanded.mvs
+      if (this.expanded.mvs) this.loadRestMvs()
+    },
+    loadRestMvs() {
+      if (!this.mvPaging.more || this.mvPaging.loading) return Promise.resolve()
+      this.mvPaging.loading = true
+      const step = () => {
+        if (!this.mvPaging.more || !this.expanded.mvs) return Promise.resolve()
+        return artistApi.mvs(this.id, MV_PAGE, this.mvPaging.offset).then(res => {
+          const data = res.data || {}
+          const list = data.mvs || []
+          if (!list.length) { this.mvPaging.more = false; return }
+          const seen = new Set(this.mvs.map(m => m.id))
+          this.mvs = this.mvs.concat(list.filter(m => !seen.has(m.id)))
+          this.mvPaging.offset += list.length
+          this.mvPaging.more = !!data.hasMore
+          return step()
+        })
+      }
+      return step()
+        .catch(() => this.$message.error('MV 加载失败，请稍后重试'))
+        .finally(() => { this.mvPaging.loading = false })
+    },
+
     /** 关注 / 取消关注该歌手 */
     toggleFollow() {
       if (this.followPending || !this.isLogin) return
@@ -169,29 +230,54 @@ export default {
     },
     getAtDetail() { return artistApi.detail(this.id) },
     getTop50() { return artistApi.topSongs(this.id) },
-    getAlbum() { return artistApi.albums(this.id) },
-    getMVs() { return artistApi.mvs(this.id) },
+    getAlbum() { return artistApi.albums(this.id, ALBUM_INIT, 0) },
+    getMVs() { return artistApi.mvs(this.id, MV_INIT, 0) },
     getSimiAt() { return artistApi.simi(this.id) },
     getVid() { return artistApi.videos(this.vidParams) },
+    /** 换一批视频：cursor 分页，一批一批替换；到底后把游标复位，避免反复点击毫无反馈 */
     loadMoreVid() {
-      this.getVid().then(res => {
-        if (res.data.data.page.more) {
-          this.videos = res.data.data.records
-          this.vidParams.cursor = res.data.data.page.cursor
-        } else { this.vidParams.cursor = 0 }
-      })
+      if (this.vidLoading) return
+      this.vidLoading = true
+      this.getVid()
+        .then(res => {
+          const data = (res.data && res.data.data) || {}
+          const page = data.page || {}
+          const records = data.records || []
+          if (records.length) this.videos = records
+          if (page.more) {
+            this.vidParams.cursor = page.cursor
+          } else {
+            this.vidParams.cursor = 0
+            this.$message.info('已经是最后一批了')
+          }
+        })
+        .catch(() => this.$message.error('视频加载失败，请稍后重试'))
+        .finally(() => { this.vidLoading = false })
     }
   },
   activated() {
     this.loading = true
+    // 重新进入页面时列表会重拉，MV 的展开态一并复位，避免"展开着但只剩 16 个"的错位
+    this.expanded = { mvs: false, simi: false }
     this.$nextTick(() => {
     this.$axios.all([this.getAtDetail(), this.getTop50(), this.getAlbum(), this.getMVs(), this.getSimiAt(), this.getVid()])
         .then(this.$axios.spread((AtDetail, Top50, Album, MVs, SimiAt, video) => {
           this.arBasicInfo = AtDetail.data.artist
           this.followed = !!this.arBasicInfo.followed
-          this.top50songs = Top50.data.songs; this.hotAlbums = Album.data.hotAlbums
-          this.mvs = MVs.data.mvs; this.simiArtists = SimiAt.data.artists
-          this.videos = video.data.data.records; this.vidParams.cursor = video.data.data.page.cursor
+          this.top50songs = Top50.data.songs
+
+          const albumData = Album.data || {}
+          this.hotAlbums = albumData.hotAlbums || []
+          this.albumMore = !!albumData.more
+
+          const mvData = MVs.data || {}
+          this.mvs = mvData.mvs || []
+          this.mvPaging.offset = this.mvs.length
+          this.mvPaging.more = !!mvData.hasMore
+
+          this.simiArtists = SimiAt.data.artists
+          this.videos = video.data.data.records
+          this.vidParams.cursor = video.data.data.page.cursor
         }))
         .finally(() => { this.loading = false })
     })
@@ -256,8 +342,18 @@ export default {
   margin-bottom: 44px;
   .section-head {
     display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;
-    h2 { font-size: 20px; font-weight: 700; color: $font-black; margin: 0; }
-    .section-more { font-size: 14px; color: $font-black-2; cursor: pointer; display: flex; align-items: center; gap: 4px; &:hover { color: $color-main; } }
+    h2 {
+      font-size: 20px; font-weight: 700; color: $font-black; margin: 0;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    // 标题旁的统计（如「47 张」），弱化处理，不抢标题
+    .section-count { font-size: 13px; font-weight: 400; font-style: normal; color: #aaa; }
+    .section-more {
+      font-size: 14px; color: $font-black-2; cursor: pointer; display: flex; align-items: center; gap: 4px;
+      &:hover { color: $color-main; }
+      // 续拉期间不可再点，防止连点叠请求
+      &.is-loading { color: #aaa; cursor: default; pointer-events: none; }
+    }
     .el-button { border-radius: 20px; }
   }
 }

@@ -171,6 +171,12 @@ export default {
         query: {id}
       })
     },
+    artistAllAlbumsClick(id) {
+      this.$router.push({
+        name: "artistAllAlbums",
+        query: {id}
+      })
+    },
     songClick(song) {
       //退出 FM 模式（isPersonalFM 已下沉到 PlayerCore，通过 $bus 通知）
       //原实现写的是 this.$store.state.isPersonalFM = false（缺模块前缀，实际没生效）
@@ -220,6 +226,7 @@ export default {
     this.$bus.$on('alClk', this.albumClick)
     this.$bus.$on('arClk', this.artistClick)
     this.$bus.$on('arAsClk', this.artistAllSongsClick)
+    this.$bus.$on('arAlClk', this.artistAllAlbumsClick)
     this.$bus.$on('songClk', this.songClick)
     this.$bus.$on('mvClk', this.mvClick)
     this.$bus.$on('vClk', this.videoClick)
