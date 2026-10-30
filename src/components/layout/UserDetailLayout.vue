@@ -39,9 +39,16 @@
         <section class="ud-section ud-card">
           <h2>听歌排行</h2>
           <el-tabs v-if="weekTracksData.length||allTracksData.length" v-model="listenedAcName">
-            <el-tab-pane label="最近一周" name="week"><TracksLayout :list="weekTracksData"/></el-tab-pane>
-            <el-tab-pane label="所有时间" name="all"><TracksLayout :list="allTracksData"/></el-tab-pane>
+            <el-tab-pane label="最近一周" name="week">
+              <TracksLayout v-if="weekTracksData.length" :list="weekTracksData"/>
+              <p v-else class="empty-text">最近一周还没有听歌记录（只有在本站播放超过 30 秒的歌才会被统计）</p>
+            </el-tab-pane>
+            <el-tab-pane label="所有时间" name="all">
+              <TracksLayout v-if="allTracksData.length" :list="allTracksData"/>
+              <p v-else class="empty-text">还没有听歌记录</p>
+            </el-tab-pane>
           </el-tabs>
+          <p v-else-if="recordErr" class="empty-text">听歌排行获取失败，稍后再试</p>
           <p v-else class="empty-text">未公开</p>
         </section>
         <section v-if="isSelf" class="ud-section ud-card">
@@ -157,6 +164,8 @@ export default {
       // 导入外部歌单弹窗开关（仅本人可开）
       importVisible: false,
       weekTracksData: [], allTracksData: [], listenedAcName: "week", favorsAcName: "cloud",
+      // 听歌排行拉取失败标记：与「未公开」区分开，否则接口挂了也提示"未公开"（误导）
+      recordErr: false,
       cloudTracks: [], favors: { vids: [], artists: [], albums: [] },
       locationName: '', pageLoading: true,
       lastLoginInfo: { time: "", IP: "", location: "" },
@@ -471,7 +480,12 @@ export default {
       if (this.isSelf) this.reloadPlaylists()
     },
     handleThisTracksData(tracks, target) {
-      tracks.forEach(l => { l.song.recordPlayCount = l.playCount; target.push(l.song) })
+      // 上游偶有缺 song 的空壳条目，直接跳过，别让一条脏数据把整个排行榜打空
+      (tracks || []).forEach(l => {
+        if (!l || !l.song) return
+        l.song.recordPlayCount = l.playCount
+        target.push(l.song)
+      })
     },
     async loadPage() {
       this.pageLoading = true
@@ -502,15 +516,22 @@ export default {
           }).catch(() => {})
         : Promise.resolve()
       // 听歌排行仅本人可看(他人 record 接口返回 400), 非本人跳过请求, 显示"未公开"
+      // 先复位：组件被复用于另一个 uid 时，上一页的排行不能留在这里
+      this.weekTracksData = []
+      this.allTracksData = []
+      this.recordErr = false
       const p2 = isSelf
         ? Promise.all([
             this.getRecentTracks(uid), this.getRecentTracks(uid, 0)
           ]).then(([week, all]) => {
-            this.handleThisTracksData(week.data.weekData, this.weekTracksData)
-            this.handleThisTracksData(all.data.allData, this.allTracksData)
+            // type=1 只回 weekData、type=0 只回 allData，字段缺失按空数组处理
+            this.handleThisTracksData(week.data && week.data.weekData, this.weekTracksData)
+            this.handleThisTracksData(all.data && all.data.allData, this.allTracksData)
+            this.recordErr = false
           }).catch(() => {
             this.weekTracksData = []
             this.allTracksData = []
+            this.recordErr = true
           })
         : Promise.resolve()
       const p3 = isSelf

@@ -276,6 +276,11 @@ import * as userApi from "@/api/User";
 import * as authApi from "@/api/auth";
 import { toHttpsUrl, imgParam } from "@/utils/filters";
 
+// 打卡门槛：播满 30 秒或过半（先到者）。
+// 太短的「点一下就切」报了也不会被网易云计入，只会白打一次接口。
+const SCROBBLE_MIN_SECONDS = 30;
+const SCROBBLE_MIN_RATIO = 0.5;
+
 export default {
   name: "PlayCore",
   props: ["song", "isExpand"],
@@ -318,6 +323,14 @@ export default {
       playContextId: 0,
       playlistContextId: 0,
       playIntentId: 0,
+      // ---- 听歌打卡（/scrobble）----
+      // 服务端的「听歌记录 / 听歌排行 / 年度报告」全部由打卡日志累积，官方播放器边播边报；
+      // 本站不报的话，个人主页「最近一周」恒为空（「所有时间」只是官方客户端的历史累计）。
+      // 详见 analysis/user-record-week-empty-analysis.md
+      scrobbleKey: '',        // 已上报的 key（歌 id # 第几次播放），用于去重
+      scrobbleSeq: 0,         // 播放轮次：换歌 / 重播同一首时自增，让同一首歌能重复计次
+      scrobbleSourceId: 0,    // 本次播放的归属 id（歌单/专辑），起播时确定、播完前一直有效
+      scrobbleStart: null,    // 本次播放的起点进度：中断恢复可能从 40s 开始，不能把旧进度算成"已听"
       currentPlaySourceLocked: false,
       audioRetryCount: 0,
       audioLastSrc: '',
@@ -669,8 +682,19 @@ export default {
       this.currentSong = normalizeTrack(val)
       this.updateMiniBackground()
     },
-    currentSong(val) {
+    currentSong(val, oldVal) {
       if (val.id) {
+        // 换歌前先把上一首补报掉：此刻 sel 的 currentTime / duration 还停在旧歌上，
+        // 判断「播够门槛没有」才准（本 watcher 之后 pauseSong 会把进度清掉）。
+        const sameSong = !!(oldVal && oldVal.id && oldVal.id === val.id)
+        if (!sameSong) {
+          if (oldVal && oldVal.id) this._reportPlay(oldVal)
+          // 新一轮播放：seq 自增，同一首歌重播也能再计一次
+          this.scrobbleSeq++
+          this.scrobbleSourceId = this._resolveSourceId(val)
+          // 新歌的"已听秒数"从 0 起算（起播后由首次 timeupdate 锚定真实起点）
+          this.scrobbleStart = null
+        }
         this._loadChorus()
         console.log('[PlayIntent]', { songId: val.id, source: this.currentSongSource, playIntentId: this.playIntentId, playContextId: this.playContextId, requestId: this.playRequestId, action: 'start' })
         console.log('[PlayContext]', { songId: val.id, source: this.currentSongSource, contextId: this.playContextId, playlistContextId: this.playlistContextId, requestId: this.playRequestId })
@@ -1305,6 +1329,9 @@ export default {
       // 双保险：$nextTick 在 microtask 释放，但 audio 事件在 macrotask，可能仍在锁释放后触发
       if (this.autoNextLocked) return
       this.autoNextLocked = true
+      // 切歌前补一次打卡：走到这里说明本首已播完（或副歌区间结束），
+      // timeupdate 未必来得及在最后一帧触发，不补就可能整首漏报
+      this._reportPlay()
       if (this.sel && !this.sel.paused) this.sel.pause()
       setTimeout(() => {
         this.autoNextLocked = false
@@ -1501,6 +1528,11 @@ export default {
     _restartCurrent() {
       this.onInteract()
       if (!this.sel) return
+      // 重播前先把这一轮报掉（单曲循环 / FM 同批重播都会走到这里），
+      // 然后 seq 自增：同一首歌的下一轮才能重新计一次打卡
+      this._reportPlay()
+      this.scrobbleSeq++
+      this.scrobbleStart = 0
       try {
         this.sel.currentTime = 0
         // 必须无条件 play()：autoNext 里只是原生 pause()，并没有改 isPlay，
@@ -2394,6 +2426,59 @@ export default {
       this.sel.removeEventListener('error', this._onAudioError)
       this.sel.removeEventListener('ended', this._onAudioEnded)
     },
+    /**
+     * 打卡归属 id：网易云的 weblog 需要知道这次播放来自哪个歌单/专辑。
+     * 优先取当前路由的歌单/专辑详情 id（用户多半就是从那儿点的播放），
+     * 其次退回歌曲自身的专辑 id，都没有才用 0（不阻塞打卡）。
+     * 只在起播时算一次，之后路由变了也不影响这首的归属。
+     */
+    _resolveSourceId(song) {
+      try {
+        const r = this.$route
+        if (r && (r.name === 'listDetail' || r.name === 'albumDetail')) {
+          const id = Number(r.query && r.query.id)
+          if (id) return id
+        }
+      } catch (e) { /* 无 router 时忽略 */ }
+      const al = song && song.al
+      return (al && al.id) ? Number(al.id) : 0
+    },
+    /**
+     * 上报一次播放（/scrobble → 上游 POST /api/feedback/weblog）。
+     *
+     * 为什么必须自己报：服务端的听歌记录、听歌排行、年度报告全部由这条 weblog 累积，
+     * 官方播放器是边播边打卡的。本项目此前只声明了 updateListenedRanks 却从未调用，
+     * 于是「最近一周」永远是空数组（「所有时间」显示的只是官方客户端的历史累计）。
+     *
+     * 门槛 30 秒 / 过半（先到者）；每次播放只报一条（key = 歌 id # 轮次）；
+     * 失败静默——打卡是旁路，不能影响播放链路。
+     */
+    _reportPlay(song) {
+      const s = song || this.currentSong
+      const el = this.sel
+      if (!s || !s.id || !el) return
+      // 语音/电台节目走另一套记录，不参与听歌排行
+      if (s.isVoice) return
+      const key = s.id + '#' + this.scrobbleSeq
+      // 去重放在鉴权之前：timeupdate 每秒会调 4 次，报过之后要尽早返回
+      if (this.scrobbleKey === key) return
+      // 未登录没有 cookie，接口会直接 400（code -2），不必发
+      if (!isLoggedIn()) return
+      const played = Number(el.currentTime) || 0
+      const duration = Number(el.duration) || Number(this.timeDuration) || 0
+      // 真正的"已听"是相对起播点的增量：中断恢复可能一上来就在 40s，
+      // 那 40 秒属于上一次会话，算进去会变成"刚开播就打卡"。
+      // 进度回退（重播 / 换源回到 0）时重新锚定，避免锚点残留在旧进度上。
+      if (this.scrobbleStart === null || played < this.scrobbleStart) this.scrobbleStart = played
+      const listened = Math.max(0, played - this.scrobbleStart)
+      const enough = listened >= SCROBBLE_MIN_SECONDS || (duration > 0 && listened / duration >= SCROBBLE_MIN_RATIO)
+      if (!enough) return
+      this.scrobbleKey = key
+      try {
+        const p = tracks.updateListenedRanks(s.id, this.scrobbleSourceId || 0, Math.round(listened))
+        if (p && p.catch) p.catch(() => {})
+      } catch (e) { /* 打卡失败不影响播放 */ }
+    },
     _currentTime() {
       if (this.sel) {
         this.timeNow = (this.sel.currentTime).toFixed(4)
@@ -2412,6 +2497,8 @@ export default {
             this._saveState()
           }
         }
+        // 播够门槛就打卡：内部按「歌 id # 轮次」去重，重复调用只是一次廉价判断
+        this._reportPlay()
       }
     },
     _durationTime() {

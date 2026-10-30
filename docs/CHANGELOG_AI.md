@@ -35,6 +35,50 @@
 
 ## 历史记录
 
+### 2026-10-30 — FIX-scrobble 补上听歌打卡，修复「最近一周」听歌排行恒为空
+
+### 修改内容
+
+1. **`PlayerCore` 新增播放打卡**（`/scrobble` → 上游 `POST /api/feedback/weblog`）：
+   - 门槛：本次已听 ≥ 30 秒或 ≥ 半首（先到者）；`scrobbleStart` 记录起播进度，中断恢复从 40s 接着播时不会把上次会话的进度算进来
+   - 去重：`key = 歌 id # 播放轮次`，同一轮只报一次；换歌 / 单曲循环重播时 `scrobbleSeq` 自增，同一首歌能重复计次
+   - 触发点四处：`timeupdate`（达标即报）、`currentSong` watcher（切歌前用旧进度补报上一首）、`_autoNext`（播完/副歌到点切歌前补报）、`_restartCurrent`（单曲循环、FM 同批重播）
+   - 归属 id：`_resolveSourceId()` 优先当前路由的歌单/专辑 id，其次歌曲自身专辑 id，兜底 0
+   - 未登录跳过；接口失败静默，不影响播放链路；语音/电台（`isVoice`）不参与
+2. **`UserDetailLayout` 空状态与失败区分**：
+   - 两个 tab 各自加空态文案（"最近一周还没有听歌记录"/"还没有听歌记录"），不再是一片空白
+   - 新增 `recordErr` 标记，接口失败提示"听歌排行获取失败"，不再与"未公开"混为一谈
+   - `loadPage` 进入时复位排行数组（组件复用到另一个 uid 时不会残留上一页数据）
+   - `handleThisTracksData` 跳过缺 `song` 的空壳条目
+
+### 修改文件
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/layout/UserDetailLayout.vue`
+- `analysis/user-record-week-empty-analysis.md`（新增，归因分析）
+
+### 修改原因
+
+个人主页「最近一周」听歌排行一直空，分析后确认**不是接口问题**：
+
+- `/user/record` 的两个请求由 `Promise.all` 并发，任一失败会同时清空两个列表 → 页面会显示"未公开"，而不是"tab 在、列表空"
+- 既然「所有时间」有数据、「最近一周」是空数组，说明 `type=1` 那条**成功返回了 200 + `weekData: []`**
+- 关键：`updateListenedRanks`（`/scrobble`）自首次提交起**只被声明、从未被调用**（`git log -S` 可验，`dist` 里连 `scrobble` 字符串都被 tree-shaking 掉了）
+- 网易云的听歌记录/排行/年度报告全靠这条 weblog 累积，官方播放器边播边打卡；本站从不打卡 → 服务端最近 7 天没有任何记录
+- 「所有时间」里看到的只是早期在官方客户端听出来的历史累计，所以两边表现不一致
+
+### 测试结果
+- `yarn lint`（改动两文件）✅ 无告警
+- `yarn build` ✅ 通过，产物 `dist/js/app.*.js` 已包含 `scrobble`
+- 接口连通性 ✅ `GET /api/scrobble?...` 返回 `{"code":200,"data":"success"}`
+- 浏览器手动核查：❌ 待登录态下实测（播 >30 秒 → 个人主页「最近一周」应出现该曲，网易云侧有分钟级延迟）
+
+### 注意事项
+- 打卡是旁路：任何异常都吞掉，不会 interrupt 播放；未登录直接 return，不产生 400 噪音
+- 每首歌每轮播放只打一次接口，量级与真人听歌一致，不会触发 `/api/` 限流（15 r/s，burst 40）
+- 与官方客户端并存时两边都会打卡，计数按网易云自己的去重规则走，无需特殊处理
+- 若日后接入「听歌识曲/播客」等 `isVoice` 内容，需确认是否要走另一套记录接口
+- 回滚：删掉 `_reportPlay` 的四处调用即可，其余改动（空状态文案）可独立保留
+
 ### 2026-09-30 — HARDEN-audio-proxy + LINT-zero 音频代理加固、lint 归零、深链接回退核实
 
 ### 修改内容
