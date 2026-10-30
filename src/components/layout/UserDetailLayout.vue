@@ -13,20 +13,23 @@
             <h1 class="hero-name">{{ profile.nickname }}<i v-if="profile.gender===1" class="el-icon-male"></i><i v-if="profile.gender===2" class="el-icon-female"></i><VipBadge :uid="uid" :is-self="isSelf"/></h1>
             <p class="hero-sig" v-if="profile.signature" :title="profile.signature">{{ profile.signature }}</p>
             <p class="hero-meta">
-              <span v-if="locationName">📍 {{ locationName }}</span>
-              <span v-if="profile.follows != null" class="hero-stat" title="查看关注列表" @click="jumpSocial('follows')">{{ profile.follows }} 关注</span>
-              <span v-if="profile.followeds != null" class="hero-stat" title="查看粉丝列表" @click="jumpSocial('followeds')">{{ profile.followeds }} 粉丝</span>
-              <span v-if="isSelf && subcount.createdPlaylistCount != null">{{ subcount.createdPlaylistCount }} 创建歌单</span>
-              <span v-if="isSelf && subcount.subPlaylistCount != null">{{ subcount.subPlaylistCount }} 收藏歌单</span>
+              <span v-if="locationName" class="hero-chip">📍 {{ locationName }}</span>
+              <span v-if="profile.follows != null" class="hero-chip hero-chip--link" title="查看关注列表" @click="jumpSocial('follows')">{{ profile.follows }} 关注</span>
+              <span v-if="profile.followeds != null" class="hero-chip hero-chip--link" title="查看粉丝列表" @click="jumpSocial('followeds')">{{ profile.followeds }} 粉丝</span>
+              <span v-if="isSelf && subcount.createdPlaylistCount != null" class="hero-chip">{{ subcount.createdPlaylistCount }} 创建歌单</span>
+              <span v-if="isSelf && subcount.subPlaylistCount != null" class="hero-chip">{{ subcount.subPlaylistCount }} 收藏歌单</span>
             </p>
-            <p class="hero-login" v-if="isSelf && lastLoginText">{{ lastLoginText }}</p>
+          </div>
+          <!-- 右侧动作区：年度报告（本人）+ 关注按钮（他人）+ 上次登录（本人，最次要） -->
+          <div class="hero-side" v-if="isSelf">
             <!-- 年度听歌报告入口：仅本人可见（接口只能取当前登录用户的数据） -->
             <router-link v-if="isSelf" to="/annual" class="hero-annual">
               年度听歌报告<span class="hero-annual-arrow">→</span>
             </router-link>
+            <p class="hero-login" v-if="isSelf && lastLoginText">{{ lastLoginText }}</p>
           </div>
           <!-- 关注 / 已关注：仅登录且非本人时出现，初始状态取 /user/detail 的 profile.followed -->
-          <div class="hero-side" v-if="canFollow">
+          <div class="hero-side hero-side--action" v-if="canFollow">
             <button class="followBtn" :class="{ 'is-followed': followed, 'is-mutual': followState === 'mutual' }"
                     :disabled="followPending"
                     :title="followed ? '点击取消关注' : (followState === 'followBack' ? 'TA 也关注了你，点击回关' : '关注 TA')"
@@ -36,44 +39,62 @@
             </button>
           </div>
         </div>
-        <section class="ud-section ud-card">
-          <h2>听歌排行</h2>
-          <el-tabs v-if="weekTracksData.length||allTracksData.length" v-model="listenedAcName">
-            <el-tab-pane label="最近一周" name="week">
-              <TracksLayout v-if="weekTracksData.length" :list="weekTracksData"/>
-              <p v-else class="empty-text">最近一周还没有听歌记录（只有在本站播放超过 30 秒的歌才会被统计）</p>
-            </el-tab-pane>
-            <el-tab-pane label="所有时间" name="all">
-              <TracksLayout v-if="allTracksData.length" :list="allTracksData"/>
-              <p v-else class="empty-text">还没有听歌记录</p>
-            </el-tab-pane>
-          </el-tabs>
-          <p v-else-if="recordErr" class="empty-text">听歌排行获取失败，稍后再试</p>
-          <p v-else class="empty-text">未公开</p>
-        </section>
-        <section v-if="isSelf" class="ud-section ud-card">
-          <h2>云盘与收藏</h2>
-          <el-tabs v-model="favorsAcName">
-            <el-tab-pane label="云盘" name="cloud"><TracksLayout :list="cloudTracks"/></el-tab-pane>
-            <el-tab-pane label="专辑" name="album"><AlbumLayout :list="favors.albums"/></el-tab-pane>
-            <el-tab-pane label="歌手" name="artists"><ArtistLayout :list="favors.artists"/></el-tab-pane>
-            <el-tab-pane label="视频" name="videos"><VideoLayout :list="favors.vids"/></el-tab-pane>
-          </el-tabs>
-        </section>
-        <section class="ud-section ud-card">
+        <!-- 锚点条：页面有 4 个区块、滚动距离长，给一个随手可点的位置标 -->
+        <nav class="ud-anchor">
+          <button v-for="a in anchors" :key="a.key" class="anchorBtn" @click="scrollTo(a.key)">{{ a.label }}</button>
+        </nav>
+        <!-- 两个都是「矮列表」，并排省掉一整屏：排行占 2 份宽，云盘 1 份 -->
+        <div class="ud-duo" :class="{ 'is-solo': !isSelf }">
+          <section ref="secRank" class="ud-section ud-card ud-sec">
+            <h2>听歌排行</h2>
+            <el-tabs v-if="weekTracksData.length||allTracksData.length" v-model="listenedAcName">
+              <el-tab-pane label="最近一周" name="week">
+                <RankList v-if="weekTracksData.length" :list="weekTracksData"/>
+                <p v-else class="empty-text">最近一周还没有听歌记录（只有在本站播放超过 30 秒的歌才会被统计）</p>
+              </el-tab-pane>
+              <el-tab-pane label="所有时间" name="all">
+                <RankList v-if="allTracksData.length" :list="allTracksData"/>
+                <p v-else class="empty-text">还没有听歌记录</p>
+              </el-tab-pane>
+            </el-tabs>
+            <p v-else-if="recordErr" class="empty-text">听歌排行获取失败，稍后再试</p>
+            <p v-else class="empty-text">未公开</p>
+          </section>
+          <section v-if="isSelf" ref="secFavors" class="ud-section ud-card ud-sec">
+            <h2>云盘与收藏</h2>
+            <el-tabs v-model="favorsAcName">
+              <el-tab-pane label="云盘" name="cloud">
+                <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size"/>
+                <p v-else class="empty-text">云盘还是空的</p>
+              </el-tab-pane>
+              <el-tab-pane label="专辑" name="album"><AlbumLayout :list="favors.albums"/></el-tab-pane>
+              <el-tab-pane label="歌手" name="artists"><ArtistLayout :list="favors.artists"/></el-tab-pane>
+              <el-tab-pane label="视频" name="videos"><VideoLayout :list="favors.vids"/></el-tab-pane>
+            </el-tabs>
+          </section>
+        </div>
+        <section ref="secPlaylist" class="ud-section ud-card ud-sec">
           <h2>
             歌单
+            <span v-if="allPlaylists.length" class="h2-count">{{ playlistCounts }}</span>
             <!-- 导入外部歌单（仅本人）：只有登录态才有写入权限，入口也只在自己主页出现 -->
             <el-button v-if="isSelf" class="import-btn" size="mini" round @click="importVisible = true">
               导入外部歌单
             </el-button>
           </h2>
-          <div v-if="favorTracks.length"><h3>喜欢</h3><PlaylistLayout :list="favorTracks" pic-name="coverImgUrl"/></div>
-          <div v-if="createList.length"><h3>创建</h3><PlaylistLayout :list="createList" pic-name="coverImgUrl"/></div>
-          <div v-if="subList.length"><h3>收藏</h3><PlaylistLayout :list="subList" pic-name="coverImgUrl"/></div>
-          <p v-if="!favorTracks.length&&!createList.length&&!subList.length" class="empty-text">未公开</p>
+          <!-- 喜欢 / 创建 / 收藏合成一张网格：原来分组渲染时，只有一个"喜欢"的歌单会独占一整行，
+               右边留出大片空白；合并后它们按同一尺寸连续排列 -->
+          <PlaylistLayout v-if="allPlaylists.length" :list="allPlaylists" pic-name="coverImgUrl">
+            <template #tail>
+              <li v-if="isSelf" class="plNewTile" @click="importVisible = true">
+                <span class="plNewPlus">+</span>
+                <span class="plNewText">新建 / 导入歌单</span>
+              </li>
+            </template>
+          </PlaylistLayout>
+          <p v-else class="empty-text">未公开</p>
         </section>
-        <section ref="socialSection" class="ud-section ud-card">
+        <section ref="secSocial" class="ud-section ud-card ud-sec">
           <h2>关注与粉丝</h2>
           <el-tabs v-model="socialAcName" @tab-click="onSocialTabClick">
             <el-tab-pane :label="socialLabels.follows" name="follows" lazy>
@@ -84,24 +105,44 @@
                   <el-radio-button :label="2">用户</el-radio-button>
                   <el-radio-button :label="1">歌手</el-radio-button>
                 </el-radio-group>
-                <FollowMixedLayout v-if="mixed.list.length" :list="mixed.list"/>
+                <FollowMixedLayout v-if="mixed.list.length" :list="shownMixed" :dense="!expand.follows"/>
                 <p v-else class="empty-text">{{ mixedEmptyText }}</p>
-                <LoadMore v-if="mixed.list.length" :loading="mixed.loading"
-                          :noMore="mixed.noMore" :load="loadMixed" noMoreText="没有更多了"/>
+                <div class="listFoot">
+                  <button v-if="!expand.follows && mixed.list.length > denseLimit" class="expandBtn"
+                          @click="expandList('follows')">
+                    查看全部 {{ mixed.list.length }} 位 <span class="caret">▾</span>
+                  </button>
+                  <LoadMore v-if="mixed.list.length && expand.follows" :loading="mixed.loading"
+                            :noMore="mixed.noMore" :load="loadMixed" noMoreText="没有更多了"/>
+                </div>
               </template>
               <template v-else>
-                <UserListLayout v-if="social.follows.list.length" :list="social.follows.list"/>
+                <UserListLayout v-if="social.follows.list.length" :list="shownFollows" :dense="!expand.follows"/>
                 <p v-else class="empty-text">{{ socialEmptyText('follows') }}</p>
-                <LoadMore v-if="social.follows.list.length" :loading="social.follows.loading"
-                          :noMore="social.follows.noMore" :load="loadFollows" noMoreText="没有更多了"/>
+                <div class="listFoot">
+                  <button v-if="!expand.follows && social.follows.list.length > denseLimit" class="expandBtn"
+                          @click="expandList('follows')">
+                    查看全部 {{ social.follows.list.length }} 位 <span class="caret">▾</span>
+                  </button>
+                  <LoadMore v-if="social.follows.list.length && expand.follows" :loading="social.follows.loading"
+                            :noMore="social.follows.noMore" :load="loadFollows" noMoreText="没有更多了"/>
+                </div>
               </template>
             </el-tab-pane>
             <el-tab-pane :label="socialLabels.followeds" name="followeds" lazy>
-              <UserListLayout v-if="social.followeds.list.length" :list="social.followeds.list" mode="followeds"/>
+              <!-- self：本人的粉丝列表才显示「回关」；他人粉丝列表里的人关注的是页面主人，只能「关注」 -->
+              <UserListLayout v-if="social.followeds.list.length" :list="shownFolloweds" mode="followeds"
+                              :self="isSelf" :dense="!expand.followeds"/>
               <p v-else class="empty-text">{{ socialEmptyText('followeds') }}</p>
               <p v-if="social.followeds.cap" class="cap-hint">接口只返回最近的前 30 位粉丝，更早的粉丝暂时取不到</p>
-              <LoadMore v-if="social.followeds.list.length" :loading="social.followeds.loading"
-                        :noMore="social.followeds.noMore" :load="loadFolloweds" noMoreText="没有更多了"/>
+              <div class="listFoot">
+                <button v-if="!expand.followeds && social.followeds.list.length > denseLimit" class="expandBtn"
+                        @click="expandList('followeds')">
+                  查看全部 {{ social.followeds.list.length }} 位 <span class="caret">▾</span>
+                </button>
+                <LoadMore v-if="social.followeds.list.length && expand.followeds" :loading="social.followeds.loading"
+                          :noMore="social.followeds.noMore" :load="loadFolloweds" noMoreText="没有更多了"/>
+              </div>
             </el-tab-pane>
           </el-tabs>
         </section>
@@ -118,13 +159,13 @@
 
 <script>
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
-import TracksLayout from "@/components/layout/TracksLayout";
 import AlbumLayout from "@/components/layout/AlbumLayout";
 import ArtistLayout from "@/components/layout/ArtistLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
 import UserListLayout from "@/components/layout/UserListLayout";
 import FollowMixedLayout from "@/components/layout/FollowMixedLayout";
 import VipBadge from "@/components/userPage/VipBadge";
+import RankList from "@/components/userPage/RankList";
 import LoadMore from "@/components/LoadMore";
 import CoverImage from "@/components/common/CoverImage";
 import PlaylistImportDialog from "@/components/common/PlaylistImportDialog";
@@ -156,7 +197,7 @@ function createMixedState() {
 export default {
   name: "UserDetailLayout",
   mixins: [coverLight],
-  components: {PlaylistLayout, TracksLayout, AlbumLayout, ArtistLayout, VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog},
+  components: {PlaylistLayout, AlbumLayout, ArtistLayout, VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog, RankList},
   props: { uid: { required: true } },
   data() {
     return {
@@ -184,6 +225,11 @@ export default {
       mutual: false,
       followMe: false,
       followPending: false,
+      // 关注/粉丝列表的展开状态：默认只给头像墙（前 12 位），点「查看全部」才切成完整卡片 + 翻页。
+      // 20 多行的大卡片会把整页拉得极长，而看主页的人多数只是想扫一眼"关注了谁"。
+      expand: { follows: false, followeds: false },
+      // 头像墙一屏展示的位数（12 = 两行 × 6 列）
+      denseLimit: 12,
       // 登录态：mounted 时读一次 cookie（不使用会被永久缓存的 getter）
       loggedIn: false,
     }
@@ -252,6 +298,50 @@ export default {
       if (this.followScene === 1) return '暂无关注歌手'
       if (this.followScene === 2) return '暂无关注用户'
       return '暂无关注'
+    },
+    /**
+     * 歌单区统一成一张网格：喜欢 → 创建 → 收藏。
+     * 之前三组分别渲染，只有一个歌单的「喜欢」会独占一整行，右边空着；
+     * 合并后同尺寸连续排列，少了三个小标题，也少了三块空白。
+     */
+    allPlaylists() {
+      const tag = (list, kind) => (list || []).map(p => Object.assign({}, p, {_kind: kind}))
+      // 「喜欢」的歌单（uid 同名歌单）也会出现在创建列表里 —— /user/playlist 第一项
+      // 既是喜欢也是自己创建的。以前分三组渲染不明显，合并成一张网格后会连出两张一样的卡。
+      const favorIds = {}
+      this.favorTracks.forEach(p => { favorIds[p.id] = 1 })
+      return [
+        ...tag(this.favorTracks, 'favor'),
+        ...tag(this.createList.filter(p => !favorIds[p.id]), 'create'),
+        ...tag(this.subList, 'sub'),
+      ]
+    },
+    // 区块标题右侧的计数，替代原来的三个 h3 小标题
+    playlistCounts() {
+      const parts = []
+      if (this.favorTracks.length) parts.push(`喜欢 ${this.favorTracks.length}`)
+      // 计数也要去掉与「喜欢」重复的那张
+      const created = this.createList.filter(p => !this.favorTracks.some(f => f.id === p.id)).length
+      if (created) parts.push(`创建 ${created}`)
+      if (this.subList.length) parts.push(`收藏 ${this.subList.length}`)
+      return parts.join(' · ')
+    },
+    // 锚点条：云盘只有本人可见，别人的主页少一项
+    anchors() {
+      const list = [{key: 'secRank', label: '听歌排行'}]
+      if (this.isSelf) list.push({key: 'secFavors', label: '云盘与收藏'})
+      list.push({key: 'secPlaylist', label: '歌单'}, {key: 'secSocial', label: '关注与粉丝'})
+      return list
+    },
+    // 收起态只渲染前 denseLimit 位；展开后交给完整列表 + 翻页
+    shownMixed() {
+      return this.expand.follows ? this.mixed.list : this.mixed.list.slice(0, this.denseLimit)
+    },
+    shownFollows() {
+      return this.expand.follows ? this.social.follows.list : this.social.follows.list.slice(0, this.denseLimit)
+    },
+    shownFolloweds() {
+      return this.expand.followeds ? this.social.followeds.list : this.social.followeds.list.slice(0, this.denseLimit)
     }
   },
   methods: {
@@ -449,6 +539,7 @@ export default {
     onFollowSceneChange() {
       this.mixedSeq++ // 让在途请求失效
       this.mixed = createMixedState()
+      this.expand.follows = false
       this.loadMixed()
     },
     // 切 tab 时才首次请求，避免每次进用户页都多打两个接口
@@ -465,12 +556,22 @@ export default {
     // 点 hero 上的「关注 / 粉丝」数字 → 切到对应 tab 并滚到该区块
     jumpSocial(kind) {
       this.socialAcName = kind
+      this.expand[kind] = false
       if (kind === 'follows' && this.useMixedFollow) this.loadMixed()
       else this.loadSocial(kind)
       this.$nextTick(() => {
-        const el = this.$refs.socialSection
+        const el = this.$refs.secSocial
         if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
       })
+    },
+    /** 锚点条：滚到对应区块（区块自带 scroll-margin-top，不会被吸顶条挡住） */
+    scrollTo(ref) {
+      const el = this.$refs[ref]
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    /** 头像墙 → 完整卡片列表 */
+    expandList(kind) {
+      this.expand[kind] = true
     },
     /**
      * 别处删了歌单（歌单详情页）：本人主页要重拉，他人主页不涉及。
@@ -496,6 +597,7 @@ export default {
       this.followScene = 2
       this.mixed = createMixedState()
       this.mixedSeq++
+      this.expand = { follows: false, followeds: false }
       const p1 = this.getPlaylist(uid).then(res => {
         res.data.playlist.forEach((pl) => {
           if (pl.creator.userId*1 === uid*1) this.createList.push(pl)
@@ -554,15 +656,6 @@ export default {
       const p7 = this.useMixedFollow ? this.loadMixed() : this.loadSocial('follows')
       await Promise.all([this.getUserInfo(uid), p1, p2, p3, p4, p5, p6, p7])
       this.pageLoading = false
-    },
-    layout() {
-      this.$nextTick(() => {
-        const el = this.$el.querySelector('.tracksContainer')
-        if (el && el.querySelector('.tracks')) {
-          el.style.height = el.querySelector('.tracks').clientHeight * 8 + 'px'
-          el.style.overflow = 'auto'
-        }
-      })
     }
   },
   mounted() {
@@ -577,8 +670,7 @@ export default {
   },
   beforeDestroy() {
     this.$bus.$off('playlistDeleted', this.onPlaylistDeleted)
-  },
-  updated() { this.layout() }
+  }
 }
 </script>
 
@@ -634,21 +726,31 @@ export default {
   .hero-info { flex: 1; min-width: 0; }
   .hero-name { font-size: 28px; font-weight: 700; color: $font-black; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; i { display: inline-block; font-size: 18px; line-height: 1; flex-shrink: 0; } i.el-icon-male { color: #47a1ce; } i.el-icon-female { color: #ff86b6; } }
   .hero-sig { font-size: 14px; color: $font-black-1; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 460px; }
-  .hero-meta { display: flex; gap: 20px; font-size: 13px; color: $font-black-1; margin: 0; }
-  // 关注/粉丝可点，跳转到页面底部的关注与粉丝区块
-  .hero-stat {
-    cursor: pointer;
-    transition: color .2s;
-    &:hover { color: $color-main; text-decoration: underline; }
+  // 统计信息做成 chip：原来是一行朴素文字，数字和标签糊在一起，扫读时分不清边界
+  .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: $font-black-1; margin: 0; }
+  .hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(0,0,0,.045);
+    color: $font-black-1;
+    white-space: nowrap;
   }
-  .hero-login { margin: 12px 0 0; font-size: 12px; color: $font-black-2; display: flex; gap: 16px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid rgba(0,0,0,.05); }
+  // 关注/粉丝可点，跳转到页面底部的关注与粉丝区块
+  .hero-chip--link {
+    cursor: pointer;
+    transition: background .2s, color .2s;
+    &:hover { background: rgba($color-main, .12); color: $color-main; }
+  }
+  .hero-login { margin: 0; font-size: 11px; color: $font-black-2; white-space: nowrap; }
   // 年度听歌报告入口（仅本人）
   // 用实心主色：hero 背景是头像模糊渐变（深浅不定），半透明底会糊掉
   .hero-annual {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-top: 14px;
     padding: 7px 16px;
     border-radius: 999px;
     background: $color-main-1;
@@ -662,8 +764,16 @@ export default {
     .hero-annual-arrow { font-size: 12px; opacity: .85; }
   }
 
-  // 关注按钮贴右侧
-  .hero-side { margin-left: auto; flex-shrink: 0; }
+  // 右侧动作区：主操作（年度报告 / 关注按钮）在上，次要信息（上次登录）在下
+  .hero-side {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .hero-side--action { justify-content: center; }
   .followBtn {
     min-width: 96px;
     height: 36px;
@@ -714,6 +824,8 @@ export default {
   h2 { font-size: 20px; font-weight: 700; color: $font-black; margin: 0 0 18px; display: flex; align-items: center; }
   // 标题右侧的操作入口（导入外部歌单）：h2 是 flex，margin-left:auto 推到最右
   h2 .import-btn { margin-left: auto; font-size: 12px; font-weight: 500; }
+  // 歌单区的分类计数，替代原来的三个 h3 小标题
+  h2 .h2-count { margin-left: 10px; font-size: 12px; font-weight: 400; color: $font-black-2; }
   h2::before {
     content: ''; display: inline-block; width: 4px; height: 18px;
     border-radius: 2px; background: $color-main; margin-right: 12px; flex-shrink: 0;
@@ -726,6 +838,98 @@ export default {
   .sceneTabs { margin-bottom: 18px; }
 }
 
+/* ---------- 锚点条 ---------- */
+// 页面从"一屏看完"变成"四块内容"，给一个随手可点的位置标；吸顶是为了滚动中途也能点
+.ud-anchor {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 8px 0;
+  // 半透明底 + 模糊：滚过卡片时字不会和封面糊在一起
+  background: rgba(250, 250, 252, .82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.anchorBtn {
+  padding: 6px 16px;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 999px;
+  background: rgba(255,255,255,.7);
+  font-size: 13px;
+  color: $font-black-1;
+  cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s;
+
+  &:hover { background: $color-main-1; border-color: $color-main-1; color: #fff; }
+}
+
+// 滚动定位时给吸顶条留出空间，否则标题会被盖住
+.ud-sec { scroll-margin-top: 64px; }
+
+/* ---------- 听歌排行 + 云盘：两个矮列表并排 ---------- */
+// 两栏比例 1.6:1：排行榜是主内容（有数字列，需求更宽），云盘只是"收藏了什么"的速览
+.ud-duo {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 20px;
+  align-items: start;
+
+  @media (max-width: 980px) { grid-template-columns: 1fr; }
+
+  // 他人主页没有「云盘与收藏」（只有本人能取），只剩排行榜一张卡 →
+  // 必须回到单列，否则排行会被挤在左侧 61% 处，右边空一格
+  &.is-solo { grid-template-columns: 1fr; }
+
+  // 窄列里的专辑/歌手/视频网格：沿用全站的 minmax(200px) 会变成一列大卡，这里压到两列
+  ::v-deep .gridLayout {
+    grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)) !important;
+    gap: 14px;
+  }
+}
+
+.ud-duo > .ud-section { margin-bottom: 0; }
+
+/* ---------- 关注列表：头像墙 + 查看全部 ---------- */
+.listFoot { display: flex; justify-content: center; margin-top: 14px; }
+
+.expandBtn {
+  padding: 7px 18px;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 999px;
+  background: rgba(255,255,255,.7);
+  font-size: 13px;
+  color: $font-black-1;
+  cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s;
+
+  &:hover { border-color: rgba($color-main, .5); color: $color-main; }
+  .caret { font-size: 11px; opacity: .7; }
+}
+
+/* ---------- 歌单网格尾部的「新建 / 导入」 ---------- */
+.plNewTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 160px;
+  margin: 15px;
+  border: 1px dashed rgba(0,0,0,.16);
+  border-radius: 16px;
+  color: $font-black-2;
+  cursor: pointer;
+  transition: border-color .2s, color .2s, background .2s;
+
+  &:hover { border-color: rgba($color-main, .55); color: $color-main; background: rgba($color-main, .04); }
+  .plNewPlus { font-size: 26px; line-height: 1; }
+  .plNewText { font-size: 12px; }
+}
+
 .ud-card {
   padding: 28px 32px;
   border-radius: 24px;
@@ -736,68 +940,13 @@ export default {
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
 }
 
-/* ---------- 美化滚动条 ---------- */
-::v-deep .tracksContainer {
-  max-height: 520px;
-  overflow-y: auto;
-  padding-right: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0,0,0,.12) transparent;
-  &::-webkit-scrollbar { width: 5px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 3px; }
-  &::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.2); }
-}
 
-/* ---------- 听歌排行/云盘：播放次数+文件大小 字体样式 & 垂直居中平齐 ---------- */
-// 根因：el-col 默认 align-items:stretch，内容靠 margin-top 偏下，封面 img/文字/数字高度各异 → 不平齐
-// 修复：把各 el-col 变成内部 flex 容器居中内容；去掉 margin-top；播放次数/文件大小加左边距保持距离
-::v-deep .tracksContainer .tracks .tracks-wrap {
-  display: flex;
-  align-items: stretch;          // el-col 等高撑满 tracks-wrap 高度
-}
-// 每个 el-col 自身变成 flex 容器，内容垂直居中（基准线对齐）
-::v-deep .tracksContainer .tracks .tracks-wrap .coverImg,
-::v-deep .tracksContainer .tracks .tracks-wrap .name-artist,
-::v-deep .tracksContainer .tracks .tracks-wrap .album,
-::v-deep .tracksContainer .tracks .tracks-wrap .duration,
-::v-deep .tracksContainer .tracks .tracks-wrap .playCount,
-::v-deep .tracksContainer .tracks .tracks-wrap .fileSize {
-  display: flex;
-  align-items: center;          // 内容在 el-col 内垂直居中 → 所有列基线平齐
-}
-// 去掉 margin-top（原本靠它偏下，现在由 align-items:center 取代）
-::v-deep .tracksContainer .tracks .tracks-wrap .name-artist { padding: 0; }
-::v-deep .tracksContainer .tracks .tracks-wrap .name-artist .name,
-::v-deep .tracksContainer .tracks .tracks-wrap .name-artist .artist { margin: 0; }
-::v-deep .tracksContainer .tracks .tracks-wrap .album { padding: 0; margin: 0; }
-::v-deep .tracksContainer .tracks .tracks-wrap .duration { padding: 0; margin: 0; }
-// 播放次数/文件大小：字体样式 + 左边距与时长保持距离
-::v-deep .tracksContainer .tracks .tracks-wrap .playCount,
-::v-deep .tracksContainer .tracks .tracks-wrap .fileSize {
-  font-size: .8rem;
-  color: $font-black-1;
-  white-space: nowrap;
-  padding-left: .6rem;          // 与时长列保持距离
-  box-sizing: border-box;
-}
-// 封面列不压缩
-::v-deep .tracksContainer .tracks .tracks-wrap .coverImg { flex-shrink: 0; }
-/* fileSize 计算公式（÷1024）需要在 TracksLayout.vue 模板改一行，
-   此处仅保留字体样式，CSS 无法覆盖内联文本内容 */
-
+// 歌单网格：不再限制两行 + 内部滚动条。
+// 合并后歌单是一整块（喜欢→创建→收藏），内部滚动会让"到底有多少歌单"失去直觉，
+// 而且页面整体已经比改版前短，交给页面滚动更自然。
 ::v-deep .gridLayout {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
   gap: 20px;
-  max-height: calc(280px*2 + 20px);
-  overflow-y: auto;
-  padding-right: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0,0,0,.12) transparent;
-  &::-webkit-scrollbar { width: 5px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 3px; }
-  &::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.2); }
 }
 ::v-deep .gridLayout li { padding: 0 !important; }
 

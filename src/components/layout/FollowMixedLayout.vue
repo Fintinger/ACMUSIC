@@ -1,6 +1,6 @@
 <template>
-  <ul class="mixedGrid">
-    <li v-for="r in list" :key="itemKey(r)" class="mixedItem">
+  <ul class="mixedGrid" :class="{ 'is-dense': dense }">
+    <li v-for="r in list" :key="itemKey(r)" class="mixedItem" :class="{ 'is-dense': dense }">
       <!-- type === 1 用户 -->
       <div v-if="r.type === 1" class="hitArea" @click="uClk(r.userProfile)">
         <div class="avatar">
@@ -69,6 +69,11 @@ export default {
       type: Array,
       required: true,
     },
+    // 紧凑模式：只留头像 + 名字，排成多列头像墙（用户主页默认形态）
+    dense: {
+      type: Boolean,
+      default: false,
+    },
   },
   methods: {
     // 用户 id 和歌手 id 可能是同一个数字，key 必须带 type
@@ -129,6 +134,16 @@ export default {
   @media (max-width: 600px) { grid-template-columns: 1fr; }
 }
 
+// 紧凑模式：6 列头像墙（同 UserListLayout 的 is-dense）
+.mixedGrid.is-dense {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+
+  @media (max-width: 1100px) { grid-template-columns: repeat(5, 1fr); }
+  @media (max-width: 900px) { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 600px) { grid-template-columns: repeat(3, 1fr); }
+}
+
 .mixedItem {
   display: flex;
   align-items: center;
@@ -144,6 +159,28 @@ export default {
     border-color: rgba($color-main, .35);
     box-shadow: 0 8px 24px rgba(0,0,0,.08);
   }
+}
+
+// 头像墙单元：去掉卡片外观，只保留 hover 反馈
+.mixedItem.is-dense {
+  display: block;
+  padding: 10px 4px 9px;
+  border-radius: 12px;
+  background: transparent;
+  border-color: transparent;
+
+  &:hover {
+    transform: none;
+    background: rgba(255,255,255,.8);
+    border-color: rgba(0,0,0,.05);
+    box-shadow: none;
+  }
+
+  .hitArea { flex-direction: column; gap: 7px; }
+  .avatar { width: 44px; height: 44px; }
+  .info { flex: none; width: 100%; }
+  .name { justify-content: center; font-size: 12px; font-weight: 500; }
+  .sign, .meta, .tagArtist { display: none; }
 }
 
 .hitArea {

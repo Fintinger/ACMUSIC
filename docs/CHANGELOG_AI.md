@@ -35,6 +35,57 @@
 
 ## 历史记录
 
+### 2026-10-30 — UI(user) 个人主页排版重构：并排数据区 / 歌单统一网格 / 关注头像墙 / 锚点吸顶
+
+### 修改内容
+
+针对个人主页「密度失衡」（排行/云盘只有两三行却各占一整屏，关注列表又是 20 多行长表）的重构：
+
+1. **听歌排行 + 云盘并排**（`.ud-duo`，1.6fr : 1fr）：两个都是矮列表，合并后省掉一整屏滚动；
+   他人主页没有云盘卡时自动退回单列（`.is-solo`），避免排行被挤在左侧留一格空。
+2. **新增 `RankList` 组件**（`src/components/userPage/RankList.vue`）：紧凑排行行 = 序号 + 封面(hover 播放)
+   + 歌名/歌手 + 右对齐等宽数字，前三名主色高亮。不复用 TracksLayout——那张五列宽表塞进窄卡会被挤碎。
+   排行用 `meta="count"`、云盘用 `meta="size"`（并 `:show-rank="false"`）。
+3. **歌单统一网格**：喜欢/创建/收藏合成一张 `PlaylistLayout`（原来分组渲染时，只有一个歌单的
+   「喜欢」会独占一整行右侧空白）；分类计数改到标题右侧（`喜欢 1 · 创建 21 · 收藏 0`）；
+   PlaylistLayout 加 `tail` 插槽，尾部放虚线「新建 / 导入歌单」格子。
+   **顺带修了一个历史 bug**：`/user/playlist` 第一项（喜欢）同时也是自己创建的，旧逻辑会同时进
+   favorTracks 和 createList——分三组时不明显，合并成一张网格后连出两张一样的卡。已在
+   `allPlaylists` / `playlistCounts` 里按 id 去重。
+4. **关注与粉丝默认头像墙**：`UserListLayout` / `FollowMixedLayout` 加 `dense` prop——
+   6 列头像 + 昵称（44px 头像、去卡片底、隐藏签名/粉丝数），默认只显示前 12 位 + 「查看全部 N 位」
+   按钮；点开后切回完整卡片并恢复 LoadMore 翻页。原来 20 多行的大卡片被压缩到 2 行。
+5. **锚点吸顶条**（`.ud-anchor`）：hero 下方一排 pill，点击平滑滚动到对应区块
+   （`scrollTo` + `scroll-margin-top: 64px`），页面长滚动时随时能定位。
+6. **Hero 信息重排**：统计改 chips（关注/粉丝可点跳转对应区块）、「年度听歌报告」上移到右侧动作区、
+   「上次登录」降级为右下角小字（`hero-login` 去掉分隔线）。
+7. **清理**：TracksLayout 在本页不再使用（import/组件注册移除）；连带删掉只为它服务的
+   `tracksContainer` 全套 ::v-deep 样式、`layout()` 方法和 `updated()` 钩子；
+   歌单网格去掉「最多两行 + 内部滚动条」的限制，改交页面自然滚动。
+
+### 修改文件
+- `src/components/layout/UserDetailLayout.vue`（主体重构）
+- `src/components/userPage/RankList.vue`（新增）
+- `src/components/layout/UserListLayout.vue` / `FollowMixedLayout.vue`（加 dense 形态）
+- `src/components/layout/PlaylistLayout.vue`（加 tail 插槽）
+
+### 修改原因
+用户对主页排版不满（截图反馈）：密度失衡、单列通铺无层次、歌单区形态混杂、hero 层级平。
+方案经线框图确认后按 P0/P1 落地；渲染效果已用无头 Edge + dev server 实测截图核对
+（他人主页视角，含头像墙与「查看全部」按钮）。
+
+### 测试结果
+- `yarn lint`（5 个改动文件）✅ 无告警
+- `yarn build` ✅ 通过
+- 无头浏览器截图核对 ✅：hero chips / 锚点条 / 歌单统一网格 + 计数 / 关注头像墙 + 查看全部 均符合预期
+- 浏览器手动核查：❌ 本人视角（云盘/听歌排行/年度报告按钮）待登录后自测
+
+### 注意事项
+- 他人主页 `ud-duo` 会退化为单列（排行一张卡），别再把「云盘」卡加回来时忘了去掉 `.is-solo`
+- `RankList` 的播放走 `$bus songClk`，与全站一致；双击行为也保留了
+- dense 头像墙隐藏了「回关/关注」按钮——展开完整列表后才有；如果要在头像墙上直接回关需要另做
+- 回滚：`git revert` 本提交即可，改动不涉及接口与数据
+
 ### 2026-10-30 — FIX-scrobble 补上听歌打卡，修复「最近一周」听歌排行恒为空
 
 ### 修改内容

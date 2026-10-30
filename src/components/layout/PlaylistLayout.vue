@@ -42,6 +42,8 @@
         </div>
       </el-card>
     </li>
+    <!-- 尾部插槽：给调用方追加「新建 / 导入」这类非歌单的格子（个人主页用） -->
+    <slot name="tail"></slot>
   </ul>
 </template>
 
