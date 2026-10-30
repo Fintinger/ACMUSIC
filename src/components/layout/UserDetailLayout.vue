@@ -39,10 +39,6 @@
             </button>
           </div>
         </div>
-        <!-- 锚点条：页面有 4 个区块、滚动距离长，给一个随手可点的位置标 -->
-        <nav class="ud-anchor">
-          <button v-for="a in anchors" :key="a.key" class="anchorBtn" @click="scrollTo(a.key)">{{ a.label }}</button>
-        </nav>
         <!-- 两个都是「矮列表」，并排省掉一整屏：排行占 2 份宽，云盘 1 份 -->
         <div class="ud-duo" :class="{ 'is-solo': !isSelf }">
           <section ref="secRank" class="ud-section ud-card ud-sec">
@@ -412,13 +408,6 @@ export default {
         ? this.allPlaylists
         : this.allPlaylists.filter(p => p._kind === this.plFilter)
     },
-    // 锚点条：云盘只有本人可见，别人的主页少一项
-    anchors() {
-      const list = [{key: 'secRank', label: '听歌排行'}]
-      if (this.isSelf) list.push({key: 'secFavors', label: '云盘与收藏'})
-      list.push({key: 'secPlaylist', label: '歌单'}, {key: 'secSocial', label: '关注与粉丝'})
-      return list
-    },
     /**
      * 头像墙数据：把两种列表（混排 records / 用户列表）归一成 {key,id,name,avatar,tag}。
      * 只在本页渲染收起态；展开后交给公共卡片组件（FollowMixedLayout / UserListLayout），
@@ -687,11 +676,6 @@ export default {
       return (ar && ar.name) || '未知歌手'
     },
     artistAvatar(ar) { return (ar.picUrl || ar.img1v1Url || ar.pic || '') },
-    /** 锚点条：滚到对应区块（区块自带 scroll-margin-top，不会被吸顶条挡住） */
-    scrollTo(ref) {
-      const el = this.$refs[ref]
-      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    },
     /** 头像墙 → 完整卡片列表 */
     expandList(kind) {
       this.expand[kind] = true
@@ -957,44 +941,80 @@ export default {
   .empty-text { color: $font-black-2; font-size: 14px; padding: 20px 0; }
   // 上游分页失效时的提示（见 loadSocial 注释）
   .cap-hint { color: $font-black-2; font-size: 12px; margin: 14px 0 0; }
-  // 关注列表的「全部/用户/歌手」分类
-  .sceneTabs { margin-bottom: 18px; }
+  // 关注列表的「全部/用户/歌手」分类（间距与 el-tabs 的 header 保持一致）
+  .sceneTabs { margin-bottom: 14px; }
 }
 
 // 并排两卡与歌单区的统一高度上限：防止内容一多就把整页拉长
 $duo-h: 520px;
 $pl-max-h: 420px;
 
-/* ---------- 锚点条 ---------- */
-// 页面从"一屏看完"变成"四块内容"，给一个随手可点的位置标；吸顶是为了滚动中途也能点
-.ud-anchor {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  gap: 8px;
-  margin: 0 0 18px;
-  padding: 8px 0;
-  // 半透明底 + 模糊：滚过卡片时字不会和封面糊在一起
-  background: rgba(250, 250, 252, .82);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
+/* ---------- 页内所有「切换显示内容」的标签：统一成一套胶囊 ---------- */
+// 本页原本有三种不同视觉：el-tabs 的下划线（排行/云盘/关注）、描边胶囊（歌单分类）、
+// 方角按钮组（关注分类）。这里统一尺寸与状态色，四处看起来是同一套控件。
+// 全部用 ::v-deep 限定在本组件内，不碰公共组件。
+$tag-h: 28px;          // 统一高度
+$tag-pad: 14px;        // 左右内边距
+$tag-bd: rgba(0, 0, 0, .08);
+$tag-bg: rgba(255, 255, 255, .65);
 
-.anchorBtn {
-  padding: 6px 16px;
-  border: 1px solid rgba(0,0,0,.08);
+// 1) el-tabs：去掉底部灰长线与滑动下划线，改成胶囊
+.ud-section ::v-deep .el-tabs__header { margin-bottom: 14px; }
+.ud-section ::v-deep .el-tabs__nav-wrap::after { display: none; }
+.ud-section ::v-deep .el-tabs__active-bar { display: none; }
+.ud-section ::v-deep .el-tabs__nav { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ud-section ::v-deep .el-tabs__item {
+  height: $tag-h;
+  line-height: $tag-h - 2;
+  // Element 自带 .is-top:nth-child(2){padding-left:0} / :last-child{padding-right:0}，
+  // 优先级比这里高，所以内边距必须 !important 兜住
+  padding: 0 $tag-pad !important;
+  border: 1px solid $tag-bd;
   border-radius: 999px;
-  background: rgba(255,255,255,.7);
+  background: $tag-bg;
   font-size: 13px;
   color: $font-black-1;
-  cursor: pointer;
-  transition: background .2s, color .2s, border-color .2s;
+  transition: background .2s, border-color .2s, color .2s;
 
-  &:hover { background: $color-main-1; border-color: $color-main-1; color: #fff; }
+  &:hover { color: $color-main; border-color: rgba($color-main, .45); }
+  &.is-active {
+    background: $color-main-1;
+    border-color: $color-main-1;
+    color: #fff;
+  }
+  .el-icon-close { color: inherit; }
 }
 
-// 滚动定位时给吸顶条留出空间，否则标题会被盖住
+// 2) el-radio-button（关注分类）：由方角按钮组改成同一套胶囊，间距交给 gap，
+//    不再用 Element 的 margin-left:-1px 拼边框
+.ud-section ::v-deep .el-radio-group { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ud-section ::v-deep .el-radio-button__inner {
+  height: $tag-h;
+  line-height: $tag-h - 2;
+  padding: 0 $tag-pad;
+  border: 1px solid $tag-bd !important;
+  border-radius: 999px !important;
+  background: $tag-bg;
+  font-size: 13px;
+  color: $font-black-1;
+  box-shadow: none !important;
+  transition: background .2s, border-color .2s, color .2s;
+
+  &:hover { color: $color-main; border-color: rgba($color-main, .45) !important; }
+}
+
+.ud-section ::v-deep .el-radio-button:not(:first-child) .el-radio-button__inner { margin-left: 0; }
+
+.ud-section ::v-deep .el-radio-button__orig-radio:checked + .el-radio-button__inner {
+  background: $color-main-1 !important;
+  border-color: $color-main-1 !important;
+  color: #fff;
+  box-shadow: none !important;
+}
+
+// 滚动定位（hero 上的关注/粉丝数字 → 关注区块）时给顶部导航留出空间
 .ud-sec { scroll-margin-top: 64px; }
 
 /* ---------- 听歌排行 + 云盘：两个矮列表并排 ---------- */
@@ -1095,10 +1115,12 @@ $pl-max-h: 420px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 14px;
-  border: 1px solid rgba(0,0,0,.08);
+  // 与 el-tabs / el-radio-button 共用同一套尺寸（见「统一标签」一节）
+  height: $tag-h;
+  padding: 0 $tag-pad;
+  border: 1px solid $tag-bd;
   border-radius: 999px;
-  background: rgba(255,255,255,.65);
+  background: $tag-bg;
   font-family: inherit;
   font-size: 13px;
   color: $font-black-1;
