@@ -12,12 +12,20 @@
           <div class="hero-info">
             <h1 class="hero-name">{{ profile.nickname }}<i v-if="profile.gender===1" class="el-icon-male"></i><i v-if="profile.gender===2" class="el-icon-female"></i><VipBadge :uid="uid" :is-self="isSelf"/></h1>
             <p class="hero-sig" v-if="profile.signature" :title="profile.signature">{{ profile.signature }}</p>
+            <!-- 统计分两档：关注/粉丝是主（数字突出、点了进列表），
+                 位置与歌单数是从属信息，压成小字，别和数据抢分量 -->
             <p class="hero-meta">
-              <span v-if="locationName" class="hero-chip">📍 {{ locationName }}</span>
-              <span v-if="profile.follows != null" class="hero-chip hero-chip--link" title="查看关注列表" @click="jumpSocial('follows')">{{ profile.follows }} 关注</span>
-              <span v-if="profile.followeds != null" class="hero-chip hero-chip--link" title="查看粉丝列表" @click="jumpSocial('followeds')">{{ profile.followeds }} 粉丝</span>
-              <span v-if="isSelf && subcount.createdPlaylistCount != null" class="hero-chip">{{ subcount.createdPlaylistCount }} 创建歌单</span>
-              <span v-if="isSelf && subcount.subPlaylistCount != null" class="hero-chip">{{ subcount.subPlaylistCount }} 收藏歌单</span>
+              <span v-if="profile.follows != null" class="hero-stat" title="查看关注列表" @click="jumpSocial('follows')">
+                <b>{{ profile.follows }}</b><em>关注</em>
+              </span>
+              <span v-if="profile.followeds != null" class="hero-stat" title="查看粉丝列表" @click="jumpSocial('followeds')">
+                <b>{{ profile.followeds }}</b><em>粉丝</em>
+              </span>
+              <span class="hero-meta-sep"
+                    v-if="locationName || (isSelf && (subcount.createdPlaylistCount != null || subcount.subPlaylistCount != null))"></span>
+              <span v-if="locationName" class="hero-meta-item">📍 {{ locationName }}</span>
+              <span v-if="isSelf && subcount.createdPlaylistCount != null" class="hero-meta-item">{{ subcount.createdPlaylistCount }} 创建歌单</span>
+              <span v-if="isSelf && subcount.subPlaylistCount != null" class="hero-meta-item">{{ subcount.subPlaylistCount }} 收藏歌单</span>
             </p>
           </div>
           <!-- 右侧动作区：年度报告（本人）+ 关注按钮（他人）+ 上次登录（本人，最次要） -->
@@ -833,24 +841,34 @@ export default {
   .hero-info { flex: 1; min-width: 0; }
   .hero-name { font-size: 28px; font-weight: 700; color: $font-black; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; i { display: inline-block; font-size: 18px; line-height: 1; flex-shrink: 0; } i.el-icon-male { color: #47a1ce; } i.el-icon-female { color: #ff86b6; } }
   .hero-sig { font-size: 14px; color: $font-black-1; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 460px; }
-  // 统计信息做成 chip：原来是一行朴素文字，数字和标签糊在一起，扫读时分不清边界
-  .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: $font-black-1; margin: 0; }
-  .hero-chip {
+  // 统计分主次：关注/粉丝是主——数字放大加粗、可点进列表；
+  // 位置/歌单数是从属信息，只用小字轻色，不跟数字抢注意力
+  .hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; font-size: 12px; margin: 0; }
+
+  .hero-stat {
     display: inline-flex;
-    align-items: center;
+    align-items: baseline;
     gap: 4px;
-    padding: 3px 10px;
-    border-radius: 999px;
-    background: rgba(0,0,0,.045);
-    color: $font-black-1;
-    white-space: nowrap;
-  }
-  // 关注/粉丝可点，跳转到页面底部的关注与粉丝区块
-  .hero-chip--link {
     cursor: pointer;
-    transition: background .2s, color .2s;
-    &:hover { background: rgba($color-main, .12); color: $color-main; }
+
+    b {
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1;
+      color: $font-black;
+      // 等宽数字：37 和 21 并排时位数对齐，不会一大一小
+      font-variant-numeric: tabular-nums;
+      transition: color .2s;
+    }
+    em { font-style: normal; font-size: 12px; color: $font-black-2; transition: color .2s; }
+
+    &:hover b, &:hover em { color: $color-main; }
   }
+
+  // 主信息与从属信息之间的短竖线
+  .hero-meta-sep { width: 1px; height: 12px; background: rgba(0,0,0,.12); }
+
+  .hero-meta-item { color: $font-black-2; white-space: nowrap; }
   .hero-login { margin: 0; font-size: 11px; color: $font-black-2; white-space: nowrap; }
   // 年度听歌报告入口（仅本人）
   // 用实心主色：hero 背景是头像模糊渐变（深浅不定），半透明底会糊掉
@@ -1031,6 +1049,36 @@ $tag-bg: rgba(255, 255, 255, .65);
 
 // 滚动定位（hero 上的关注/粉丝数字 → 关注区块）时给顶部导航留出空间
 .ud-sec { scroll-margin-top: 64px; }
+
+/* ---------- 二级标签：区块内部的细分筛选 ---------- */
+// 「关注与粉丝」卡里的「全部/用户/歌手」只是对同一条列表再筛一次，
+// 和上面的 el-tabs（切整个区块）不是一个层级。这里去掉边框、字号再小一号，
+// 选中用「浅主色底 + 主色字」而不是实心色块 —— 主次一眼可分。
+.ud-section ::v-deep .el-radio-group.sceneTabs { gap: 4px; }
+
+.ud-section ::v-deep .sceneTabs .el-radio-button__inner {
+  height: 26px;
+  line-height: 24px;
+  padding: 0 10px;
+  border-color: transparent !important;
+  background: rgba(0, 0, 0, .045);
+  font-size: 12px;
+  font-weight: 400;
+  color: $font-black-2;
+
+  &:hover {
+    color: $color-main;
+    border-color: transparent !important;
+    background: rgba($color-main, .08);
+  }
+}
+
+.ud-section ::v-deep .sceneTabs .el-radio-button__orig-radio:checked + .el-radio-button__inner {
+  background: rgba($color-main, .12) !important;
+  border-color: transparent !important;
+  color: $color-main;
+  box-shadow: none !important;
+}
 
 /* ---------- 听歌排行 + 云盘：两个矮列表并排 ---------- */
 // 两栏比例 1.6:1：排行榜是主内容（有数字列，需求更宽），云盘只是"收藏了什么"的速览
