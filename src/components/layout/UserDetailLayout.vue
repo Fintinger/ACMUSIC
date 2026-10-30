@@ -68,8 +68,32 @@
                 <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size"/>
                 <p v-else class="empty-text">云盘还是空的</p>
               </el-tab-pane>
-              <el-tab-pane label="专辑" name="album"><AlbumLayout :list="favors.albums"/></el-tab-pane>
-              <el-tab-pane label="歌手" name="artists"><ArtistLayout :list="favors.artists"/></el-tab-pane>
+              <!-- 专辑/歌手改成小图标行：卡片很窄，大封面网格放不下两张 -->
+              <el-tab-pane label="专辑" name="album">
+                <ul v-if="(favors.albums||[]).length" class="miniRows">
+                  <li v-for="a in favors.albums" :key="a.id" class="miniRow" @click="openAlbum(a.id)">
+                    <img class="miniCover" :src="albumCover(a) | imgParam('80y80')" :alt="a.name + '的封面'" loading="lazy">
+                    <div class="miniMain">
+                      <p class="miniName" :title="a.name">{{ a.name }}</p>
+                      <p class="miniMeta">{{ albumArtist(a) }}</p>
+                    </div>
+                  </li>
+                </ul>
+                <p v-else class="empty-text">还没有收藏专辑</p>
+              </el-tab-pane>
+              <el-tab-pane label="歌手" name="artists">
+                <ul v-if="(favors.artists||[]).length" class="miniRows">
+                  <li v-for="ar in favors.artists" :key="ar.id" class="miniRow" @click="openArtist(ar.id)">
+                    <img class="miniCover miniCover--round" :src="artistAvatar(ar) | imgParam('80y80')"
+                         :alt="ar.name + '的头像'" loading="lazy">
+                    <div class="miniMain">
+                      <p class="miniName" :title="ar.name">{{ ar.name }}</p>
+                      <p class="miniMeta">专辑 {{ ar.albumSize || 0 }} · MV {{ ar.mvSize || 0 }}</p>
+                    </div>
+                  </li>
+                </ul>
+                <p v-else class="empty-text">还没有关注歌手</p>
+              </el-tab-pane>
               <el-tab-pane label="视频" name="videos"><VideoLayout :list="favors.vids"/></el-tab-pane>
             </el-tabs>
           </section>
@@ -77,20 +101,27 @@
         <section ref="secPlaylist" class="ud-section ud-card ud-sec">
           <h2>
             歌单
-            <span v-if="allPlaylists.length" class="h2-count">{{ playlistCounts }}</span>
             <!-- 导入外部歌单（仅本人）：只有登录态才有写入权限，入口也只在自己主页出现 -->
             <el-button v-if="isSelf" class="import-btn" size="mini" round @click="importVisible = true">
               导入外部歌单
             </el-button>
           </h2>
+          <!-- 分类标签：合并成一张列表后用它切回「喜欢 / 创建 / 收藏」，
+               比三个 h3 分组轻，又不占版面 -->
+          <div v-if="allPlaylists.length" class="plTags">
+            <button v-for="t in playlistTabs" :key="t.key" class="plTag"
+                    :class="{ 'is-active': plFilter === t.key }" @click="plFilter = t.key">
+              {{ t.label }}<span class="plTagNum">{{ t.count }}</span>
+            </button>
+          </div>
           <!-- 喜欢 / 创建 / 收藏合成一张网格：原来分组渲染时，只有一个"喜欢"的歌单会独占一整行，
                右边留出大片空白；合并后它们按同一尺寸连续排列。
                网格在本页内私有实现（plGrid），不改公共的 PlaylistLayout -->
           <!-- 横向排布：小封面在左、文字在右。歌单多了之后比大封面网格省一半高度；
                外层 plScroll 限定最大高度，避免歌单过多把页面拉长 -->
-          <div v-if="allPlaylists.length" class="plScroll">
+          <div v-if="filteredPlaylists.length" class="plScroll">
             <ul class="plRows">
-              <li v-for="p in allPlaylists" :key="p.id" class="plRow" @click="openPl(p.id)">
+              <li v-for="p in filteredPlaylists" :key="p.id" class="plRow" @click="openPl(p.id)">
                 <img class="plCover" :src="p.coverImgUrl | imgParam('120y120')" :alt="p.name + '的封面'"
                      loading="lazy" decoding="async">
                 <div class="plMain">
@@ -104,12 +135,13 @@
                   </p>
                 </div>
               </li>
-              <li v-if="isSelf" class="plRow plRowNew" @click="importVisible = true">
+              <li v-if="isSelf && plFilter !== 'sub'" class="plRow plRowNew" @click="importVisible = true">
                 <span class="plNewPlus">+</span>
                 <span class="plNewText">新建 / 导入歌单</span>
               </li>
             </ul>
           </div>
+          <p v-else-if="allPlaylists.length" class="empty-text">这个分类下还没有歌单</p>
           <p v-else class="empty-text">未公开</p>
         </section>
         <section ref="secSocial" class="ud-section ud-card ud-sec">
@@ -209,8 +241,6 @@
 </template>
 
 <script>
-import AlbumLayout from "@/components/layout/AlbumLayout";
-import ArtistLayout from "@/components/layout/ArtistLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
 import UserListLayout from "@/components/layout/UserListLayout";
 import FollowMixedLayout from "@/components/layout/FollowMixedLayout";
@@ -247,7 +277,7 @@ function createMixedState() {
 export default {
   name: "UserDetailLayout",
   mixins: [coverLight],
-  components: {AlbumLayout, ArtistLayout, VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog, RankList},
+  components: {VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog, RankList},
   props: { uid: { required: true } },
   data() {
     return {
@@ -280,6 +310,8 @@ export default {
       expand: { follows: false, followeds: false },
       // 头像墙一屏展示的位数（12 = 两行 × 6 列）
       denseLimit: 12,
+      // 歌单分类标签当前选中项：all / favor / create / sub
+      plFilter: 'all',
       // 登录态：mounted 时读一次 cookie（不使用会被永久缓存的 getter）
       loggedIn: false,
     }
@@ -366,15 +398,19 @@ export default {
         ...tag(this.subList, 'sub'),
       ]
     },
-    // 区块标题右侧的计数，替代原来的三个 h3 小标题
-    playlistCounts() {
-      const parts = []
-      if (this.favorTracks.length) parts.push(`喜欢 ${this.favorTracks.length}`)
-      // 计数也要去掉与「喜欢」重复的那张
-      const created = this.createList.filter(p => !this.favorTracks.some(f => f.id === p.id)).length
-      if (created) parts.push(`创建 ${created}`)
-      if (this.subList.length) parts.push(`收藏 ${this.subList.length}`)
-      return parts.join(' · ')
+    // 分类标签：合并成一张列表后，用它切回「喜欢 / 创建 / 收藏」
+    playlistTabs() {
+      return [
+        {key: 'all', label: '全部', count: this.allPlaylists.length},
+        {key: 'favor', label: '喜欢', count: this.favorTracks.length},
+        {key: 'create', label: '创建', count: this.allPlaylists.filter(p => p._kind === 'create').length},
+        {key: 'sub', label: '收藏', count: this.subList.length},
+      ]
+    },
+    filteredPlaylists() {
+      return this.plFilter === 'all'
+        ? this.allPlaylists
+        : this.allPlaylists.filter(p => p._kind === this.plFilter)
     },
     // 锚点条：云盘只有本人可见，别人的主页少一项
     anchors() {
@@ -637,6 +673,20 @@ export default {
     openUser(uid) {
       if (uid) this.$bus.$emit('uClk', uid)
     },
+    /** 收藏专辑 / 关注歌手：小图标列表的跳转，沿用公共组件的 $bus 通道 */
+    openAlbum(id) {
+      if (id) this.$bus.$emit('alClk', id)
+    },
+    openArtist(id) {
+      if (id) this.$bus.$emit('arClk', id)
+    },
+    // 专辑封面 / 歌手头像的兜底：字段在网易云各接口里不统一
+    albumCover(a) { return (a.picUrl || a.blurPicUrl || a.pic || '') },
+    albumArtist(a) {
+      const ar = Array.isArray(a.artists) ? a.artists[0] : a.artist
+      return (ar && ar.name) || '未知歌手'
+    },
+    artistAvatar(ar) { return (ar.picUrl || ar.img1v1Url || ar.pic || '') },
     /** 锚点条：滚到对应区块（区块自带 scroll-margin-top，不会被吸顶条挡住） */
     scrollTo(ref) {
       const el = this.$refs[ref]
@@ -963,6 +1013,9 @@ $pl-max-h: 420px;
   // 必须回到单列，否则排行会被挤在左侧 61% 处，右边空一格
   &.is-solo { grid-template-columns: 1fr; }
 
+  // 子卡片的 margin-bottom 被清零了（并排时不需要），这里补回与下方歌单卡的间距
+  margin-bottom: 28px;
+
   // 窄列里的专辑/歌手/视频网格：沿用全站的 minmax(200px) 会变成一列大卡，这里压到两列
   ::v-deep .gridLayout {
     grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)) !important;
@@ -1028,6 +1081,95 @@ $pl-max-h: 420px;
 
   &:hover { border-color: rgba($color-main, .5); color: $color-main; }
   .caret { font-size: 11px; opacity: .7; }
+}
+
+/* ---------- 歌单分类标签 ---------- */
+.plTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.plTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 999px;
+  background: rgba(255,255,255,.65);
+  font-family: inherit;
+  font-size: 13px;
+  color: $font-black-1;
+  cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s;
+
+  &:hover { border-color: rgba($color-main, .45); color: $color-main; }
+
+  &.is-active {
+    background: $color-main-1;
+    border-color: $color-main-1;
+    color: #fff;
+  }
+
+  // 未选中的标签里数字弱化处理，避免抢标题
+  .plTagNum { font-size: 11px; opacity: .7; }
+}
+
+/* ---------- 云盘与收藏：专辑 / 歌手的小图标列表 ---------- */
+.miniRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.miniRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .18s;
+
+  &:hover { background: rgba(0,0,0,.035); }
+
+  .miniCover {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    object-fit: cover;
+    display: block;
+    background: rgba(0,0,0,.05);
+  }
+  // 歌手用圆形头像，与专辑方角封面区分
+  .miniCover--round { border-radius: 50%; }
+
+  .miniMain { flex: 1; min-width: 0; }
+
+  .miniName {
+    margin: 0;
+    font-size: 13px;
+    color: $font-black;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .miniMeta {
+    margin: 2px 0 0;
+    font-size: 11px;
+    color: $font-black-2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* ---------- 歌单：横向排布（左小封面 + 右文字），页内私有 ---------- */
