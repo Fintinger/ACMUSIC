@@ -64,7 +64,10 @@
             <h2>云盘与收藏</h2>
             <el-tabs v-model="favorsAcName">
               <el-tab-pane label="云盘" name="cloud">
-                <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size"/>
+                <p v-if="cloudTracks.length" class="cloudCount">共 {{ cloudTracks.length }} 个文件</p>
+                <div v-if="cloudTracks.length" class="cloudScroll">
+                  <RankList :list="cloudTracks" :show-rank="false" meta="size"/>
+                </div>
                 <p v-else class="empty-text">云盘还是空的</p>
               </el-tab-pane>
               <el-tab-pane label="专辑" name="album"><AlbumLayout :list="favors.albums"/></el-tab-pane>
@@ -83,15 +86,22 @@
             </el-button>
           </h2>
           <!-- 喜欢 / 创建 / 收藏合成一张网格：原来分组渲染时，只有一个"喜欢"的歌单会独占一整行，
-               右边留出大片空白；合并后它们按同一尺寸连续排列 -->
-          <PlaylistLayout v-if="allPlaylists.length" :list="allPlaylists" pic-name="coverImgUrl">
-            <template #tail>
-              <li v-if="isSelf" class="plNewTile" @click="importVisible = true">
-                <span class="plNewPlus">+</span>
-                <span class="plNewText">新建 / 导入歌单</span>
-              </li>
-            </template>
-          </PlaylistLayout>
+               右边留出大片空白；合并后它们按同一尺寸连续排列。
+               网格在本页内私有实现（plGrid），不改公共的 PlaylistLayout -->
+          <ul v-if="allPlaylists.length" class="plGrid">
+            <li v-for="p in allPlaylists" :key="p.id" class="plCard" @click="openPl(p.id)">
+              <div class="plCover">
+                <img :src="p.coverImgUrl | imgParam('300y300')" :alt="p.name + '的封面'" loading="lazy" decoding="async">
+                <span v-if="p.playCount" class="plPlays"><BaseIcon name="play"/> {{ p.playCount | Div1w }}</span>
+                <span v-if="p._kind === 'favor'" class="plFavorMark" title="喜欢的歌单"><BaseIcon name="likeFill"/></span>
+              </div>
+              <p class="plName" :title="p.name">{{ p.name }}</p>
+            </li>
+            <li v-if="isSelf" class="plNewTile" @click="importVisible = true">
+              <span class="plNewPlus">+</span>
+              <span class="plNewText">新建 / 导入歌单</span>
+            </li>
+          </ul>
           <p v-else class="empty-text">未公开</p>
         </section>
         <section ref="secSocial" class="ud-section ud-card ud-sec">
@@ -105,44 +115,77 @@
                   <el-radio-button :label="2">用户</el-radio-button>
                   <el-radio-button :label="1">歌手</el-radio-button>
                 </el-radio-group>
-                <FollowMixedLayout v-if="mixed.list.length" :list="shownMixed" :dense="!expand.follows"/>
+                <template v-if="mixed.list.length">
+                  <!-- 收起：头像墙（本页私有形态，不占用公共组件） -->
+                  <div v-if="!expand.follows" class="wallGrid">
+                    <button v-for="w in wallMixed" :key="w.key" class="wallItem" @click="openUser(w.id)">
+                      <img :src="w.avatar | imgParam('100y100')" :alt="w.name + '的头像'" loading="lazy">
+                      <span class="wallName" :title="w.name">{{ w.name }}<i v-if="w.tag" class="wallTag">{{ w.tag }}</i></span>
+                    </button>
+                  </div>
+                  <!-- 展开：完整卡片（公共组件原样使用） -->
+                  <template v-else>
+                    <FollowMixedLayout :list="mixed.list"/>
+                    <div class="listFoot">
+                      <LoadMore :loading="mixed.loading" :noMore="mixed.noMore" :load="loadMixed" noMoreText="没有更多了"/>
+                    </div>
+                  </template>
+                  <div v-if="!expand.follows && mixed.list.length > denseLimit" class="listFoot">
+                    <button class="expandBtn" @click="expandList('follows')">
+                      查看全部 {{ mixed.list.length }} 位 <span class="caret">▾</span>
+                    </button>
+                  </div>
+                </template>
                 <p v-else class="empty-text">{{ mixedEmptyText }}</p>
-                <div class="listFoot">
-                  <button v-if="!expand.follows && mixed.list.length > denseLimit" class="expandBtn"
-                          @click="expandList('follows')">
-                    查看全部 {{ mixed.list.length }} 位 <span class="caret">▾</span>
-                  </button>
-                  <LoadMore v-if="mixed.list.length && expand.follows" :loading="mixed.loading"
-                            :noMore="mixed.noMore" :load="loadMixed" noMoreText="没有更多了"/>
-                </div>
               </template>
               <template v-else>
-                <UserListLayout v-if="social.follows.list.length" :list="shownFollows" :dense="!expand.follows"/>
+                <template v-if="social.follows.list.length">
+                  <div v-if="!expand.follows" class="wallGrid">
+                    <button v-for="w in wallFollows" :key="w.key" class="wallItem" @click="openUser(w.id)">
+                      <img :src="w.avatar | imgParam('100y100')" :alt="w.name + '的头像'" loading="lazy">
+                      <span class="wallName" :title="w.name">{{ w.name }}</span>
+                    </button>
+                  </div>
+                  <template v-else>
+                    <UserListLayout :list="social.follows.list"/>
+                    <div class="listFoot">
+                      <LoadMore :loading="social.follows.loading" :noMore="social.follows.noMore"
+                                :load="loadFollows" noMoreText="没有更多了"/>
+                    </div>
+                  </template>
+                  <div v-if="!expand.follows && social.follows.list.length > denseLimit" class="listFoot">
+                    <button class="expandBtn" @click="expandList('follows')">
+                      查看全部 {{ social.follows.list.length }} 位 <span class="caret">▾</span>
+                    </button>
+                  </div>
+                </template>
                 <p v-else class="empty-text">{{ socialEmptyText('follows') }}</p>
-                <div class="listFoot">
-                  <button v-if="!expand.follows && social.follows.list.length > denseLimit" class="expandBtn"
-                          @click="expandList('follows')">
-                    查看全部 {{ social.follows.list.length }} 位 <span class="caret">▾</span>
-                  </button>
-                  <LoadMore v-if="social.follows.list.length && expand.follows" :loading="social.follows.loading"
-                            :noMore="social.follows.noMore" :load="loadFollows" noMoreText="没有更多了"/>
-                </div>
               </template>
             </el-tab-pane>
             <el-tab-pane :label="socialLabels.followeds" name="followeds" lazy>
               <!-- self：本人的粉丝列表才显示「回关」；他人粉丝列表里的人关注的是页面主人，只能「关注」 -->
-              <UserListLayout v-if="social.followeds.list.length" :list="shownFolloweds" mode="followeds"
-                              :self="isSelf" :dense="!expand.followeds"/>
+              <template v-if="social.followeds.list.length">
+                <div v-if="!expand.followeds" class="wallGrid">
+                  <button v-for="w in wallFolloweds" :key="w.key" class="wallItem" @click="openUser(w.id)">
+                    <img :src="w.avatar | imgParam('100y100')" :alt="w.name + '的头像'" loading="lazy">
+                    <span class="wallName" :title="w.name">{{ w.name }}</span>
+                  </button>
+                </div>
+                <template v-else>
+                  <UserListLayout :list="social.followeds.list" mode="followeds" :self="isSelf"/>
+                  <div class="listFoot">
+                    <LoadMore :loading="social.followeds.loading" :noMore="social.followeds.noMore"
+                              :load="loadFolloweds" noMoreText="没有更多了"/>
+                  </div>
+                </template>
+                <p v-if="social.followeds.cap" class="cap-hint">接口只返回最近的前 30 位粉丝，更早的粉丝暂时取不到</p>
+                <div v-if="!expand.followeds && social.followeds.list.length > denseLimit" class="listFoot">
+                  <button class="expandBtn" @click="expandList('followeds')">
+                    查看全部 {{ social.followeds.list.length }} 位 <span class="caret">▾</span>
+                  </button>
+                </div>
+              </template>
               <p v-else class="empty-text">{{ socialEmptyText('followeds') }}</p>
-              <p v-if="social.followeds.cap" class="cap-hint">接口只返回最近的前 30 位粉丝，更早的粉丝暂时取不到</p>
-              <div class="listFoot">
-                <button v-if="!expand.followeds && social.followeds.list.length > denseLimit" class="expandBtn"
-                        @click="expandList('followeds')">
-                  查看全部 {{ social.followeds.list.length }} 位 <span class="caret">▾</span>
-                </button>
-                <LoadMore v-if="social.followeds.list.length && expand.followeds" :loading="social.followeds.loading"
-                          :noMore="social.followeds.noMore" :load="loadFolloweds" noMoreText="没有更多了"/>
-              </div>
             </el-tab-pane>
           </el-tabs>
         </section>
@@ -158,7 +201,6 @@
 </template>
 
 <script>
-import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import AlbumLayout from "@/components/layout/AlbumLayout";
 import ArtistLayout from "@/components/layout/ArtistLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
@@ -197,7 +239,7 @@ function createMixedState() {
 export default {
   name: "UserDetailLayout",
   mixins: [coverLight],
-  components: {PlaylistLayout, AlbumLayout, ArtistLayout, VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog, RankList},
+  components: {AlbumLayout, ArtistLayout, VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog, RankList},
   props: { uid: { required: true } },
   data() {
     return {
@@ -333,15 +375,30 @@ export default {
       list.push({key: 'secPlaylist', label: '歌单'}, {key: 'secSocial', label: '关注与粉丝'})
       return list
     },
-    // 收起态只渲染前 denseLimit 位；展开后交给完整列表 + 翻页
-    shownMixed() {
-      return this.expand.follows ? this.mixed.list : this.mixed.list.slice(0, this.denseLimit)
+    /**
+     * 头像墙数据：把两种列表（混排 records / 用户列表）归一成 {key,id,name,avatar,tag}。
+     * 只在本页渲染收起态；展开后交给公共卡片组件（FollowMixedLayout / UserListLayout），
+     * 所以这里不碰它们的内部实现。
+     */
+    wallMixed() {
+      return this.mixed.list.slice(0, this.denseLimit).map(r => {
+        if (r.type === 1) {
+          const pf = r.userProfile || {}
+          return { key: 'u' + r.followId, id: pf.userId || r.followId, name: pf.nickname || '用户', avatar: pf.avatarUrl || '', tag: '' }
+        }
+        const a = r.artistInfo || {}
+        return { key: 'a' + r.followId, id: a.id || r.followId, name: a.name || '歌手', avatar: a.picUrl || a.img1v1Url || '', tag: '歌手' }
+      })
     },
-    shownFollows() {
-      return this.expand.follows ? this.social.follows.list : this.social.follows.list.slice(0, this.denseLimit)
+    wallFollows() {
+      return this.social.follows.list.slice(0, this.denseLimit).map(u => (
+        { key: u.userId, id: u.userId, name: u.nickname || '用户', avatar: u.avatarUrl || '', tag: '' }
+      ))
     },
-    shownFolloweds() {
-      return this.expand.followeds ? this.social.followeds.list : this.social.followeds.list.slice(0, this.denseLimit)
+    wallFolloweds() {
+      return this.social.followeds.list.slice(0, this.denseLimit).map(u => (
+        { key: u.userId, id: u.userId, name: u.nickname || '用户', avatar: u.avatarUrl || '', tag: '' }
+      ))
     }
   },
   methods: {
@@ -563,6 +620,13 @@ export default {
         const el = this.$refs.secSocial
         if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
       })
+    },
+    /** 私有网格的跳转：与公共组件走同一条 $bus 通道，行为保持一致 */
+    openPl(id) {
+      if (id) this.$bus.$emit('plClk', id)
+    },
+    openUser(uid) {
+      if (uid) this.$bus.$emit('uClk', uid)
     },
     /** 锚点条：滚到对应区块（区块自带 scroll-margin-top，不会被吸顶条挡住） */
     scrollTo(ref) {
@@ -910,17 +974,61 @@ export default {
   .caret { font-size: 11px; opacity: .7; }
 }
 
-/* ---------- 歌单网格尾部的「新建 / 导入」 ---------- */
+/* ---------- 歌单私有网格（plGrid）：喜欢/创建/收藏 + 新建卡 ---------- */
+// 全部样式收在本页，不碰公共的 PlaylistLayout
+.plGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plCard {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.plCover {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(0,0,0,.05);
+
+  img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
+  &:hover img { transform: scale(1.05); }
+  // 播放量角标（右上）
+  .plPlays {
+    position: absolute; top: 8px; right: 8px;
+    display: flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 999px;
+    background: rgba(0,0,0,.4); color: #fff; font-size: 11px;
+  }
+  // 「喜欢」标记（左上）：合并网格后用它区分喜欢歌单
+  .plFavorMark { position: absolute; top: 8px; left: 8px; color: #fff; font-size: 13px; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
+}
+
+.plName {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: $font-black;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// 「新建 / 导入」虚线卡：占满所在格，与封面卡同高
 .plNewTile {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 160px;
-  margin: 15px;
+  min-height: 150px;
   border: 1px dashed rgba(0,0,0,.16);
-  border-radius: 16px;
+  border-radius: 14px;
   color: $font-black-2;
   cursor: pointer;
   transition: border-color .2s, color .2s, background .2s;
@@ -928,6 +1036,71 @@ export default {
   &:hover { border-color: rgba($color-main, .55); color: $color-main; background: rgba($color-main, .04); }
   .plNewPlus { font-size: 26px; line-height: 1; }
   .plNewText { font-size: 12px; }
+}
+
+/* ---------- 关注列表收起态：头像墙（页内私有，公共组件零改动） ---------- */
+.wallGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+
+  @media (max-width: 1100px) { grid-template-columns: repeat(5, 1fr); }
+  @media (max-width: 900px) { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 600px) { grid-template-columns: repeat(3, 1fr); }
+}
+
+.wallItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 4px 9px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .18s;
+
+  &:hover { background: rgba(255,255,255,.8); }
+
+  img {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    background: rgba(0,0,0,.05);
+  }
+
+  .wallName {
+    max-width: 100%;
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12px; color: $font-black-1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  // 歌手小标（混排列表里区分用户/歌手）
+  .wallTag {
+    font-size: 10px; font-style: normal;
+    color: $color-main;
+    border: 1px solid rgba($color-main, .4);
+    border-radius: 4px;
+    padding: 0 3px;
+    flex-shrink: 0;
+  }
+}
+
+/* ---------- 云盘列表：内部滚动，禁止把整页拉长 ---------- */
+.cloudCount { margin: 0 0 10px; font-size: 12px; color: $font-black-2; }
+
+.cloudScroll {
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.14) transparent;
+  &::-webkit-scrollbar { width: 5px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.14); border-radius: 3px; }
 }
 
 .ud-card {
@@ -940,15 +1113,6 @@ export default {
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
 }
 
-
-// 歌单网格：不再限制两行 + 内部滚动条。
-// 合并后歌单是一整块（喜欢→创建→收藏），内部滚动会让"到底有多少歌单"失去直觉，
-// 而且页面整体已经比改版前短，交给页面滚动更自然。
-::v-deep .gridLayout {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
-  gap: 20px;
-}
-::v-deep .gridLayout li { padding: 0 !important; }
 
 /* skeleton */
 .ud-full-skel { padding-top: 40px; }

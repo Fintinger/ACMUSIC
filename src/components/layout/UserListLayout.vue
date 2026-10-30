@@ -1,6 +1,6 @@
 <template>
-  <ul class="userGrid" :class="{ 'is-dense': dense }">
-    <li v-for="u in list" :key="u.userId" class="userItem" :class="{ 'is-dense': dense }">
+  <ul class="userGrid">
+    <li v-for="u in list" :key="u.userId" class="userItem">
       <div class="hitArea" @click="uClk(u.userId)">
         <div class="avatar">
           <cover-image :src="u.avatarUrl || ''" :alt="(u.nickname || '用户') + '的头像'"/>
@@ -23,12 +23,11 @@
         </div>
       </div>
       <!-- 操作按钮只在粉丝列表出现，且必须登录、且不是我自己 -->
-      <button v-if="showAction && !dense && !isMe(u)" class="actBtn" :class="{ 'is-mutual': isMutual(u) }"
+      <button v-if="showAction && !isMe(u)" class="actBtn" :class="{ 'is-mutual': isMutual(u) }"
               :disabled="!!pending[u.userId]" @click.stop="onAction(u)">
         <i v-if="pending[u.userId]" class="el-icon-loading"></i>
         <template v-else-if="isMutual(u)">互相关注</template>
-        <!-- 本人粉丝列表：TA 关注了我，按钮是「回关」；他人粉丝列表：TA 关注的是页面主人，按钮只能是「关注」 -->
-        <template v-else>{{ self ? '回关' : '关注' }}</template>
+        <template v-else>回关</template>
       </button>
     </li>
   </ul>
@@ -42,12 +41,7 @@
  *
  * mode:
  *   'list'      → 纯列表（关注列表用），不显示操作按钮
- *   'followeds' → 粉丝列表，右侧显示「回关 / 互相关注」按钮（本人页面）
- *                 或「关注 / 互相关注」按钮（他人页面）
- *
- * self：列表是否属于登录用户本人（默认 true，兼容旧调用）。
- *   本人粉丝列表里的人关注的是「我」→ 未关注时按钮为「回关」；
- *   他人粉丝列表里的人关注的是「页面主人」→ 未关注时按钮只能是「关注」。
+ *   'followeds' → 粉丝列表，右侧显示「回关 / 互相关注」按钮
  *
  * 按钮状态只有一个来源：列表项自带的 mutual 字段（/user/followeds 每项都有），
  * 不额外逐条打 /user/mutualfollow/get —— 30 条就是 30 次请求，且列表字段和它同源。
@@ -72,17 +66,6 @@ export default {
     mode: {
       type: String,
       default: 'list',
-    },
-    self: {
-      type: Boolean,
-      default: true,
-    },
-    // 紧凑模式：只留头像 + 昵称，排成多列小块。
-    // 用在用户主页的「关注与粉丝」——20 多行的大卡片会把整页拉得极长，
-    // 默认先给 12 个头像，想看全的点「查看全部」再切回完整卡片。
-    dense: {
-      type: Boolean,
-      default: false,
     },
   },
   data() {
@@ -160,7 +143,7 @@ export default {
       this.$set(this.spanCache, uid, null)
       return null
     },
-    /** 关注：本人页面语义上是「回关」，他人页面就是普通关注，调的是同一个接口 */
+    /** 回关：直接把 TA 关注回来 */
     doFollow(u) {
       this.setPending(u.userId, true)
       followUser(u.userId, 1)
@@ -171,7 +154,7 @@ export default {
             this.$set(u, 'followed', true)
             // 关系重建 → 时长从此刻重新计算，丢掉旧缓存
             this.$delete(this.spanCache, u.userId)
-            this.$message.success(this.self ? `已回关 ${u.nickname}` : `已关注 ${u.nickname}`)
+            this.$message.success(`已回关 ${u.nickname}`)
           } else if (code === 301 || code === 302) {
             this.$message.warning('登录态已失效，请重新登录后再试')
           } else {
@@ -206,9 +189,7 @@ export default {
       if (span && span.mutualFollowDay) {
         rows.push(this.buildSpanRow(h, '互相关注：', span.mutualFollowDay))
       }
-      if (!rows.length && this.self) {
-        // u.time 的语义是「TA 关注列表主人」：只有本人页面才能解读成「对方已关注你」，
-        // 他人页面该时间与我无关，不展示，避免误导
+      if (!rows.length) {
         const own = followSpanText(u.time)
         if (own) rows.push(this.buildSpanRow(h, '对方已关注你：', own))
       }
@@ -271,17 +252,6 @@ export default {
   @media (max-width: 600px) { grid-template-columns: 1fr; }
 }
 
-// 紧凑模式：6 列头像墙。20 多个用户用完整卡片铺开要占 7 行，
-// 换成头像墙只要 2 行，页面长度直接砍掉三分之一。
-.userGrid.is-dense {
-  grid-template-columns: repeat(6, 1fr);
-  gap: 4px;
-
-  @media (max-width: 1100px) { grid-template-columns: repeat(5, 1fr); }
-  @media (max-width: 900px) { grid-template-columns: repeat(4, 1fr); }
-  @media (max-width: 600px) { grid-template-columns: repeat(3, 1fr); }
-}
-
 .userItem {
   display: flex;
   align-items: center;
@@ -298,29 +268,6 @@ export default {
     border-color: rgba($color-main, .35);
     box-shadow: 0 8px 24px rgba(0,0,0,.08);
   }
-}
-
-// 头像墙里的单元：去掉卡片底/边框/位移，只留 hover 的浅色块反馈
-.userItem.is-dense {
-  display: block;
-  padding: 10px 4px 9px;
-  border-radius: 12px;
-  background: transparent;
-  border-color: transparent;
-
-  &:hover {
-    transform: none;
-    background: rgba(255,255,255,.8);
-    border-color: rgba(0,0,0,.05);
-    box-shadow: none;
-  }
-
-  .hitArea { flex-direction: column; gap: 7px; }
-  .avatar { width: 44px; height: 44px; }
-  .info { flex: none; width: 100%; }
-  .name { justify-content: center; font-size: 12px; font-weight: 500; }
-  // 签名和粉丝数在头像墙里没有位置，也不该抢注意力
-  .sign, .meta { display: none; }
 }
 
 /* 头像+信息整块可点，避免按钮区域误触跳转 */
