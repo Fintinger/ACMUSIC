@@ -220,7 +220,7 @@ export default {
     async saveEdit() {
       const name = (this.editForm.name || '').trim()
       if (!name) {
-        this.$message.warning('歌单名不能为空')
+        this.$toast.warning('歌单名不能为空')
         return
       }
       this.saving = true
@@ -232,9 +232,9 @@ export default {
         this.listInfo.name = name
         this.listInfo.description = this.editForm.desc || ''
         this.editVisible = false
-        this.$message.success('歌单信息已更新')
+        this.$toast.success('歌单信息已更新')
       } catch (e) {
-        this.$message.error('保存失败：' + (e.message || '请稍后重试'))
+        this.$toast.error('保存失败：' + (e.message || '请稍后重试'))
       } finally {
         this.saving = false
       }
@@ -242,7 +242,7 @@ export default {
     toggleManage() {
       this.manageMode = !this.manageMode
       if (this.manageMode && !this.allLoaded) {
-        this.$message.info('还有歌曲未加载，调整顺序前请先把列表加载到底')
+        this.$toast.info('还有歌曲未加载，调整顺序前请先把列表加载到底')
       }
     },
     /**
@@ -257,15 +257,15 @@ export default {
       const name = this.listInfo.name || '这个歌单'
       const count = this.listInfo.trackCount || 0
       try {
-        await this.$confirm(
-            `删除后无法恢复。《${name}》以及其中的 ${count} 首歌会从你的账号里移除（歌曲本身不会被删除）。`,
-            '删除歌单',
-            {
-              type: 'warning',
-              confirmButtonText: '确认删除',
-              cancelButtonText: '取消',
-              confirmButtonClass: 'el-button--danger'
-            })
+        // 不可逆操作：升级为「输入歌单名确认」，避免误点一次就丢掉整张歌单
+        await this.$confirmTyped({
+          title: '删除歌单',
+          message: `删除后无法恢复。《${name}》以及其中的 ${count} 首歌会从你的账号里移除（歌曲本身不会被删除）。`,
+          expect: name,
+          inputPlaceholder: `请输入「${name}」以确认`,
+          confirmText: '确认删除',
+          cancelText: '取消'
+        })
       } catch (e) {
         return // 用户取消
       }
@@ -274,11 +274,11 @@ export default {
         const res = await playlistApi.del(this.id)
         const r = this._writeResult(res, '删除失败')
         if (!r.ok) throw new Error(r.message)
-        this.$message.success('歌单已删除')
+        this.$toast.success('歌单已删除')
         this.$bus.$emit('playlistDeleted', this.id)
         this.$router.push('/user')
       } catch (e) {
-        this.$message.error('删除失败：' + (e.message || '请稍后重试'))
+        this.$toast.error('删除失败：' + (e.message || '请稍后重试'))
       } finally {
         this.deleting = false
       }
@@ -288,7 +288,7 @@ export default {
       const target = index + dir
       if (this.saving || target < 0 || target >= this.songs.length) return
       if (!this.allLoaded) {
-        this.$message.warning('还有歌曲未加载，请先加载全部歌曲再调整顺序')
+        this.$toast.warning('还有歌曲未加载，请先加载全部歌曲再调整顺序')
         return
       }
       const arr = this.songs.slice()
@@ -303,7 +303,7 @@ export default {
         if (!r.ok) throw new Error(r.message)
         this.songs = arr
       } catch (e) {
-        this.$message.error('调整顺序失败：' + (e.message || '请稍后重试'))
+        this.$toast.error('调整顺序失败：' + (e.message || '请稍后重试'))
       } finally {
         this.saving = false
       }
@@ -311,8 +311,11 @@ export default {
     async removeTrack(track) {
       if (this.saving || !track || !track.id) return
       try {
-        await this.$confirm(`把《${track.name || '这首歌'}》从歌单移出？`, '移出歌曲', {
-          type: 'warning', confirmButtonText: '移出', cancelButtonText: '取消'
+        await this.$confirmBox({
+          title: '移出歌曲',
+          message: `把《${track.name || '这首歌'}》从歌单移出？只是移出歌单，歌曲本身不会被删除。`,
+          confirmText: '移出',
+          cancelText: '取消'
         })
       } catch (e) {
         return // 用户取消
@@ -325,9 +328,9 @@ export default {
         const idx = this.songs.findIndex(s => s.id === track.id)
         if (idx !== -1) this.songs.splice(idx, 1)
         if (this.listInfo.trackCount > 0) this.listInfo.trackCount -= 1
-        this.$message.success('已移出歌单')
+        this.$toast.success('已移出歌单')
       } catch (e) {
-        this.$message.error('移出失败：' + (e.message || '请稍后重试'))
+        this.$toast.error('移出失败：' + (e.message || '请稍后重试'))
       } finally {
         this.saving = false
       }

@@ -154,14 +154,14 @@ export default {
             this.$set(u, 'followed', true)
             // 关系重建 → 时长从此刻重新计算，丢掉旧缓存
             this.$delete(this.spanCache, u.userId)
-            this.$message.success(`已回关 ${u.nickname}`)
+            this.$toast.success(`已回关 ${u.nickname}`)
           } else if (code === 301 || code === 302) {
-            this.$message.warning('登录态已失效，请重新登录后再试')
+            this.$toast.warning('登录态已失效，请重新登录后再试')
           } else {
-            this.$message.error('关注失败，请稍后重试')
+            this.$toast.error('关注失败，请稍后重试')
           }
         })
-        .catch(() => this.$message.error('网络错误，关注失败'))
+        .catch(() => this.$toast.error('网络错误，关注失败'))
         .finally(() => this.setPending(u.userId, false))
     },
     /**
@@ -199,10 +199,11 @@ export default {
         ...rows,
         h('p', { style: 'margin:10px 0 0;color:#999;font-size:12px' }, '取消后关注时长将重新计算。'),
       ])
-      this.$confirm(message, '取消关注', {
-        confirmButtonText: '仍然取消',
-        cancelButtonText: '继续关注',
-        type: 'warning',
+      this.$confirmBox({
+        title: '取消关注',
+        message,
+        confirmText: '仍然取消',
+        cancelText: '继续关注',
         distinguishCancelAndClose: true,
       })
         .then(() => this.doUnfollow(u))
@@ -223,14 +224,14 @@ export default {
             // 关系解除 → 时长作废，下次再关注时从新时间重新算
             this.$delete(this.spanCache, u.userId)
             // 只翻关系状态：u.time 是「TA 关注我」的时间，取关不影响它（TA 还在我的粉丝里）
-            this.$message.success(`已取消关注 ${u.nickname}`)
+            this.$toast.success(`已取消关注 ${u.nickname}`)
           } else if (code === 301 || code === 302) {
-            this.$message.warning('登录态已失效，请重新登录后再试')
+            this.$toast.warning('登录态已失效，请重新登录后再试')
           } else {
-            this.$message.error('取消关注失败，请稍后重试')
+            this.$toast.error('取消关注失败，请稍后重试')
           }
         })
-        .catch(() => this.$message.error('网络错误，取消关注失败'))
+        .catch(() => this.$toast.error('网络错误，取消关注失败'))
         .finally(() => this.setPending(u.userId, false))
     },
   }

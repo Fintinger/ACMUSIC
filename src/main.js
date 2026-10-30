@@ -17,6 +17,10 @@ import store from './store'
 import "animate.css"
 //ElementUI
 import 'element-ui/lib/theme-chalk/index.css';
+//ElementUI 浮层皮肤覆盖：必须排在主题 CSS 之后，否则同优先级规则会被反压
+import "./assets/scss/base/element-overrides.scss"
+//统一通知出口
+import {toast, confirmBox, confirmTyped} from "./utils/notify";
 //Tools(用于过滤器)
 import * as filters from './utils/filters'
 //Icon 系统
@@ -30,6 +34,11 @@ Vue.prototype.$axios = request
 //vue插件
 Vue.use(ElementUI)
 Vue.use(VueRouter)
+
+//统一通知出口：组件内一律走 $toast / $confirmBox，不再直接调 $message / $confirm
+Vue.prototype.$toast = toast
+Vue.prototype.$confirmBox = confirmBox
+Vue.prototype.$confirmTyped = confirmTyped
 
 
 Vue.config.productionTip = false
@@ -63,7 +72,7 @@ window.addEventListener('api:unauthorized', () => {
             // 网关侧仍认这份登录态 → 只是个别接口炸了，不登出
             if (d.profile || d.account) return
             doLogout()
-            ElementUI.Message.warning('登录状态已失效，请重新登录')
+            toast.warning('登录状态已失效，请重新登录')
         })
         .catch(() => { /* 网络异常不断定为登录失效，保持现状 */ })
 })
@@ -92,7 +101,7 @@ Vue.config.errorHandler = (err, vm, info) => {
     if (now - errorToastAt < 8000) return
     errorToastAt = now
     const brief = msg.length > 60 ? msg.slice(0, 60) + '…' : msg
-    ElementUI.Message.error({ message: `页面渲染异常：${brief}`, duration: 6000, showClose: true })
+    toast.error(`页面渲染异常：${brief}`, { duration: 6000 })
 }
 
 new Vue({

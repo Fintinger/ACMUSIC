@@ -162,7 +162,7 @@ export default {
      */
     toggleLike(cm) {
       if (!this.isLogin) {
-        this.$message.warning('请先登录')
+        this.$toast.warning('点赞需要登录，请先登录')
         return
       }
       if (!cm || !cm.commentId) return
@@ -181,14 +181,14 @@ export default {
             this.$set(cm, 'liked', !wasLiked)
             const prev = Number(cm.likedCount) || 0
             this.$set(cm, 'likedCount', Math.max(0, prev + (wasLiked ? -1 : 1)))
-            this.$message.success(wasLiked ? '已取消点赞' : '点赞成功')
+            this.$toast.success(wasLiked ? '已取消点赞' : '点赞成功')
           } else {
-            this.$message.error('操作失败，请稍后重试')
+            this.$toast.error('点赞失败，请稍后重试')
           }
         })
         .catch(err => {
           console.error('[CommentLike] failed', err)
-          this.$message.error('网络错误，点赞失败')
+          this.$toast.error('网络异常，点赞失败，请检查网络后重试')
         })
         .finally(() => {
           this.$set(this.likePending, cm.commentId, false)
@@ -275,7 +275,7 @@ export default {
         })
         .catch(err => {
           console.error('[CommentFloor] failed', err)
-          this.$message.error('楼层加载失败')
+          this.$toast.error('楼层加载失败')
         })
         .finally(() => this.$set(st, 'loading', false))
     },
@@ -331,10 +331,11 @@ export default {
      * 只需刷新该楼层 + 父评论回复数 -1，不必让整页列表重排（那会把已展开的楼层全部收起）
      */
     deleteComment(cm, parentCm) {
-      this.$confirm('此操作将永久删除该评论, 是否继续?', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
+      this.$confirmBox({
+        title: '删除评论',
+        message: '删除后无法恢复，该评论及其回复都会消失。',
+        confirmText: '删除',
+        cancelText: '取消'
       }).then(() => {
         comment.del(this.type, this.id, cm.commentId).then(() => {
           if (parentCm) {
@@ -344,16 +345,12 @@ export default {
             //更新最新评论数据
             this.$emit('updateNewestComment')
           }
-          this.$message({
-            type: 'success',
-            message: '删除成功!'
-          });
+          this.$toast.success('评论已删除');
+        }).catch(() => {
+          this.$toast.error('删除失败，请稍后重试');
         })
       }).catch(() => {
-        this.$message({
-          type: 'info',
-          message: '已取消删除'
-        });
+        // 用户取消删除，不需要提示（取消本身就是明确反馈）
       });
     }
   }

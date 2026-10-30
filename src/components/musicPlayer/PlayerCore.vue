@@ -7,6 +7,12 @@
     @mouseleave="onMouseLeave"
     @mousemove="onMouseMove"
   >
+    <transition name="hint-pop">
+      <div v-if="hintText" class="playerHint">
+        <BaseIcon v-if="hintIcon" :name="hintIcon" :size="14" class="hintIcon" />
+        <span class="hintText">{{ hintText }}</span>
+      </div>
+    </transition>
     <div class="miniBar" @click="onProgressClick">
       <div class="miniTrack" ref="miniTrack">
         <div class="miniFill" :style="{ width: progress + '%' }"></div>
@@ -287,6 +293,11 @@ export default {
   components: { QualityMenu, ModeMenu },
   data() {
     return {
+      // 播放器内联状态条：承载「A-B 选点 / 副歌 / 心动模式 / 定时停止」这类持续状态。
+      // 这些以前是用 toast 播报的，2 秒就消失，用户根本来不及读。
+      hintText: '',
+      hintIcon: '',
+      hintTimer: null,
       currentSong: {},
       isPlay: false,
       sel: {},
@@ -1055,7 +1066,7 @@ export default {
           // 所有 fallback 均失败 → 问清原因（/check/music 会直接给"暂无版权"），然后自动切下一首
           self._explainNoSource(id).then(msg => {
             if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
-            self.$message.warning(msg)
+            self.$toast.warning(msg)
             self.isLoading = false
             console.warn('[PlayerLoading]', { action: 'no_source', songId: id, requestId, reason: msg })
             resolve("no_url")
@@ -1067,7 +1078,7 @@ export default {
           self.isLoading = false
           // 官方音源 + 解灰都拿不到 → 用 /check/music 给准确原因，而不是笼统的"暂无可用音源"
           self._explainNoSource(id).then(msg => {
-            if (requestId === self.playRequestId) self.$message.warning(msg)
+            if (requestId === self.playRequestId) self.$toast.warning(msg)
             resolve("dnt_fail")
             if (self._inPlaylist()) self.nextSong()
           })
@@ -1103,7 +1114,7 @@ export default {
           // 所有 fallback 均失败 → 问清原因（/check/music 会直接给"暂无版权"），然后自动切下一首
           self._explainNoSource(id).then(msg => {
             if (requestId !== self.playRequestId) { resolve({ cancelled: true }); return }
-            self.$message.warning(msg)
+            self.$toast.warning(msg)
             self.isLoading = false
             console.warn('[PlayerLoading]', { action: 'no_source', songId: id, requestId, reason: msg })
             resolve("no_url")
@@ -1116,8 +1127,8 @@ export default {
           console.error('[PlayError]', { songId: id, stage: isNoResource ? 'NO_RESOURCE' : 'NETWORK_ERROR', requestId, error: err && err.message || String(err) })
           // 注意这里是 ===：旧代码写成 !==，导致提示只在请求已过期时才弹（反了）
           if (requestId === self.playRequestId) {
-            if (isNoResource) self._explainNoSource(id).then(msg => self.$message.warning(msg))
-            else self.$message.warning('播放失败，请稍后重试')
+            if (isNoResource) self._explainNoSource(id).then(msg => self.$toast.warning(msg))
+            else self.$toast.warning('播放失败，请稍后重试')
           }
           resolve("url_fail")
         })
@@ -1362,8 +1373,32 @@ export default {
      */
     _onQueueEnd() {
       this.pauseSong()
-      this.$message.info('队列已播完（顺序播放）')
+      this.showHint('队列已播完（顺序播放）', 'sequence')
       console.log('[PlayMode]', { action: 'queue_end', mode: this.playMode })
+    },
+    /**
+     * 播放器内联状态条。
+     * 用于播报「持续状态 / 操作引导」——这类信息以前走 toast，一闪就没了。
+     * @param {string} text
+     * @param {string} icon BaseIcon 名称
+     * @param {number} duration 毫秒；传 0 表示常驻，直到被下一条覆盖或主动清除
+     */
+    showHint(text, icon = '', duration = 4000) {
+      this.hintText = text
+      this.hintIcon = icon
+      if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
+      if (duration > 0) {
+        this.hintTimer = setTimeout(() => {
+          this.hintText = ''
+          this.hintIcon = ''
+          this.hintTimer = null
+        }, duration)
+      }
+    },
+    clearHint() {
+      if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
+      this.hintText = ''
+      this.hintIcon = ''
     },
     // ---------------- 心动模式（B 层：内容来源） ----------------
     toggleHeartMode() {
@@ -1373,7 +1408,7 @@ export default {
     _heartOff() {
       this.heartMode = false
       this.heartExtendPromise = null
-      this.$message.info('已关闭心动模式，队列保持当前内容')
+      this.showHint('已关闭心动模式，队列保持当前内容', 'likeFill')
     },
     /**
      * 开启：以当前在播的这首为种子，从红心歌单拉一批，**整队替换**并从第一首开始播。
@@ -1393,13 +1428,13 @@ export default {
      */
     _heartOn() {
       const seed = (this.currentSong && this.currentSong.id) || (this.currentPlaylist[0] && this.currentPlaylist[0].id)
-      if (!seed) { this.$message.warning('先播放一首歌，心动模式需要一首歌作为起点'); return }
-      if (!this.isLogin) { this.$message.warning('心动模式基于你的红心歌单，请先登录'); return }
+      if (!seed) { this.$toast.warning('先播放一首歌，心动模式需要一首歌作为起点'); return }
+      if (!this.isLogin) { this.$toast.warning('心动模式基于你的红心歌单，请先登录'); return }
       if (this.isPersonalFM) this.isPersonalFM = false
       this.heartBusy = true
       fetchHeartBatch(seed, 20).then(list => {
         this.heartBusy = false
-        if (!list.length) { this.$message.info('这次没拿到心动推荐，稍后再试'); return }
+        if (!list.length) { this.$toast.info('这次没拿到心动推荐，稍后再试'); return }
         this.heartMode = true
         this.playContextId++
         this.playlistContextId = this.playContextId
@@ -1422,7 +1457,7 @@ export default {
         this.$nextTick(() => {
           this.currentPlaylist.forEach(el => { el.curSong = el.id === target.id })
         })
-        this.$message.success(`心动模式：已换上 ${list.length} 首，从第 1 首开始播`)
+        this.showHint(`心动模式：已换上 ${list.length} 首，从第 1 首开始播`, 'likeFill', 5000)
         console.log('[Heart]', { action: 'on', seed, got: list.length, first: target.id })
       }).catch(err => {
         this.heartBusy = false
@@ -1432,7 +1467,7 @@ export default {
           // 400 绝大多数是"红心歌单里还没有收藏"，得说明白，否则用户只会觉得功能坏了
           BAD_PLAYLIST: '心动模式需要先有几首收藏歌曲（它基于红心歌单推荐）'
         }
-        this.$message.warning((err && map[err.reason]) || '心动模式拉取失败，请稍后重试')
+        this.$toast.warning((err && map[err.reason]) || '心动模式拉取失败，请稍后重试')
         console.warn('[Heart] failed', err && err.reason, err && err.message)
       })
     },
@@ -1699,11 +1734,11 @@ export default {
         if (this.chorusRange) {
           this._applyRangeSeek(true)
         } else {
-          this.$message.info('这首歌没有副歌数据，本次按完整播放')
+          this.showHint('这首歌没有副歌数据，本次按完整播放', 'chorus')
         }
         if (!this.chorusHinted) {
           this.chorusHinted = true
-          this.$message.success('已开启副歌模式：每首只播副歌段，到点自动切下一首')
+          this.showHint('已开启副歌模式：每首只播副歌段，到点自动切下一首', 'chorus', 5000)
         }
       }
       if (next === 'ab') {
@@ -1713,9 +1748,12 @@ export default {
         } else {
           this._abEnsureSong()
           this.abSetting = true
-          this.$message.info('点击进度条设定起点 A')
+          // 选点引导常驻（duration 0），否则用户还没点进度条提示就没了
+          this.showHint('点击进度条设定起点 A', 'abLoop', 0)
         }
       }
+      // 离开 A-B 形态时收掉常驻引导（进副歌模式时上面刚设过提示，不能清）
+      if (next !== 'ab' && next !== 'chorus') this.clearHint()
       console.log('[TrackForm]', { form: next, hasChorus: !!this.chorusRange, ab: !!this.abRangeValid })
     },
     /** A-B 选点前确保状态属于当前这首歌 */
@@ -1738,12 +1776,13 @@ export default {
       const time = Math.max(0, Math.min(Number(t) || 0, dur))
       if (this.abStart === null) {
         this.abStart = time
-        this.$message.info(`起点 A：${this.formatTime(time)}，再点一次设定终点 B`)
+        // 常驻：等用户点第二个点
+        this.showHint(`起点 A：${this.formatTime(time)}，再点一次设定终点 B`, 'abLoop', 0)
         return
       }
       const start = this.abStart
       if (time - start < 1) {
-        this.$message.warning('终点 B 至少要晚于起点 A 1 秒')
+        this.showHint('终点 B 至少要晚于起点 A 1 秒', 'abLoop', 3000)
         return
       }
       this.abRange = { start, end: time }
@@ -1751,7 +1790,7 @@ export default {
       this.abStart = null
       this.abSetting = false
       this.trackForm = 'ab'
-      this.$message.success(`A-B 已设定：${this.formatTime(start)} - ${this.formatTime(time)}`)
+      this.showHint(`A-B 已设定：${this.formatTime(start)} - ${this.formatTime(time)}`, 'abLoop', 4000)
       this._applyRangeSeek(true)
       console.log('[AB]', { action: 'set', songId: this.abRangeSongId, start, end: time })
     },
@@ -1771,7 +1810,7 @@ export default {
         this.trackForm = 'full'
         try { localStorage.setItem('acmusic_track_form', 'full') } catch (e) { /* ignore */ }
       }
-      this.$message.info('已清除 A-B 区间')
+      this.showHint('已清除 A-B 区间', 'abLoop')
     },
     /** 换歌：A-B 是按歌设定的，旧区间必须整块丢弃 */
     _resetAb() {
@@ -1843,7 +1882,7 @@ export default {
       if (this.heartMode) this._heartOff()
       if (this.trackForm !== 'full') this.setTrackForm('full')
       if (this.sleepMode !== 'off') this._clearSleep()
-      this.$message.success('已复位：完整播放 · 不定时 · 已关心动（队列策略保留）')
+      this.showHint('已复位：完整播放 · 不定时 · 已关心动（队列策略保留）', 'sequence')
       console.log('[ModeStack]', { action: 'reset', policy: this.playMode })
     },
     toggleSleepFade() {
@@ -1868,7 +1907,7 @@ export default {
         const label = mode === 'song'
           ? '播完当前这首后停止'
           : (mode === 'count' ? `再播 ${value} 首后停止` : `${value} 分钟后停止`)
-        this.$message.success(`定时停止：${label}${this.sleepFade ? `（最后 ${this.fadeSec} 秒渐弱）` : ''}`)
+        this.showHint(`定时停止：${label}${this.sleepFade ? `（最后 ${this.fadeSec} 秒渐弱）` : ''}`, 'timer', 5000)
       }
       console.log('[Sleep]', { action: 'set', mode, value, quiet: !!quiet })
     },
@@ -1879,7 +1918,7 @@ export default {
       this.sleepValue = 0
       this.songsLeft = 0
       this.sleepDeadline = 0
-      this.$message.info('已取消定时停止')
+      this.showHint('已取消定时停止', 'timer')
     },
     _startSleepClock() {
       this._clearSleepClock()
@@ -1923,7 +1962,7 @@ export default {
       this.sleepValue = 0
       this.songsLeft = 0
       this.sleepDeadline = 0
-      this.$message.info(msg)
+      this.showHint(msg, 'timer', 5000)
       console.log('[Sleep]', { action: 'stop', msg })
     },
     /**
@@ -1998,7 +2037,7 @@ export default {
      */
     toggleLike() {
       if (!this.isLogin) {
-        this.$message.warning('请先登录')
+        this.$toast.warning('收藏需要先登录，登录后重试')
         return
       }
       const songId = this.currentSong && this.currentSong.id
@@ -2020,17 +2059,17 @@ export default {
             if (newLiked) this.likedSongIds.add(String(songId))
             else this.likedSongIds.delete(String(songId))
             this.$bus.$emit('likeChange', { id: songId, liked: newLiked })
-            this.$message.success(newLiked ? '已添加到我的喜欢' : '已取消喜欢')
+            this.$toast.success(newLiked ? '已添加到我的喜欢' : '已取消喜欢')
           } else {
             // 业务失败 → 回滚
             this.isLiked = wasLiked
-            this.$message.error('操作失败，请稍后重试')
+            this.$toast.error('收藏失败，请稍后重试')
           }
         })
         .catch(err => {
           console.error('[SongLike] failed', err)
           this.isLiked = wasLiked
-          this.$message.error('网络错误，点赞失败')
+          this.$toast.error('网络异常，收藏失败，请检查网络后重试')
         })
         .finally(() => {
           this.likePending = false
@@ -2150,7 +2189,7 @@ export default {
     onNeedVip(opt) {
       this.showQualityMenu = false
       const label = (opt && opt.label) || '该音质'
-      this.$message.warning(`「${label}」需要黑胶VIP，已保持当前音质`)
+      this.$toast.warning(`「${label}」需要黑胶VIP，已保持当前音质`)
     },
     onQualitySelect(key) {
       const vipOnly = (config.player.vipOnlyLevels || []).indexOf(key) !== -1
@@ -2369,7 +2408,7 @@ export default {
       if (from === target) return
       list.splice(target, 0, item)
       this._commitQueue(list)
-      this.$message.success(`已设为下一首：${s.name || ''}`)
+      this.$toast.success(`已设为下一首：${s.name || ''}`)
       console.log('[Queue]', { action: 'play_next', songId: s.id, from, target })
     },
     /** 从队列移除单曲；移除的是当前曲则顺延播下一首 */
@@ -2383,7 +2422,7 @@ export default {
       if (!list.length) {
         this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [])
         this.pauseSong()
-        this.$message.info('播放列表已清空')
+        this.showHint('播放列表已清空', 'sequence')
         return
       }
       this._commitQueue(list)
@@ -2396,10 +2435,11 @@ export default {
       console.log('[Queue]', { action: 'remove', songId: s.id, index: idx, isCurrent })
     },
     clearPlaylist() {
-      this.$confirm('确定清空全部播放歌曲？', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
+      this.$confirmBox({
+        title: '清空播放列表',
+        message: '当前队列里的所有歌曲都会被移除，正在播放的会停止。',
+        confirmText: '清空',
+        cancelText: '取消'
       }).then(() => {
         this.pauseSong()
         this.$bus.$emit("clearPlaylist")
@@ -2407,7 +2447,7 @@ export default {
         // （_saveState 的守卫 if (!s || !s.id) return 会跳过 song 为空时的保存，
         //   但旧数据仍残留会导致刷新后 _restoreState 把列表"复活"）
         try { localStorage.removeItem('acmusic_player_state') } catch (e) { /* ignore */ }
-        this.$message.success('播放列表已清空')
+        this.showHint('播放列表已清空', 'sequence')
       }).catch(() => {})
     },
     addEventListeners() {
@@ -2954,6 +2994,7 @@ mounted() {
     pubsub.unsubscribe(this.fmBatchId)
     this.$bus.$off('fm-mode', this._fmModeHandler)
     this.$bus.$off('heart-toggle', this._heartToggleHandler)
+    if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
   }
 }
 </script>
@@ -3005,6 +3046,37 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 }
 
 .playerPanel.expanded .miniBar { display: none; }
+
+// 播放器内联状态条：A-B 选点 / 副歌 / 心动模式 / 定时停止 的持续状态播报
+.playerHint {
+  position: absolute; bottom: calc(100% + 12px); left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
+  max-width: min(560px, 88vw);
+  padding: 9px 18px;
+  background: rgba(28, 29, 40, .94);
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 999px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+  backdrop-filter: blur(18px);
+  color: rgba(255, 255, 255, .92);
+  font-size: 13px; line-height: 1.45;
+  pointer-events: none;
+  z-index: 6;
+
+  .hintIcon { flex: none; color: $accent; }
+  .hintText { min-width: 0; }
+}
+
+.hint-pop-enter-active, .hint-pop-leave-active {
+  transition: opacity $motion-normal $ease-standard, transform $motion-normal $ease-standard;
+}
+.hint-pop-enter, .hint-pop-leave-to {
+  opacity: 0; transform: translate(-50%, 10px);
+}
+.hint-pop-enter-to, .hint-pop-leave {
+  opacity: 1; transform: translate(-50%, 0);
+}
 
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(6px); }

@@ -80,13 +80,13 @@
   }
 
   .comment-overlay {
-    position: fixed; inset: 0; z-index: 3000;
+    position: fixed; inset: 0; z-index: $z-overlay;
     display: flex; align-items: center; justify-content: center;
     background: rgba(10,10,15,.55); backdrop-filter: blur(12px);
   }
 
   .comment-dialog {
-    position: relative; z-index: 3001;
+    position: relative; z-index: $z-overlay + 1;
     width: 560px; max-width: 90vw; max-height: 85vh;
     background: rgba(20,22,32,.72); backdrop-filter: blur(28px);
     border: 1px solid rgba(255,255,255,.08);

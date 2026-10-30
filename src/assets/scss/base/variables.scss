@@ -17,6 +17,23 @@ $font-white: #FFFFFF;
 $font-white-1: #dddddd;
 $font-white-2: #a5a0a0;
 
+//FEEDBACK COLOR(通知/状态语义色，供 element-overrides 与内联状态条复用)
+$feedback-success: #12a87a;
+$feedback-warning: #d98b0a;
+$feedback-error: #e5484d;
+$feedback-info: $color-main;
+
+//Z-INDEX LAYER TOKENS
+//分层约定：内容 0-99 / 悬浮控件 100-199 / 下拉面板 900-999 / Element 默认弹层 2000+
+//        全屏浮层(评论等) 3000+ / 全局 toast 4000 / 确认框 4100
+$z-content: 1;
+$z-sticky: 100;
+$z-dropdown: 900;
+$z-popup: 2000;
+$z-overlay: 3000;
+$z-toast: 4000;
+$z-modal: 4100;
+
 //PLAYER DESIGN TOKENS
 $player-bg-start: #1a1a2e;
 $player-bg-mid: #16213e;

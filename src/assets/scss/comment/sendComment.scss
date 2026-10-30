@@ -47,6 +47,13 @@
       transition: transform .25s ease, box-shadow .25s ease;
       &:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba($color-main,.38); }
       &:active { transform: translateY(0); }
+
+      // 空内容时禁用发送，替代原来的 alert
+      &.is-disabled {
+        background: rgba(255,255,255,.08); color: rgba(255,255,255,.3);
+        box-shadow: none; cursor: not-allowed; pointer-events: auto;
+        &:hover { transform: none; box-shadow: none; }
+      }
     }
   }
 }

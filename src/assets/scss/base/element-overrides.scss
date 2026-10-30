@@ -1,0 +1,142 @@
+/**
+ * Element UI 浮层皮肤覆盖
+ *
+ * 只覆盖「通知 / 确认框 / 对话框」三类浮层，把 Element 出厂皮肤（4px 圆角、#409EFF 蓝、
+ * 彩色底 toast）换成项目 token（12-16px 圆角、#8685EF 主色、白底 + 语义色图标）。
+ *
+ * ⚠️ 不触碰 el-button / el-input / el-form 等公共基础组件的全局样式，
+ *    按钮等只在本文件内以 `.el-message-box` 前缀限定作用域，避免污染业务组件。
+ *
+ * ⚠️ 必须在 `element-ui/lib/theme-chalk/index.css` 之后引入（见 main.js），
+ *    否则同优先级的规则会被主题 CSS 反压。
+ */
+@import "variables";
+
+$overlay-radius: 12px;
+$overlay-radius-lg: 16px;
+$overlay-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+$overlay-border: 1px solid rgba(0, 0, 0, .04);
+
+/* ---------------- Toast ---------------- */
+.el-message {
+  min-width: 300px;
+  max-width: 80vw;
+  padding: 13px 18px;
+  border-radius: $overlay-radius;
+  border: $overlay-border;
+  box-shadow: $overlay-shadow;
+  background-color: #fff;
+
+  .el-message__icon {
+    margin-right: 10px;
+    font-size: 17px;
+  }
+
+  .el-message__content {
+    font-size: 14px;
+    line-height: 1.5;
+    color: $font-black-1;
+  }
+
+  .el-message__closeBtn {
+    color: $font-black-2;
+    font-size: 15px;
+  }
+}
+
+// 语义色只落在图标上，正文统一深色 —— 比 Element 的「整块彩色底」更贴合项目
+.el-message.el-message--success {
+  background-color: #fff;
+  border-color: rgba(18, 168, 122, .18);
+  .el-message__icon, .el-message__content { color: $feedback-success; }
+}
+
+.el-message.el-message--warning {
+  background-color: #fff;
+  border-color: rgba(217, 139, 10, .18);
+  .el-message__icon, .el-message__content { color: $feedback-warning; }
+}
+
+.el-message.el-message--error {
+  background-color: #fff;
+  border-color: rgba(229, 72, 77, .18);
+  .el-message__icon, .el-message__content { color: $feedback-error; }
+}
+
+.el-message.el-message--info {
+  background-color: #fff;
+  border-color: rgba(134, 133, 239, .18);
+  .el-message__icon, .el-message__content { color: $feedback-info; }
+}
+
+/* ---------------- 确认框 ---------------- */
+.el-message-box {
+  padding-bottom: 18px;
+  border: none;
+  border-radius: $overlay-radius-lg;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
+
+  .el-message-box__header { padding: 20px 24px 8px; }
+
+  .el-message-box__title {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: $font-black;
+  }
+
+  .el-message-box__content { padding: 8px 24px 4px; }
+
+  .el-message-box__message {
+    font-size: 14px;
+    line-height: 1.6;
+    color: $font-black-1;
+  }
+
+  .el-message-box__btns { padding: 16px 24px 0; }
+
+  // 作用域限定在确认框内，不影响业务里的 el-button
+  .el-button {
+    height: 38px;
+    padding: 0 20px;
+    border-radius: 19px;
+    font-size: 14px;
+  }
+
+  .el-button--default {
+    border-color: #dcdfe6;
+    color: $font-black-1;
+    &:hover { border-color: $color-main; color: $color-main; }
+  }
+
+  .el-button--primary {
+    background: $color-main;
+    border-color: $color-main;
+    &:hover { background: $color-main-1; border-color: $color-main-1; }
+  }
+
+  .el-button--danger {
+    background: $feedback-error;
+    border-color: $feedback-error;
+    &:hover { background: #cf3b40; border-color: #cf3b40; }
+  }
+
+  .el-message-box__input {
+    padding-top: 6px;
+    .el-input__inner {
+      height: 38px;
+      line-height: 38px;
+      border-radius: 10px;
+      &:focus { border-color: $color-main; }
+    }
+  }
+}
+
+/* ---------------- 对话框 ---------------- */
+// 只统一圆角与阴影，不碰 header padding / title 排版 ——
+// AppFooter 免责声明、导入歌单、编辑歌单等既有弹窗都依赖 Element 默认内距，
+// 动它们会改变已有布局。字重由各自组件自己决定（VideoPlayerLayout 已自行设置）。
+.el-dialog {
+  border-radius: $overlay-radius-lg;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
+}

@@ -97,7 +97,8 @@ export default {
           }
         }
       }).catch(err => {
-        alert("登陆失败")
+        // 原来是 alert —— 阻塞式弹窗且视觉与项目完全脱节
+        this.$toast.error('登录状态获取失败，请刷新页面重试')
         console.error(err.message)
       })
     },

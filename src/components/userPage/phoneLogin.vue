@@ -69,7 +69,6 @@ export default {
       this.$refs[formName].validate((valid) => {
         if (valid) {
           this.login(this.ruleForm.phoneNumber, this.ruleForm.verifyCode)
-          // alert('submit!');
         } else {
           return false;
         }
@@ -103,9 +102,13 @@ export default {
               if (res.data.data) {
                 // console.log(res.data);
                 callback();
+              } else {
+                // 原先验证码错误是彻底静默的：不 callback 也不提示，表单永远转圈
+                callback(new Error('验证码不正确，请重新输入'));
               }
             }, err => {
               console.error(err.message);
+              callback(new Error('验证码校验失败，请稍后重试'));
             })
       }
     },
@@ -119,8 +122,11 @@ export default {
             .then(() => {
               // 发送成功 -> 启动 60s 倒计时(内部自行管理 isSending)
               this.startCountdown(60)
+              this.$toast.success('验证码已发送，请注意查收')
             }, err => {
               console.error(err.message);
+              // 原来只 console.error：点「发送」没反应，用户以为按钮坏了
+              this.$toast.error('验证码发送失败，请稍后重试')
             })
       }
     },
@@ -130,10 +136,13 @@ export default {
             // 统一写入登录态
             setLogin(res.data.cookie)
             this.$bus.$emit('loggedIn', res.data.cookie)
+            this.$toast.success('登录成功')
             // console.log("%cphoneLoginData:","color:#335eea;background-color:#eaeffd")
             // console.log(res.data);
           }, err => {
             console.error(err.message);
+            // 登录失败原本完全静默
+            this.$toast.error('登录失败，请检查手机号和验证码')
           })
     }
   },

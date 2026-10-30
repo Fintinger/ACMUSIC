@@ -191,7 +191,7 @@ export default {
         })
       }
       return step()
-        .catch(() => this.$message.error('MV 加载失败，请稍后重试'))
+        .catch(() => this.$toast.error('MV 加载失败，请稍后重试'))
         .finally(() => { this.mvPaging.loading = false })
     },
 
@@ -199,10 +199,11 @@ export default {
     toggleFollow() {
       if (this.followPending || !this.isLogin) return
       if (!this.followed) return this.setFollow(1)
-      this.$confirm(`取消后你将不再收藏「${this.arBasicInfo.name}」，其新歌也不会出现在你的关注动态里。`, '取消关注', {
-        confirmButtonText: '仍然取消',
-        cancelButtonText: '继续关注',
-        type: 'warning',
+      this.$confirmBox({
+        title: '取消关注',
+        message: `取消后你将不再收藏「${this.arBasicInfo.name}」，其新歌也不会出现在你的关注动态里。`,
+        confirmText: '仍然取消',
+        cancelText: '继续关注',
         distinguishCancelAndClose: true,
       })
         .then(() => this.setFollow(0))
@@ -217,15 +218,15 @@ export default {
             const on = t === 1
             this.followed = on
             this.$set(this.arBasicInfo, 'followed', on)
-            this.$message.success(on ? '已关注该歌手' : '已取消关注')
+            this.$toast.success(on ? '已关注该歌手' : '已取消关注')
           } else if (code === 301 || code === 302) {
             // 未登录时 /artist/sub 返回 301「未登录」
-            this.$message.warning('登录态已失效，请重新登录后再试')
+            this.$toast.warning('登录态已失效，请重新登录后再试')
           } else {
-            this.$message.error('操作失败，请稍后重试')
+            this.$toast.error('关注失败，请稍后重试')
           }
         })
-        .catch(() => this.$message.error('网络错误，操作失败'))
+        .catch(() => this.$toast.error('网络异常，关注失败，请检查网络后重试'))
         .finally(() => { this.followPending = false })
     },
     getAtDetail() { return artistApi.detail(this.id) },
@@ -248,10 +249,10 @@ export default {
             this.vidParams.cursor = page.cursor
           } else {
             this.vidParams.cursor = 0
-            this.$message.info('已经是最后一批了')
+            this.$toast.info('已经是最后一批了')
           }
         })
-        .catch(() => this.$message.error('视频加载失败，请稍后重试'))
+        .catch(() => this.$toast.error('视频加载失败，请稍后重试'))
         .finally(() => { this.vidLoading = false })
     }
   },

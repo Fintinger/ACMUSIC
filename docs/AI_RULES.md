@@ -270,7 +270,51 @@ this.$axios('/song/detail?ids=' + id).then(res => {
 - API 错误：统一在 `request.js` 拦截器处理。业务 301 / HTTP 401 派发 `api:unauthorized` 事件
 - 页面层不应直接监听 `axios` 错误除非需要自定义提示
 - 播放器降级失败：自动切下一首（在播放列表中时），详见 PlayerCore `_inPlaylist()`
-- 永远不要 `alert(...)` 做错误提示 — 用 `this.$message.error(...)`（Element UI）
+
+---
+
+# 通知 / 提示规范
+
+> 统一出口是 `src/utils/notify.js`，皮肤是 `src/assets/scss/base/element-overrides.scss`。
+
+## 硬规则
+
+1. **永远不要 `alert(...)` / `confirm(...)`** —— 浏览器原生弹窗会阻塞主线程且视觉与项目完全脱节
+2. **不要直接调 `this.$message` / `this.$confirm`** —— 一律走 `this.$toast` / `this.$confirmBox`
+   （直接调 Element 原生 API 会丢掉去重与 z-index 抬升，在评论浮层里会被盖住）
+3. **不要只 `console.error` 就完事** —— 关键路径（登录、验证码、评论发送、收藏）的失败必须有用户可见反馈
+4. 组件外（如 `main.js` 的错误兜底）：`import { toast } from '@/utils/notify'`
+
+## 三种形态怎么选
+
+| 场景 | 用什么 | 例子 |
+|---|---|---|
+| 瞬时结果 / 错误 | `this.$toast.xxx()` | 「已关注」「网络异常，请检查网络后重试」 |
+| 危险操作二次确认 | `this.$confirmBox({...})` | 取消关注、移出歌曲 |
+| 不可逆操作 | `this.$confirmTyped({expect})` | 删除歌单（需输入歌单名） |
+| 播放器**持续状态 / 操作引导** | `this.showHint(text, icon, duration)` | A-B 选点、副歌模式、定时停止 |
+
+判断标准：**用户需要读超过 2 秒、或需要记住才能继续操作的信息，不能用 toast**。
+toast 一闪就没了，这类信息走 `showHint`（播放器内联状态条，`duration: 0` 表示常驻）。
+
+## 文案规范
+
+- 说清**下一步动作**，不要只描述故障：`'操作失败'` → `'收藏失败，请稍后重试'`
+- 登录态问题统一措辞：`'登录态已失效，请重新登录后再试'`
+- 网络错误统一以「网络异常，xxx失败，请检查网络后重试」开头
+- 取消操作不需要提示（取消本身就是明确反馈）
+
+## 层高约定
+
+`variables.scss` 的 `$z-*` token：内容 0-99 / 悬浮控件 100-199 / 下拉 900-999 /
+Element 默认弹层 2000+ / 全屏浮层 3000+ / toast 4000 / 确认框 4100。
+新增浮层必须落在对应档位，不要硬编码数字。
+
+## 改皮肤时注意
+
+`element-overrides.scss` 必须在 `element-ui/lib/theme-chalk/index.css` **之后**引入（见 `main.js`），
+否则同优先级规则会被主题 CSS 反压。且只能覆盖 `.el-message` / `.el-message-box` / `.el-dialog`，
+不要动 `el-button` 等公共基础组件的全局样式。
 
 ---
 

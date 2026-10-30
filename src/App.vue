@@ -205,9 +205,15 @@ export default {
       this.$router.push('/user')
     },
     logout() {
-      if (confirm('是否退出登录')) {
+      // 原实现用的是浏览器原生 confirm，与项目视觉完全脱节
+      this.$confirmBox({
+        title: '退出登录',
+        message: '退出后需要重新扫码或短信登录，本地播放列表不受影响。',
+        confirmText: '退出登录',
+        cancelText: '再想想'
+      }).then(() => {
         doLogout();
-      }
+      }).catch(() => { /* 用户取消 */ });
     },
     handleCommand(command) {
       command();

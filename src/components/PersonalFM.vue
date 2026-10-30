@@ -257,7 +257,7 @@ export default {
         // 连点多个模式时只认最后一次
         if (token !== this.roamToken) return
         if (!batch || !batch.length) {
-          if (this.$message) this.$message.warning('这个模式暂时没拉到内容，已保持原样')
+          this.$toast.warning('这个模式暂时没拉到内容，已保持原样')
           return
         }
         this.$store.dispatch('TracksAbout/playAllTracks', batch)
@@ -338,7 +338,7 @@ export default {
         })
         .catch(err => {
           console.error('[FMRefresh] failed', err)
-          if (this.$message) this.$message.warning('FM 续播失败，请稍后再试')
+          this.$toast.warning('FM 续播失败，请稍后再试')
           return null
         })
         .finally(() => {

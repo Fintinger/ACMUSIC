@@ -394,8 +394,8 @@ export default {
         const d = (res && res.data && res.data.data) || {}
         const url = d.url
         if (!url) {
-          if (d.code === -110) this.$message.warning('下载歌曲需要登录')
-          else this.$message.warning('该歌曲暂不提供下载')
+          if (d.code === -110) this.$toast.warning('下载需要先登录，登录后重试')
+          else this.$toast.warning('该歌曲暂不提供下载，版权方未开放')
           return
         }
         const a = document.createElement('a')
@@ -406,10 +406,10 @@ export default {
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        this.$message.success('已开始下载')
+        this.$toast.success('已开始下载')
       }).catch(err => {
         console.warn('[Download]', err && err.message)
-        this.$message.warning('下载失败，请稍后重试')
+        this.$toast.warning('下载失败，请稍后重试')
       }).then(() => { this.downloading = false })
     },
     shareSong() {},

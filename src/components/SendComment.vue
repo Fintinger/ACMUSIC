@@ -20,7 +20,7 @@
       <el-col :span="4">
         <div class="btn-send row-col-center">
           <button class="btn-cancel" type="button" @click="$emit('cancel')">取消</button>
-          <span @click="sendComment">发送</span>
+          <span :class="{ 'is-disabled': !canSend }" @click="sendComment">发送</span>
         </div>
       </el-col>
     </el-row>
@@ -54,24 +54,28 @@ export default {
     profile() {
       return this.$store.getters["UserAbout/userProfile"]
     },
+    /** 空评论直接在按钮上禁用，不再靠 alert 事后拦截 */
+    canSend() {
+      return !!this.commentContent.trim()
+    },
     params() {
       return [this.type, this.stype, this.sid, this.commentContent, this.commentId]
     }
   },
   methods: {
     sendComment() {
-      if (this.commentContent) {
-        send(...this.params).then(() => {
-          //是回复评论
-          if (this.type * 1 === 2) {
-            this.$emit('reply')
-          }
-          this.$emit('updateNewestComment')
-          this.commentContent = ""
-        })
-      } else {
-        alert('评论不为空')
-      }
+      if (!this.canSend) return
+      send(...this.params).then(() => {
+        //是回复评论
+        if (this.type * 1 === 2) {
+          this.$emit('reply')
+        }
+        this.$emit('updateNewestComment')
+        this.commentContent = ""
+      }).catch(() => {
+        // 原来发送失败是彻底静默的：点了发送什么反馈都没有
+        this.$toast.error('评论发送失败，请稍后重试')
+      })
     }
   }
 }

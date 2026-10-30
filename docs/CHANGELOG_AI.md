@@ -2500,3 +2500,63 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
   两者不重叠；若页面内容迟迟加载不出来，最多重试 2.5 秒后放弃（不会把用户卡在中间态）。
 - 回滚策略：本次改动集中在 4 个文件，`git revert` 即可；localStorage 新增 key
   （`acmusic_volume`、`acmusic_player_ui`）旧版本会忽略，无兼容问题。
+
+---
+
+## 2026-10-30
+
+### 修改内容
+统一全站消息通知机制：新建统一出口 `src/utils/notify.js` + 浮层皮肤 `element-overrides.scss`，
+清除 3 处浏览器原生 `alert`/`confirm`，补齐 4 处关键路径静默失败，播放器持续状态改内联状态条。
+
+### 修改文件
+- `src/utils/notify.js`（新增）
+- `src/assets/scss/base/element-overrides.scss`（新增）
+- `src/assets/scss/base/variables.scss`（新增语义色 + z-index 层级 token）
+- `src/main.js`（引入顺序 + 挂载 `$toast` / `$confirmBox` / `$confirmTyped`）
+- `src/App.vue`（退出登录：原生 `confirm` → `$confirmBox`）
+- `src/components/SendComment.vue`（空评论：`alert` → 按钮禁用；发送失败补提示）
+- `src/components/userPage/phoneLogin.vue`（3 处静默失败补提示）
+- `src/pages/UserPage.vue`（`alert("登陆失败")` → `$toast.error`）
+- `src/components/layout/CommentContentLayout.vue`、`UserDetailLayout.vue`、`UserListLayout.vue`
+- `src/components/musicPlayer/PlayerCore.vue`、`MusicPlayer.vue`
+- `src/pages/ListDetail.vue`、`src/pages/artist/ArtistDetail.vue`、`src/components/PersonalFM.vue`
+- `src/assets/scss/comment/commentLayout.scss`、`commentContentLayout.scss`（z-index 改走 token）
+- `src/assets/scss/comment/sendComment.scss`（发送按钮禁用态样式）
+- `docs/AI_RULES.md`（新增「通知 / 提示规范」章节）
+
+### 修改原因
+改造前项目并存三套提示方式，视觉与交互都不统一：
+1. **三套皮肤并存**：Element 出厂弹窗（4px 圆角 / #409EFF 蓝 / 彩色底）与项目紫 `#8685EF` + 12px 圆角
+   的设计语言完全脱节；另有 3 处浏览器原生 `alert`/`confirm`，且 `docs/AI_RULES.md` 早有明令禁止。
+2. **被全屏浮层盖住（真实 bug）**：Element 弹层 z-index 从 2000 起，而评论浮层写了 3000/3100
+   （`commentLayout.scss` / `commentContentLayout.scss`）。在评论区里删除评论的确认框、
+   点赞失败的 toast 会被完全遮住 —— 用户点了没反应。
+3. **连点刷屏**：71 处 `$message` 无任何去重，只有 `main.js` 的错误兜底做了 8 秒限频。
+4. **语义错配**：A-B 选点引导（"点击进度条设定起点 A"）、副歌模式、定时停止这类
+   **持续状态 / 操作引导**用 2 秒即消失的 toast 播报，用户根本来不及读。
+5. **静默失败**：`phoneLogin.vue` 的验证码发送 / 校验 / 登录失败、`SendComment.vue` 的发送失败
+   全部只 `console.error`，用户点按钮毫无反馈。
+
+### 测试结果
+- `yarn lint` ✅ No lint errors found!
+- `yarn serve` ✅ Compiled successfully（dev server 跑在 http://localhost:8080/）
+- 浏览器手动核查：⏳ 待用户确认（无测试 runner，需手工过主流程）
+
+### 注意事项
+- **改动面 71 处，建议按文件分 commit**，不要一次全提。
+- **`element-overrides.scss` 的引入顺序是硬约束**：必须排在 `element-ui/lib/theme-chalk/index.css`
+  之后（见 `main.js`），否则同优先级规则会被主题 CSS 反压，覆盖完全失效。
+- **不动公共基础组件**：覆盖只作用于 `.el-message` / `.el-message-box` / `.el-dialog`；
+  确认框内的按钮样式用 `.el-message-box` 前缀限定作用域，不污染业务里的 `el-button`。
+  `.el-dialog` 只统一圆角与阴影，**故意不动 header padding / title 排版** ——
+  AppFooter 免责声明、导入歌单、编辑歌单等既有弹窗都依赖 Element 默认内距，改了会挪动已有布局。
+- **z-index 抬升靠运行时 patch**：Element `Message` 在 `$mount` 后会把 zIndex 覆写成
+  `PopupManager.nextZIndex()`，`MessageBox` 又不接受 `zIndex` 参数，所以只能在拿到实例 /
+  nextTick 后改 DOM 的 `style.zIndex`。这是受 Element 2.x 实现限制，升级大版本需回归。
+- **删除歌单升级为「输入歌单名确认」**（`$confirmTyped`），比原来的单一确认框更防误触，
+  与网易云官方客户端规格一致。
+- **未做的收尾**：`$z-*` token 目前只落到了评论浮层与通知层，其余散落的硬编码 z-index
+  （搜索页 999、播放器 100 等）暂未收编，避免一次性改动带来回归风险。
+- **回滚策略**：新增文件 2 个、其余为原地替换，`git revert` 或逐文件回退均可；
+  无 localStorage / 接口数据结构变更，不涉及兼容问题。
