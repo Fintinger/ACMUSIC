@@ -792,7 +792,9 @@ export default {
 <style lang="scss" scoped>
 @import "src/assets/scss/base/variables";
 
-.userDetail { max-width: 1200px; margin: 0 auto; padding-bottom: 80px; }
+// 底部不再留 padding：页面下方就是 AppFooter，它自带 margin-top:48px 和
+// 底部 80px 的播放器留白，这里再补 80px 会让内容与 footer 之间空出 156px
+.userDetail { max-width: 1200px; margin: 0 auto; padding-bottom: 0; }
 
 /* ---------- Hero 毛玻璃卡片 ---------- */
 .user-hero {
@@ -946,6 +948,9 @@ export default {
 /* ---------- Section 卡片 ---------- */
 .ud-section {
   margin-bottom: 28px;
+  // 最后一块不再留底部外边距：页面底 → footer 已有 AppFooter 的 margin-top:48px，
+  // 这里再带 28px 加上容器的 padding-bottom，会叠出一百多像素的空白
+  &:last-child { margin-bottom: 0; }
   h2 { font-size: 20px; font-weight: 700; color: $font-black; margin: 0 0 18px; display: flex; align-items: center; }
   // 标题右侧的操作入口（导入外部歌单）：h2 是 flex，margin-left:auto 推到最右
   h2 .import-btn { margin-left: auto; font-size: 12px; font-weight: 500; }
