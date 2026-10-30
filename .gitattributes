@@ -2,3 +2,5 @@
 *.sh   text eol=lf
 *.yml  text eol=lf
 *.yaml text eol=lf
+# nginx 配置同理：CRLF 会让 nginx -t 报 unexpected end of file
+*.conf text eol=lf
