@@ -954,15 +954,20 @@ $pl-max-h: 420px;
 // 方角按钮组（关注分类）。这里统一尺寸与状态色，四处看起来是同一套控件。
 // 全部用 ::v-deep 限定在本组件内，不碰公共组件。
 $tag-h: 28px;          // 统一高度
-$tag-pad: 14px;        // 左右内边距
+$tag-pad: 12px;        // 左右内边距
+$tag-gap: 6px;         // 标签间距
+$tag-fs: 12px;         // 字号
 $tag-bd: rgba(0, 0, 0, .08);
 $tag-bg: rgba(255, 255, 255, .65);
+// 「云盘与收藏」在窄列里要放 4 个标签（云盘/专辑/歌手/视频），
+// 单卡内容宽最窄时只有 230px 左右，所以上面这套尺寸是按「4 个一行」倒推的：
+// 单个约 24(文字) + 24(内边距) + 2(边框) = 50px，4 个 + 3×6 间距 = 218px。
 
 // 1) el-tabs：去掉底部灰长线与滑动下划线，改成胶囊
 .ud-section ::v-deep .el-tabs__header { margin-bottom: 14px; }
 .ud-section ::v-deep .el-tabs__nav-wrap::after { display: none; }
 .ud-section ::v-deep .el-tabs__active-bar { display: none; }
-.ud-section ::v-deep .el-tabs__nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.ud-section ::v-deep .el-tabs__nav { display: flex; flex-wrap: wrap; gap: $tag-gap; }
 
 .ud-section ::v-deep .el-tabs__item {
   height: $tag-h;
@@ -970,10 +975,19 @@ $tag-bg: rgba(255, 255, 255, .65);
   // Element 自带 .is-top:nth-child(2){padding-left:0} / :last-child{padding-right:0}，
   // 优先级比这里高，所以内边距必须 !important 兜住
   padding: 0 $tag-pad !important;
+  // 关键：Element 给每个 item 加了 margin-right:16px，和这里的 gap 叠加后间距变 24px，
+  // 4 个标签就会超出窄列宽度而折行。间距统一交给 gap，外边距清零。
+  margin: 0 !important;
+  // 全局 element-variables.scss 把 .el-tabs__item 写死成 width:5rem（80px），
+  // 不放开的话改 padding 也不会变窄，四个标签在窄列里永远折行
+  width: auto !important;
+  flex: 0 0 auto;
+  white-space: nowrap;
   border: 1px solid $tag-bd;
   border-radius: 999px;
   background: $tag-bg;
-  font-size: 13px;
+  font-size: $tag-fs;
+  font-weight: 500;
   color: $font-black-1;
   transition: background .2s, border-color .2s, color .2s;
 
@@ -988,7 +1002,7 @@ $tag-bg: rgba(255, 255, 255, .65);
 
 // 2) el-radio-button（关注分类）：由方角按钮组改成同一套胶囊，间距交给 gap，
 //    不再用 Element 的 margin-left:-1px 拼边框
-.ud-section ::v-deep .el-radio-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.ud-section ::v-deep .el-radio-group { display: flex; flex-wrap: wrap; gap: $tag-gap; }
 
 .ud-section ::v-deep .el-radio-button__inner {
   height: $tag-h;
@@ -997,7 +1011,8 @@ $tag-bg: rgba(255, 255, 255, .65);
   border: 1px solid $tag-bd !important;
   border-radius: 999px !important;
   background: $tag-bg;
-  font-size: 13px;
+  font-size: $tag-fs;
+  font-weight: 500;
   color: $font-black-1;
   box-shadow: none !important;
   transition: background .2s, border-color .2s, color .2s;
@@ -1107,7 +1122,7 @@ $tag-bg: rgba(255, 255, 255, .65);
 .plTags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: $tag-gap;
   margin: 0 0 14px;
 }
 
@@ -1122,7 +1137,8 @@ $tag-bg: rgba(255, 255, 255, .65);
   border-radius: 999px;
   background: $tag-bg;
   font-family: inherit;
-  font-size: 13px;
+  font-size: $tag-fs;
+  font-weight: 500;
   color: $font-black-1;
   cursor: pointer;
   transition: background .2s, border-color .2s, color .2s;
