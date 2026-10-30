@@ -65,9 +65,7 @@
             <el-tabs v-model="favorsAcName">
               <el-tab-pane label="云盘" name="cloud">
                 <p v-if="cloudTracks.length" class="cloudCount">共 {{ cloudTracks.length }} 个文件</p>
-                <div v-if="cloudTracks.length" class="cloudScroll">
-                  <RankList :list="cloudTracks" :show-rank="false" meta="size"/>
-                </div>
+                <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size"/>
                 <p v-else class="empty-text">云盘还是空的</p>
               </el-tab-pane>
               <el-tab-pane label="专辑" name="album"><AlbumLayout :list="favors.albums"/></el-tab-pane>
@@ -88,20 +86,30 @@
           <!-- 喜欢 / 创建 / 收藏合成一张网格：原来分组渲染时，只有一个"喜欢"的歌单会独占一整行，
                右边留出大片空白；合并后它们按同一尺寸连续排列。
                网格在本页内私有实现（plGrid），不改公共的 PlaylistLayout -->
-          <ul v-if="allPlaylists.length" class="plGrid">
-            <li v-for="p in allPlaylists" :key="p.id" class="plCard" @click="openPl(p.id)">
-              <div class="plCover">
-                <img :src="p.coverImgUrl | imgParam('300y300')" :alt="p.name + '的封面'" loading="lazy" decoding="async">
-                <span v-if="p.playCount" class="plPlays"><BaseIcon name="play"/> {{ p.playCount | Div1w }}</span>
-                <span v-if="p._kind === 'favor'" class="plFavorMark" title="喜欢的歌单"><BaseIcon name="likeFill"/></span>
-              </div>
-              <p class="plName" :title="p.name">{{ p.name }}</p>
-            </li>
-            <li v-if="isSelf" class="plNewTile" @click="importVisible = true">
-              <span class="plNewPlus">+</span>
-              <span class="plNewText">新建 / 导入歌单</span>
-            </li>
-          </ul>
+          <!-- 横向排布：小封面在左、文字在右。歌单多了之后比大封面网格省一半高度；
+               外层 plScroll 限定最大高度，避免歌单过多把页面拉长 -->
+          <div v-if="allPlaylists.length" class="plScroll">
+            <ul class="plRows">
+              <li v-for="p in allPlaylists" :key="p.id" class="plRow" @click="openPl(p.id)">
+                <img class="plCover" :src="p.coverImgUrl | imgParam('120y120')" :alt="p.name + '的封面'"
+                     loading="lazy" decoding="async">
+                <div class="plMain">
+                  <p class="plName" :title="p.name">
+                    {{ p.name }}
+                    <span v-if="p._kind === 'favor'" class="plFavorMark" title="喜欢"><BaseIcon name="likeFill"/></span>
+                  </p>
+                  <p class="plMeta">
+                    <span v-if="p.trackCount">{{ p.trackCount }} 首</span>
+                    <span v-if="p.playCount" class="plPlays"><BaseIcon name="play"/> {{ p.playCount | Div1w }}</span>
+                  </p>
+                </div>
+              </li>
+              <li v-if="isSelf" class="plRow plRowNew" @click="importVisible = true">
+                <span class="plNewPlus">+</span>
+                <span class="plNewText">新建 / 导入歌单</span>
+              </li>
+            </ul>
+          </div>
           <p v-else class="empty-text">未公开</p>
         </section>
         <section ref="secSocial" class="ud-section ud-card ud-sec">
@@ -455,15 +463,15 @@ export default {
             // 粉丝数做本地即时反馈（服务端为准，刷新后会校正）
             const p = this.profile
             if (p && p.followeds != null) this.$set(p, 'followeds', Math.max(0, p.followeds + (on ? 1 : -1)))
-            this.$message.success(on ? '已关注' : '已取消关注')
+            this.$toast.success(on ? '已关注' : '已取消关注')
           } else if (code === 301 || code === 302) {
             // 网关对未登录/失效 cookie 分别回 301「未登录」和 302「系统错误」
-            this.$message.warning('登录态已失效，请重新登录后再试')
+            this.$toast.warning('登录态已失效，请重新登录后再试')
           } else {
-            this.$message.error('操作失败，请稍后重试')
+            this.$toast.error('操作失败，请稍后重试')
           }
         })
-        .catch(() => this.$message.error('网络错误，操作失败'))
+        .catch(() => this.$toast.error('网络错误，操作失败'))
         .finally(() => { this.followPending = false })
     },
     /**
@@ -488,10 +496,11 @@ export default {
           this.mutual ? `取消后你将不再关注「${name}」，互相关注状态会被解除。` : `取消后你将不再关注「${name}」。`),
         ...rows,
       ])
-      this.$confirm(message, '取消关注', {
-        confirmButtonText: '仍然取消',
-        cancelButtonText: '继续关注',
-        type: 'warning',
+      this.$confirmBox({
+        title: '取消关注',
+        message,
+        confirmText: '仍然取消',
+        cancelText: '继续关注',
         distinguishCancelAndClose: true,
       })
         .then(() => this.setFollow(0))
@@ -902,6 +911,10 @@ export default {
   .sceneTabs { margin-bottom: 18px; }
 }
 
+// 并排两卡与歌单区的统一高度上限：防止内容一多就把整页拉长
+$duo-h: 520px;
+$pl-max-h: 420px;
+
 /* ---------- 锚点条 ---------- */
 // 页面从"一屏看完"变成"四块内容"，给一个随手可点的位置标；吸顶是为了滚动中途也能点
 .ud-anchor {
@@ -938,7 +951,9 @@ export default {
 // 两栏比例 1.6:1：排行榜是主内容（有数字列，需求更宽），云盘只是"收藏了什么"的速览
 .ud-duo {
   display: grid;
-  grid-template-columns: 1.6fr 1fr;
+  // 必须写 minmax(0, …)：纯 fr 的最小值是 auto，列宽会被内容（比如云盘超长列表、
+  // 专辑网格）撑开 —— 表现就是「切到专辑 tab 时卡片宽度变化」
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 
@@ -955,7 +970,48 @@ export default {
   }
 }
 
-.ud-duo > .ud-section { margin-bottom: 0; }
+// 两张卡等高（DUO_HEIGHT）+ 内容区内部滚动：
+// 之前只有云盘自己限高，排行卡跟着内容长，两块高度完全对不上
+// 只在真正并排（本人页：排行 + 云盘）时锁高；他人页只有一张卡，按内容自适应
+.ud-duo:not(.is-solo) > .ud-section {
+  margin-bottom: 0;
+  height: $duo-h;
+  display: flex;
+  flex-direction: column;
+
+  > h2 { flex: none; }
+
+  // el-tabs 变纵向 flex，让内容区吃掉剩余高度并滚动
+  ::v-deep .el-tabs {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+
+    > .el-tabs__header { flex: none; }
+    > .el-tabs__content {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0,0,0,.14) transparent;
+      &::-webkit-scrollbar { width: 5px; }
+      &::-webkit-scrollbar-track { background: transparent; }
+      &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.14); border-radius: 3px; }
+    }
+  }
+
+  // 窄屏恢复自适应高度，别在手机上锁死 520px
+  @media (max-width: 980px) {
+    height: auto;
+    max-height: none;
+    ::v-deep .el-tabs__content { overflow: visible; }
+  }
+}
+
+// 他人主页：单列、不锁高，避免「未公开」三个字撑出一整张空卡
+.ud-duo.is-solo > .ud-section { margin-bottom: 0; height: auto; }
 
 /* ---------- 关注列表：头像墙 + 查看全部 ---------- */
 .listFoot { display: flex; justify-content: center; margin-top: 14px; }
@@ -974,68 +1030,95 @@ export default {
   .caret { font-size: 11px; opacity: .7; }
 }
 
-/* ---------- 歌单私有网格（plGrid）：喜欢/创建/收藏 + 新建卡 ---------- */
-// 全部样式收在本页，不碰公共的 PlaylistLayout
-.plGrid {
+/* ---------- 歌单：横向排布（左小封面 + 右文字），页内私有 ---------- */
+// 歌单数量不定，网格会被撑得很长；横排一行只占 ~64px，同样高度能多放一倍内容。
+// 外层 plScroll 兜住最大高度，剩下的走内部滚动。
+.plScroll {
+  max-height: $pl-max-h;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.14) transparent;
+  &::-webkit-scrollbar { width: 5px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.14); border-radius: 3px; }
+}
+
+.plRows {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.plCard {
-  min-width: 0;
-  cursor: pointer;
-}
-
-.plCover {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: 14px;
-  overflow: hidden;
-  background: rgba(0,0,0,.05);
-
-  img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
-  &:hover img { transform: scale(1.05); }
-  // 播放量角标（右上）
-  .plPlays {
-    position: absolute; top: 8px; right: 8px;
-    display: flex; align-items: center; gap: 3px;
-    padding: 2px 8px; border-radius: 999px;
-    background: rgba(0,0,0,.4); color: #fff; font-size: 11px;
-  }
-  // 「喜欢」标记（左上）：合并网格后用它区分喜欢歌单
-  .plFavorMark { position: absolute; top: 8px; left: 8px; color: #fff; font-size: 13px; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
-}
-
-.plName {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: $font-black;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-// 「新建 / 导入」虚线卡：占满所在格，与封面卡同高
-.plNewTile {
+.plRow {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 150px;
-  border: 1px dashed rgba(0,0,0,.16);
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 12px;
   border-radius: 14px;
-  color: $font-black-2;
+  background: rgba(255,255,255,.6);
+  border: 1px solid rgba(0,0,0,.05);
   cursor: pointer;
-  transition: border-color .2s, color .2s, background .2s;
+  transition: transform .2s, border-color .2s, box-shadow .2s;
 
-  &:hover { border-color: rgba($color-main, .55); color: $color-main; background: rgba($color-main, .04); }
-  .plNewPlus { font-size: 26px; line-height: 1; }
-  .plNewText { font-size: 12px; }
+  &:hover {
+    transform: translateY(-2px);
+    border-color: rgba($color-main, .35);
+    box-shadow: 0 6px 18px rgba(0,0,0,.06);
+  }
+
+  .plCover {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    object-fit: cover;
+    display: block;
+    background: rgba(0,0,0,.05);
+  }
+
+  .plMain { flex: 1; min-width: 0; }
+
+  .plName {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 14px;
+    color: $font-black;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  // 「喜欢」标记：合并成一张列表后用它在喜欢歌单上打标
+  .plFavorMark { flex-shrink: 0; color: $color-main; font-size: 12px; }
+
+  .plMeta {
+    margin: 4px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: $font-black-2;
+
+    .plPlays { display: inline-flex; align-items: center; gap: 3px; }
+  }
+}
+
+// 尾部「新建 / 导入」：与歌单行同高，虚线卡
+.plRowNew {
+  justify-content: flex-start;
+  background: transparent;
+  border: 1px dashed rgba(0,0,0,.16);
+  color: $font-black-2;
+
+  &:hover { background: rgba($color-main, .04); border-color: rgba($color-main, .55); color: $color-main; transform: none; box-shadow: none; }
+  .plNewPlus { margin-left: 7px; font-size: 20px; line-height: 1; }
+  .plNewText { font-size: 13px; }
 }
 
 /* ---------- 关注列表收起态：头像墙（页内私有，公共组件零改动） ---------- */
@@ -1089,19 +1172,8 @@ export default {
   }
 }
 
-/* ---------- 云盘列表：内部滚动，禁止把整页拉长 ---------- */
-.cloudCount { margin: 0 0 10px; font-size: 12px; color: $font-black-2; }
-
-.cloudScroll {
-  max-height: 440px;
-  overflow-y: auto;
-  padding-right: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0,0,0,.14) transparent;
-  &::-webkit-scrollbar { width: 5px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.14); border-radius: 3px; }
-}
+/* ---------- 云盘：文件总数说明（滚动由卡片统一接管） ---------- */
+.cloudCount { margin: 0 0 8px; font-size: 12px; color: $font-black-2; }
 
 .ud-card {
   padding: 28px 32px;
