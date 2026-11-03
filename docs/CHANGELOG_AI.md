@@ -2560,3 +2560,101 @@ PersonalFM 拉取新批次后通知 PlayerCore 推进 curIndex，解决"自然�
   （搜索页 999、播放器 100 等）暂未收编，避免一次性改动带来回归风险。
 - **回滚策略**：新增文件 2 个、其余为原地替换，`git revert` 或逐文件回退均可；
   无 localStorage / 接口数据结构变更，不涉及兼容问题。
+
+### 2026-11-03 — FEAT 页脚加作者博客入口 + 移动端「暂未适配」提示
+
+### 修改内容
+
+1. **页脚博客入口**：`config.site` 增加 `blog` / `blogLabel`；页脚 `.af-links` 首位加一颗胶囊样式的
+   「博客主页 blog.archai.space ↗」，与后面的普通文字链（源码/反馈/API 仓库/API 文档/免责声明）区分；
+   免责声明弹窗补一句「更多项目记录与随笔见作者博客」。
+2. **移动端提示 `MobileNotice.vue`**（新增，`components/common/`）：移动端进入即显示一层全屏浮层，
+   标题「当前暂未适配移动端」，说明手机上的排版/播放器未单独适配，展示当前完整地址 + 「复制链接」，
+   引导到电脑浏览器打开；底部保留「仍要在手机上继续浏览」（不是硬拦截）。
+3. **`src/utils/device.js`**（新增）：移动端判定 + `sessionStorage` 记录「本次已选择继续浏览」。
+4. **图标注册**：`config/icon.js` 新增 `external`（纯箭头，小尺寸不糊）/ `monitor` / `copy` / `check`。
+5. **`App.vue`** 末尾挂载 `<MobileNotice/>`。
+
+### 修改文件
+
+- `src/config.js`
+- `src/config/icon.js`
+- `src/components/common/AppFooter.vue`
+- `src/components/common/MobileNotice.vue`（新增）
+- `src/utils/device.js`（新增）
+- `src/App.vue`
+
+### 修改原因
+
+用户提出两点：底部要加个人博客地址；移动端打开显示「暂未适配」并引导到电脑端。
+站点是 `el-main { width: 80% }` 的桌面布局，导航是固定 80px 三段式、播放条也是横向排布，
+窄屏下必然错位；与其让用户自己撞墙，不如先说明并给一条「把链接发到电脑」的路径。
+博客入口放在页脚，是因为它属于「作者个人」而非站点功能，不占主导航。
+
+### 测试结果
+
+- `yarn lint` ✅ No lint errors found!
+- `yarn build` ✅ 通过
+- 无头 Edge（`analysis/cdp_mobile_notice.py`）实测 ✅
+  - 390×844 + iPhone UA：提示层出现，标题/地址正确，`documentElement` 滚动被锁
+  - 点「复制链接」→ 按钮切成功色 + 「链接已复制」+ toast 可见（z-index 未挡住）
+  - 点「仍要在手机上继续浏览」→ 浮层移除、滚动恢复、`sessionStorage` 写入 `1`
+  - 1440×900 桌面 UA：不出现提示层，页脚博客胶囊正常渲染（紫色底、外链箭头、与文字链同行）
+- 截图：`analysis/mobile-notice.png`、`analysis/footer-blog.png`
+
+### 注意事项
+
+- **只做「提示 + 引导」，没做真正的响应式适配**。真适配是另一个任务：导航折叠、`el-main` 宽度、
+  播放条重排、表格类页面横向滚动。当前的提示层是临时兜底。
+- **判定偏保守**，三类命中任一：UA 含移动端关键字 / iPadOS 多点触控（UA 伪装成 Macintosh）/
+  `pointer: coarse` + `hover: none` + 视口 ≤768px。桌面窄窗口、带触摸屏的笔记本不会误触发。
+- **「继续浏览」只记在 sessionStorage**（`acmusic_mobile_notice_dismissed`）：同一标签页刷新不重复打扰，
+  新开标签页会再次提示。要改成「永久不再提示」需换 localStorage 并给出恢复入口。
+- **z-index 用 `$z-overlay + 10`（3010）**：压住评论浮层（3000），低于 toast（4000），
+  保证「已复制」提示可见。改层高时先看 `variables.scss` 的档位约定。
+- **复制用完整 `location.href`**（含 query），从分享链接进来的人复制到电脑上还能落回原页面；
+  非安全上下文（http）没有 `navigator.clipboard`，回落到 `textarea + execCommand`。
+- **回滚**：删 `MobileNotice.vue` / `device.js` 与 `App.vue` 里的两处引用即可，不影响其他模块；
+  页脚只动 `.af-links` 和免责声明文案。
+
+### 2026-11-03 — UI 调整：页脚博客改为灰色文字链 / 移动端提示每次打开都显示
+
+> 本条调整覆盖上一条里的「胶囊样式博客入口」与「sessionStorage 记住继续浏览」两个设计。
+
+### 修改内容
+
+1. **页脚博客入口降级为普通文字链**：去掉紫色胶囊底、域名和外部箭头，改为与其他链接同款灰色文字
+   `我的博客`（hover 变主色，`title` 里带 `blog.archai.space`），仍然新标签页打开。
+   随之删掉只为它服务的 `.af-blog` 样式块与 `icon.js` 里的 `external` 图标（已无引用）。
+2. **移动端提示改为每次打开都出现**：去掉 `sessionStorage` 的
+   `acmusic_mobile_notice_dismissed`，`utils/device.js` 只保留 `isMobileDevice()`；
+   「仍要在手机上继续浏览」不再持久化，只关闭当前这次打开。
+
+### 修改文件
+
+- `src/components/common/AppFooter.vue`
+- `src/components/common/MobileNotice.vue`
+- `src/utils/device.js`
+- `src/config/icon.js`
+
+### 修改原因
+
+用户希望页脚保持克制、不加视觉噪音：博客只作为一行灰色文字，点了能跳转即可。
+移动端提示此前用 sessionStorage 记忆，用户刷新或重开标签就不再出现，与「每次打开都要提示」的诉求不符。
+
+### 测试结果
+
+- `yarn lint` ✅ No lint errors found!
+- `yarn build` ✅ 通过
+- 无头 Edge 实测 ✅：页脚「我的博客」为灰色文字、与其余链接同基线同行、点击跳 `https://blog.archai.space/`；
+  移动端刷新后提示层再次出现（不再依赖存储），点「继续浏览」仅关闭当次
+
+### 注意事项
+
+- **提示不再有跨会话记忆**：只要在手机上打开就会拦一层，这是有意为之；若以后要「永久不再提示」，
+  需要另加 localStorage + 恢复入口，不要直接改回现在的逻辑。
+- **`external` 图标已删除**：以后要外链箭头，重新在 `config/icon.js` 注册（纯箭头 path：
+  `M7 17L17 7 M9 7h8v8`），带方框的小尺寸版本会糊。
+- 免责声明弹窗里的博客引用保留（不是页脚，属于正文说明）。
+
+
