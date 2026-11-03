@@ -83,6 +83,8 @@
     <transition name="search">
       <DoSearch v-if="showSearch" @toggleSearch="toggleSearch"/>
     </transition>
+    <!-- 移动端未适配提示（固定全屏浮层，不影响桌面端） -->
+    <MobileNotice/>
   </div>
 </template>
 
@@ -91,13 +93,14 @@ import MusicPlayer from "@/components/musicPlayer/MusicPlayer";
 import DoSearch from "@/components/DoSearch";
 import PageBack from "@/components/common/PageBack";
 import AppFooter from "@/components/common/AppFooter";
+import MobileNotice from "@/components/common/MobileNotice";
 import {doLogout} from "@/utils/auth";
 import { saveScroll, restoreScroll } from "@/utils/scrollMemory";
 import config from "./config"
 
 export default {
   name: 'App',
-  components: {MusicPlayer, DoSearch, PageBack, AppFooter},
+  components: {MusicPlayer, DoSearch, PageBack, AppFooter, MobileNotice},
   data() {
     return {
       song: {},

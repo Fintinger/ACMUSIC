@@ -12,6 +12,9 @@ export default {
         // 本站源码仓库（公开）
         repo: 'https://github.com/Fintinger/ACMUSIC',
         issues: 'https://github.com/Fintinger/ACMUSIC/issues',
+        // 作者博客（个人主页，页脚外链）
+        blog: 'https://blog.archai.space',
+        blogLabel: 'blog.archai.space',
         // 接口来源：开源项目（页脚展示 + 免责声明引用）
         apiRepo: 'https://github.com/neteasecloudmusicapienhanced/api-enhanced',
         apiDocs: 'https://docs-neteasecloudmusicapi.focalors.ltd'

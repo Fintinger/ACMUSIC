@@ -141,6 +141,22 @@ export default {
     },
 
     // ---- 通用 ----
+    // 显示器：移动端提示里指代「电脑端」
+    monitor: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M3 4h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z M8 20h8 M12 16v4',
+    },
+    copy: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
+    },
+    check: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 2,
+        path: 'M20 6L9 17l-5-5',
+    },
     delete: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 2,

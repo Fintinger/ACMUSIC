@@ -6,6 +6,7 @@
     </div>
 
     <nav class="af-links">
+      <a :href="site.blog" target="_blank" rel="noopener noreferrer" :title="site.blogLabel">我的博客</a>
       <a :href="site.repo" target="_blank" rel="noopener noreferrer">源码</a>
       <a :href="site.issues" target="_blank" rel="noopener noreferrer">反馈</a>
       <a :href="site.apiRepo" target="_blank" rel="noopener noreferrer">API 仓库</a>
@@ -35,6 +36,10 @@
           本站源码开源在
           <a :href="site.repo" target="_blank" rel="noopener noreferrer">{{ siteName }}</a>，
           问题与建议欢迎在 Issues 反馈。
+        </p>
+        <p>
+          更多项目记录与随笔见作者博客
+          <a :href="site.blog" target="_blank" rel="noopener noreferrer">{{ site.blogLabel }}</a>。
         </p>
       </div>
       <span slot="footer">
