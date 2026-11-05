@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>录制提词卡 · ACMUSIC</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: #0F0F23;
+    color: #E8E8F0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 0 14px calc(40px + env(safe-area-inset-bottom));
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: #0F0F23;
+    padding: 14px 0 10px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    margin-bottom: 16px;
+  }
+  .h-top { display: flex; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 17px; font-weight: 600; letter-spacing: .3px; }
+  .count { font-size: 13px; color: #8685EF; font-variant-numeric: tabular-nums; }
+  .bar { height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: #8685EF; border-radius: 2px; transition: width .3s ease; }
+  .sub { font-size: 12px; color: #7A7A94; margin-top: 8px; }
+
+  h2 {
+    font-size: 12px; font-weight: 500; color: #7A7A94;
+    letter-spacing: 1.2px; margin: 22px 0 10px;
+  }
+  .card {
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+    padding: 14px 15px;
+    margin-bottom: 11px;
+    transition: opacity .2s ease, background .2s ease;
+    cursor: pointer;
+  }
+  .card.done { opacity: .38; background: rgba(255,255,255,.02); }
+  .card.done .title { text-decoration: line-through; text-decoration-color: rgba(255,255,255,.4); }
+
+  .c-head { display: flex; align-items: flex-start; gap: 10px; }
+  .tick {
+    flex: 0 0 20px; width: 20px; height: 20px; margin-top: 2px;
+    border: 1.5px solid rgba(255,255,255,.25); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: transparent; transition: all .2s ease;
+  }
+  .card.done .tick, .check.done .tick { background: #8685EF; border-color: #8685EF; color: #fff; }
+  .c-main { flex: 1; min-width: 0; }
+  .tc { font-size: 11px; color: #8685EF; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+  .title { font-size: 16px; font-weight: 500; margin-top: 1px; }
+
+  ol { list-style: none; margin: 10px 0 0 30px; }
+  ol li {
+    position: relative; padding-left: 14px; margin-bottom: 4px;
+    font-size: 14.5px; color: #C9C9DB;
+  }
+  ol li::before {
+    content: ""; position: absolute; left: 2px; top: 9px;
+    width: 4px; height: 4px; border-radius: 50%; background: #5A5A78;
+  }
+  .warn { color: #F0A08B; }
+  .warn::before { background: #F0A08B !important; }
+
+  .line { margin: 11px 0 0 30px; font-size: 13.5px; }
+  .line .k { color: #7A7A94; margin-right: 6px; }
+  .line .v { color: #E8E8F0; }
+  .say .v { color: #A9A8E8; }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; font-size: 14.5px; color: #C9C9DB; }
+  .check .tick { margin-top: 1px; }
+  .check.done { opacity: .4; }
+
+  footer { text-align: center; margin-top: 28px; }
+  button {
+    background: none; border: 1px solid rgba(255,255,255,.14);
+    color: #7A7A94; font-size: 13px; padding: 8px 18px;
+    border-radius: 8px; font-family: inherit;
+  }
+  button:active { background: rgba(255,255,255,.05); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-top">
+    <h1>录制提词卡</h1>
+    <span class="count" id="count">0 / 7</span>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="sub">点一下卡片就算录完</div>
+</header>
+
+<h2>开录前</h2>
+<div class="check" data-key="prep-1"><span class="tick">✓</span><span>F11 全屏（地址栏消失）</span></div>
+<div class="check" data-key="prep-2"><span class="tick">✓</span><span>Ctrl+Shift+B 隐藏书签栏</span></div>
+<div class="check" data-key="prep-3"><span class="tick">✓</span><span>浏览器缩放 125% – 150%</span></div>
+<div class="check" data-key="prep-4"><span class="tick">✓</span><span>系统静音（别录进歌曲声）</span></div>
+<div class="check" data-key="prep-5"><span class="tick">✓</span><span>关微信 / QQ 通知</span></div>
+<div class="check" data-key="prep-6"><span class="tick">✓</span><span>OBS：CQP 18 · 输出分辨率不缩放 · 60fps</span></div>
+<div class="check" data-key="prep-7"><span class="tick">✓</span><span>先录 5 秒回放，确认不糊、光标可见</span></div>
+
+<h2>七个镜头</h2>
+
+<div class="card" data-key="shot-1">
+  <div class="c-head"><span class="tick">✓</span><div class="c-main">
+    <div class="tc">00:00 – 00:05</div>
+    <div class="title">播放器展开 + 歌词</div>
+  </div></div>
+  <ol>
+    <li>进入任意歌曲</li>
+    <li>点底部条展开</li>
+    <li>等歌词滚到当前行再开始录</li>
+    <li class="warn">录 9 秒，后期只取 5 秒</li>
+  </ol>
+  <div class="line"><span class="k">字幕</span><span class="v">网页也能做成这样</span></div>
+  <div class="line say"><span class="k">口播</span><span class="v">网页也能做成这样。打开就能用。</span></div>
+</div>
+
+<div class="card" data-key="shot-2">
+  <div class="c-head"><span class="tick">✓</span><div class="c-main">
+    <div class="tc">00:05 – 00:11</div>
+    <div class="title">首页下滚</div>
+  </div></div>
+  <ol>
+    <li>回到首页顶部</li>
+    <li>匀速下滚，约 1 秒 100px</li>
+    <li>鼠标划过 2 张卡片，各停 0.3 秒</li>
+  </ol>
+  <div class="line"><span class="k">字幕</span><span class="v">2022 年搭的框架，今年重做 / 只支持电脑，手机打不开</span></div>
+  <div class="line say"><span class="k">口播</span><span class="v">2022 年搭的框架，今年用 AI 重做了一遍。只支持电脑。</span></div>
+</div>
+
+<div class="card" data-key="shot-3">
+  <div class="c-head"><span class="tick">✓</span><div class="c-main">
+    <div class="tc">00:11 – 00:18</div>
+    <div class="title">搜索到播放（一镜到底）</div>
+  </div></div>
+  <ol>
+    <li>点搜索框</li>
+    <li>输入歌手名 → <span class="warn">停 0.5 秒</span> 等联想弹出</li>
+    <li>回车 → 停 0.3 秒</li>
+    <li>点第一首 → 底部条滑出后停 1 秒</li>
+    <li class="warn">录 3 条，取最稳的</li>
+  </ol>
+  <div class="line"><span class="k">字幕</span><span class="v">搜歌手，搜歌，搜歌单 / 点一下，直接开始放</span></div>
+  <div class="line say"><span class="k">口播</span><span class="v">搜歌手，搜歌名，搜歌单。点一下就开始放。</span></div>
+</div>
+
+<div class="card" data-key="shot-4">
+  <div class="c-head"><span class="tick">✓</span><div class="c-main">
+    <div class="tc">00:18 – 00:26</div>
+    <div class="title">歌词 + 换歌变色</div>
+  </div></div>
+  <ol>
+    <li>展开播放器</li>
+    <li>让歌词点亮 2–3 个字</li>
+    <li>点下一首</li>
+    <li>等背景完全变色再停</li>
+    <li class="warn">两首歌封面色差要大：一冷一暖</li>
+  </ol>
+  <div class="line"><span class="k">字幕</span><span class="v">歌词一个字一个字亮起来 / 换首歌，界面跟着变色</span></div>
+  <div class="line say"><span class="k">口播</span><span class="v">歌词是一个字一个字亮起来的。换一首歌，整个界面会跟着换颜色。</span></div>
+</div>
+
+<div class="card" data-key="shot-5">
+  <div class="c-head"><span class="tick">✓</span><div class="c-main">
+    <div class="tc">00:26 – 00:34</div>
+    <div class="title">私人 FM 3D</div>
+  </div></div>
+  <ol>
+    <li>滚到私人 FM 区</li>
+    <li>鼠标缓慢左右移动，幅度半张卡</li>
+    <li>连续不中断，别移太快</li>
+    <li class="warn">用鼠标，别用触控板</li>
+  </ol>
+  <div class="line"><span class="k">字幕</span><span class="v">鼠标一动，卡片跟着转 / 不是特效，这是网页</span></div>
+  <div class="line say"><span class="k">口播</span><span class="v">这是私人 FM。鼠标动一下，卡片会跟着转。</span></div>
+</div>
+
+<div class="card" data-key="shot-6">
+  <div class="c-head"><span class="tick">✓</span><div class="c-main">
+    <div class="tc">00:34 – 00:40</div>
+    <div class="title">刷新恢复</div>
+  </div></div>
+  <ol>
+    <li>暂停 1 秒，让观众看清进度</li>
+    <li>按 F5</li>
+    <li>等画面完全恢复，再停 2 秒</li>
+    <li class="warn">白屏那 1 秒后期剪掉一半</li>
+  </ol>
+  <div class="line"><span class="k">字幕</span><span class="v">刷新一下，进度还在</span></div>
+  <div class="line say"><span class="k">口播</span><span class="v">刷新一下，还是刚才那个进度。</span></div>
+</div>
+
+<div class="card" data-key="shot-7">
+  <div class="c-head"><span class="tick">✓</span><div class="c-main">
+    <div class="tc">00:40 – 00:45</div>
+    <div class="title">收尾</div>
+  </div></div>
+  <ol>
+    <li>回首页</li>
+    <li>停在全景画面</li>
+    <li>后期压上大字</li>
+  </ol>
+  <div class="line"><span class="k">字幕</span><span class="v">地址在主页简介，不好用也说</span></div>
+  <div class="line say"><span class="k">口播</span><span class="v">想试的看我主页简介。哪里不好用，也欢迎告诉我。</span></div>
+</div>
+
+<h2>发之前</h2>
+<div class="check" data-key="chk-1"><span class="tick">✓</span><span>前 3 秒是最漂亮的那一帧</span></div>
+<div class="check" data-key="chk-2"><span class="tick">✓</span><span>没有"免费 / VIP / 破解"字样</span></div>
+<div class="check" data-key="chk-3"><span class="tick">✓</span><span>没有地址栏、没有他人头像昵称</span></div>
+<div class="check" data-key="chk-4"><span class="tick">✓</span><span>镜头 3 和 6 连贯，没被剪断</span></div>
+<div class="check" data-key="chk-5"><span class="tick">✓</span><span>只有 BGM，没有真实歌曲声</span></div>
+<div class="check" data-key="chk-6"><span class="tick">✓</span><span>结尾指向主页简介，也有求建议的话</span></div>
+<div class="check" data-key="chk-7"><span class="tick">✓</span><span>封面在手机小屏上能看清字</span></div>
+
+<footer>
+  <button id="reset">清空进度</button>
+</footer>
+
+<script>
+(function () {
+  var KEY = 'acmusic_cue_progress';
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { state = {}; }
+
+  var cards = document.querySelectorAll('[data-key]');
+  var countEl = document.getElementById('count');
+  var barEl = document.getElementById('bar');
+
+  function refresh() {
+    var shots = document.querySelectorAll('.card');
+    var done = 0;
+    shots.forEach(function (c) { if (c.classList.contains('done')) done++; });
+    countEl.textContent = done + ' / ' + shots.length;
+    barEl.style.width = (done / shots.length * 100) + '%';
+  }
+
+  cards.forEach(function (el) {
+    var k = el.getAttribute('data-key');
+    if (state[k]) el.classList.add('done');
+    el.addEventListener('click', function () {
+      el.classList.toggle('done');
+      state[k] = el.classList.contains('done');
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+      refresh();
+    });
+  });
+
+  document.getElementById('reset').addEventListener('click', function () {
+    state = {};
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    cards.forEach(function (el) { el.classList.remove('done'); });
+    refresh();
+  });
+
+  refresh();
+})();
+</script>
+
+</body>
+</html>
