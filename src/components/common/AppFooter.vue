@@ -10,6 +10,7 @@
       <a :href="site.repo" target="_blank" rel="noopener noreferrer">源码</a>
       <a :href="site.issues" target="_blank" rel="noopener noreferrer">反馈</a>
       <a :href="site.apiDocs" target="_blank" rel="noopener noreferrer">API 文档</a>
+      <button type="button" class="af-link-btn" @click="$emit('open-changelog')">更新日志</button>
       <button type="button" class="af-link-btn" @click="showDisclaimer = true">免责声明</button>
     </nav>
 

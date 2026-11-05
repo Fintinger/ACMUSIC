@@ -45,6 +45,7 @@
                   <span class="avatar-trigger">
                     <img v-if="profile.avatarUrl" :src="profile.avatarUrl | https" alt="" class="el-dropdown-link">
                     <i v-else class="avatar-fallback"><BaseIcon name="user" :size="26"/></i>
+                    <i v-if="changelogUnread" class="avatar-dot" aria-label="有新版本的更新日志"></i>
                   </span>
                   <el-dropdown-menu slot="dropdown" class="user-dropdown">
                     <el-dropdown-item class="user-header" disabled>
@@ -57,6 +58,9 @@
                       <BaseIcon name="user"/>个人主页
                     </el-dropdown-item>
                     <el-dropdown-item :command="openAccentPicker" class="menu-item"><BaseIcon name="palette"/>主题颜色</el-dropdown-item>
+                    <el-dropdown-item :command="openChangelog" class="menu-item">
+                      <BaseIcon name="calendar"/>更新日志<i v-if="changelogUnread" class="menu-dot"></i>
+                    </el-dropdown-item>
                     <el-dropdown-item :command="logout" class="menu-item logout-item">
                       <BaseIcon name="logout"/>退出登录
                     </el-dropdown-item>
@@ -77,13 +81,14 @@
           </keep-alive>
         </transition>
         <!-- 全站页脚：放在 keep-alive 之外，避免随页面缓存重复挂载 -->
-        <AppFooter/>
+        <AppFooter @open-changelog="openChangelog"/>
       </el-main>
     </el-container>
     <!--播放器组件 -->
     <el-dialog title="主题颜色" :visible.sync="showAccentPicker" width="340px" append-to-body>
       <AccentPicker v-if="showAccentPicker"/>
     </el-dialog>
+    <ChangelogDialog :visible.sync="showChangelog"/>
     <div v-show="showPlayer" class="player">
       <MusicPlayer :song="song"/>
     </div>
@@ -102,6 +107,8 @@ import PageBack from "@/components/common/PageBack";
 import AppFooter from "@/components/common/AppFooter";
 import MobileNotice from "@/components/common/MobileNotice";
 import AccentPicker from '@/components/common/AccentPicker';
+import ChangelogDialog from '@/components/common/ChangelogDialog';
+import { isChangelogUnread, markChangelogSeen } from '@/utils/changelog';
 import {watchAccent} from '@/utils/accent';
 import {doLogout} from "@/utils/auth";
 import { saveScroll, restoreScroll } from "@/utils/scrollMemory";
@@ -110,7 +117,7 @@ import {getStoredTheme, setTheme, watchTheme} from '@/utils/theme'
 
 export default {
   name: 'App',
-  components: {MusicPlayer, DoSearch, PageBack, AppFooter, MobileNotice, AccentPicker},
+  components: {MusicPlayer, DoSearch, PageBack, AppFooter, MobileNotice, AccentPicker, ChangelogDialog},
   data() {
     return {
       song: {},
@@ -118,6 +125,9 @@ export default {
       themeDark: document.documentElement.dataset.theme === 'dark',
       showSearch: false,
       showAccentPicker: false,
+      showChangelog: false,
+      // 有新版本的更新日志未读时，头像与菜单项上点一个小红点
+      changelogUnread: false,
       //keep-alive 缓存页面实例上限（模板中 :max 绑定）
       pageCacheMax: 10,
     }
@@ -149,6 +159,12 @@ export default {
   },
   methods: {
     openAccentPicker() { this.showAccentPicker = true },
+    openChangelog() {
+      this.showChangelog = true
+      // 打开即视为已读：小红点只在"还没看过这一版"时出现
+      markChangelogSeen()
+      this.changelogUnread = false
+    },
     toggleTheme() {
       this.themeDark = !this.themeDark
       this.themePreference = this.themeDark ? 'dark' : 'light'
@@ -255,6 +271,8 @@ export default {
   },
   mounted() {
     this._stopAccentWatch = watchAccent(() => {})
+    // 有未读的更新日志时，头像上点一个小红点（版本号来自 package.json）
+    this.changelogUnread = isChangelogUnread()
     this._stopThemeWatch = watchTheme(mode => { this.themePreference = mode; this.themeDark = document.documentElement.dataset.theme === 'dark' })
     this.$bus.$on('plClk', this.playlistClick)
     this.$bus.$on('alClk', this.albumClick)
