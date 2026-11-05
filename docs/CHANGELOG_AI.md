@@ -3262,3 +3262,35 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 用户确认已全部检查，明确要求推送所有本地更改；本次包括已有marketing文件。版本号与lock根版本同步1.0.0，更新实施计划验收状态。
 - 当前master与origin/master同步；推送将触发仓库现有生产部署工作流。完成12组回归、lint/build和暂存检查后提交并push，不新增tag或修改部署配置。历史自动验收局限不回写为自动测试通过。
 - 结果：用户验收已记录，package/lock根版本均1.0.0；12组回归、lint、生产构建（812a4ffe208b2635）通过。全量暂存121文件（含marketing）；修正回归脚本末尾多余空行，暂存diff检查后分组提交并推送origin/master。部署结果以Actions为准。
+
+### 2026-11-05 — 解灰过程状态提示
+- 计划：在播放按钮正上方居中位置加音源状态胶囊（进行中转圈 / 解灰琥珀 / 成功绿 / 失败红），按「正在获取音源 → 官方无货换源 → 正在解灰 → 解灰完成·第三方源 / 解灰失败」播报；正常秒开的歌不显示，慢请求 500ms 才亮出，成功/失败结论留 4-6 秒。全屏播放页同步复用 expandedHint 播报。播放条上方原有 hint 与状态胶囊收进同一个纵向 flex 容器，共存时自动堆叠。
+- 结果：PlayerCore 新增 `sourceStatus` + `armSourceStatus` / `setSourceStatusLater` / `settleSourceStatus` / `clearSourceStatusSoon`，接在 getSongUrl 三档降级、/song/url/match 解灰、老接口兜底各分支上；新增 `.floatStack`（绝对定位居中、收起态下移 40px）承载 `.sourceHint` 与 `.playerHint`；MusicPlayer 的 expandedHint 兜底读取该状态，详情页 `.rightContent` 内边距改为 `20px 0 70px`（上 20 / 下 70，左右 0）。lint 通过、dev 编译通过；未做真机灰歌验收，未提交/部署。
+
+### 2026-11-05 — FIX-trial 未登录/非会员不再播试听片段
+- 计划：`/song/url/v1` 响应里 `freeTrialInfo` 非空即判该档位不可用（VIP 独占曲目对未登录 / 非会员只给 30-35 秒片段，`url` 却有值），跳过其余档位直接走 `/song/url/match` 解灰兜底；正常歌曲 `freeTrialInfo` 恒为 null，音质档位选择链路完全不变。老接口 `/song/url` 兜底同步拒收试听。
+- 结果：实测 347230（fee=1）未登录时 exhigh/standard 均返回 `freeTrialInfo{start:0,end:35}`（约 560KB），`/song/url/match` 返回 32.5MB 完整 flac；改后该曲识别为试听→直接解灰，状态条播报「仅试听片段，正在解灰…」。lint 通过、dev 编译通过；未做真机全流程验收，未提交/部署。
+
+### 2026-11-05 — 音质菜单按曲目自适应 + 解灰曲目下载
+- 计划：音质菜单不再固定 5 档，改由 `/song/detail` 的 `hr/sq/h/m/l` 字段（null=该档不存在）决定当前歌曲真正有哪些档位；未知时回落完整列表。用户所选档位本曲没有时，高亮实际在用的那一档，避免"没有一项被选中"的错觉。取源链路顺便跳过本曲没有的档位，少打无效请求。下载：解灰曲目直接存当前 match 源（版权下载接口对 VIP/受限曲目恒返 -105/-110，旧文案对已登录用户误报"需要登录"）；其余歌曲仍走 `/song/download/url/v1`，失败文案按登录态区分。
+- 结果：PlayerCore 新增 `songLevels` + `_loadSongLevels`（按 id 缓存、带换歌竞态校验）、`qualityMenuSelected`、`unblockDownloadSource`；QualityMenu 新增 `levels` prop 与"本曲 N 档"表头；MusicPlayer `downloadSong` 增加解灰直下分支与 `_triggerDownload`。lint 通过、dev 编译通过；未做真机验收，未提交/部署。
+
+### 2026-11-05 — 解灰曲目音质菜单收成单条 + 状态条残留修复 + 未登录下载
+- 计划：`1)` 解灰曲目只有第三方固定音质，音质菜单不再列官方 3-4 档，改为一行「解灰源·第三方 / 不可切换」说明；换歌时清空 `currentQuality`，避免音质按钮先亮上一首的结论。`2)` 修「歌已在放但状态条一直显示正在获取音源…」：`settleSourceStatus` 原来只在 tone 为 pending/unblock 时动作，音源 300ms 就回来时 tone 还是空，500ms 的延时播报照样触发且无人清理；现在落定时连延时定时器一起取消，并在 canplay 再兜一次、延时播报自带 8 秒自动收。`3)` 未登录不再弹"下载需要先登录"：未登录/解灰曲目直接下载当前正在播的文件，登录用户则优先走版权下载接口，接口不给链接时用当前音源兜底。
+- 结果：QualityMenu 新增 `unblock` prop 与静态说明行；PlayerCore 新增 `audioSrcSongId`、`playableDownloadSource()`（替代 `unblockDownloadSource`）；MusicPlayer `downloadSong` 重排分支并去掉"需要登录"文案。lint 通过、dev 编译通过；未做真机验收，未提交/部署。
+
+### 2026-11-05 — 登录页「欢迎回来」标题居中
+- 计划：定位到 `reset.scss` 的全局 `h1 { text-align: left }`——直接写在元素上的声明会盖掉 `.login-hero` 继承来的 `text-align: center`，于是标题盒子虽居中、文字却从左排起（视觉上偏左）。改为在 `.login-title` / `.login-subtitle` 上显式 `text-align: center`，`.login-hero` 改纵向 flex + `align-items: center` 不再依赖继承；`.login-wrap` 补 `width: 100%`，防止父级把容器收成 fit-content 时整块贴左。
+- 结果：仅改 `src/pages/UserPage.vue` 的登录页样式，其余页面 h1 仍按全局左对齐。SCSS 编译通过、dev 编译通过；未真机验收，未提交/部署。
+
+### 2026-11-05 — 会员音质不再拦截：非会员也能切无损/臻音
+- 计划：去掉音质菜单的 VIP 锁和 `onQualitySelect` 的拦截（不再弹"「高解析度无损」需要黑胶VIP，已保持当前音质"）。会员档位保留 VIP 徽标提示出处，但可点可选。取源链路新增兜底：请求会员档位而上游压级（lossless→exhigh）时，先走 `/song/url/match` 取这一档的真文件（实测对 347230 返回 32.5MB flac，与 sq.size 一致），解灰失败再退回上游那份压级文件，保证有声。
+- 结果：QualityMenu 移除 `isLocked` / `need-vip` / `vipType`，改为 `isVipTier` 仅作标记；PlayerCore `getSongUrl` 增加 vipTier 压级→解灰分支，`onNeedVip` 删除。另区分解灰来源：`currentQuality.byChoice`——主动选会员档时菜单仍列官方档位（可切回）、按钮显你选的档位，只有被迫解灰（曲目没货/仅试听）才收成单条"解灰源"。lint 通过、dev 编译通过；未做真机验收，未提交/部署。
+
+### 2026-11-05 — 音质菜单高亮跟随实际播放档位
+- 计划：`qualityMenuSelected` 的判定顺序改为「实际在放的档位 → 用户所选（未起播时）→ 最高可用档」。旧逻辑优先返回 `config.player.level`，于是非会员选无损被上游压成 320k（或解灰失败回退压级文件）时，菜单高亮「高解析度无损」、播放条按钮显示「HQ」，两处对不上。顺带把选中标记的图标从 `loop`（循环箭头，容易被误读）换成 `check`。
+- 结果：只改 `PlayerCore.qualityMenuSelected` 与 `QualityMenu` 的勾选图标；解灰源（actual=match）仍按用户所选档位高亮。lint 通过、dev 编译通过；未做真机验收，未提交/部署。
+
+### 2026-11-05 — 应用内更新日志（CHANGELOG.md → 弹窗 + 未读红点）
+- 计划：新增面向使用者的 `CHANGELOG.md`（与内部的 `docs/CHANGELOG_AI.md` 分离，避免把"未验收/未部署"这类话露给用户）。用 `scripts/build-changelog.mjs` 把 Markdown 转成 `src/data/changelog.generated.js`，挂在 `prebuild` / `preserve` 上（`npm run build` 会自动触发，CI 无需改）。App 增加 `ChangelogDialog`，入口放在头像菜单与页脚；未读状态用 `localStorage.acmusic_seen_changelog` 与 `package.json` 版本比对，有新版本时头像和菜单项各点一个小红点。版本号 1.0.0 → 1.1.0（package.json 与 lock 根版本同步），页脚自动显示 v1.1.0。
+- 结果：新增 `CHANGELOG.md`、`scripts/build-changelog.mjs`、`src/data/changelog.generated.js`、`src/components/common/ChangelogDialog.vue`、`src/utils/changelog.js`；改动 `src/App.vue`、`src/components/common/AppFooter.vue`、`src/assets/scss/navigationBar.scss`、`package.json`、`package-lock.json`、`AGENTS.md`（补充版本与日志约定）。lint 通过、dev 编译通过；未真机验收，未提交/未部署、未打 tag。

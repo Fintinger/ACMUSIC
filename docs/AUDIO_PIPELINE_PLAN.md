@@ -107,6 +107,7 @@ self.$axios('/song/url/v1', {
   "Customizing unblock sources is not supported on this endpoint. Please use `/song/url/match` instead."）
 - 第 2 层成功时，把 `currentQuality.actual = 'unblock'` 并在播放器上给个"解灰源"标记（音质/版本不可控）
 - 第 3 层实测收益几乎为零（br 被忽略），建议**降级为可选开关**，默认关掉，减少一次无效请求
+- **第 1 层必须识别"试听片段"**：VIP 独占曲目（fee=1）对未登录 / 非会员返回的是 30-35 秒片段——`url` 有值、能播，但 `freeTrialInfo` 非空（实测 347230：exhigh/standard 都返回 `{start:0,end:35}`，约 560KB）。旧逻辑只看 `url`，会把半首歌当正常音源播掉。现在 `freeTrialInfo` 非空即判该档位不可用，直接跳第 2 层解灰（试听是版权侧策略，换低档位仍是试听，不必多打三次请求）；正常歌曲该字段恒为 null，音质选择不受影响。老接口 `/song/url` 兜底同样拒收试听。
 
 ### 4.2 缓存与切档
 
@@ -156,3 +157,7 @@ self.$axios('/song/url/v1', {
 | C | 彻底关闭解灰 | VIP 歌无声音，只提示"需要 VIP" |
 
 另外是否补齐 `jyeffect / sky / jymaster` 三档（需要 VIP，且 `sky` 还要选 `immerseType`），一句话决定即可。
+> **2026-11-05 补充（已实施）**：会员档位不再在入口拦截。用户（含非会员、未登录）选了 `lossless/hires`
+> 时，若上游把档位压下来（实测 `lossless → exhigh`），先请求 `/song/url/match` 取这一档的真文件
+> （对 347230 实测返回 32.5MB `.flac`，与 `/song/detail` 的 `sq.size` 一致）；解灰失败再退回上游那份
+> 压级文件，保证"点了就有的听"，不会静音。`/song/url/v1` 返回 `freeTrialInfo` 非空时仍按试听处理。

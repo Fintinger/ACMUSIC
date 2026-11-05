@@ -7,6 +7,7 @@ NetEase Cloud Music third-party web client. Vue 2 SPA. No tests; deploy is GitHu
 - `yarn serve` — dev server with HMR
 - `yarn build` — production build to `dist/`
 - `yarn lint` — ESLint (config lives in `package.json` eslintConfig key)
+- `yarn changelog` — regenerate `src/data/changelog.generated.js` from `CHANGELOG.md` (also runs automatically via `prebuild` / `preserve`)
 
 No test runner exists.
 
@@ -50,3 +51,10 @@ No test runner exists.
 - Detail pages receive `id` / `uid` via query params with Vue Router `props` function pattern
 - NetEase API returns inconsistent field names — code uses fallback checks (`coverImgUrl` vs `picUrl`, etc.)
 - `VueRouter.prototype.push` is patched globally to suppress duplicate navigation errors
+
+## Version & changelog
+
+- Two logs, don't mix them: `CHANGELOG.md` (repo root) is **user-facing**; `docs/CHANGELOG_AI.md` is the internal dev log (acceptance status, deployment notes, trade-offs).
+- `CHANGELOG.md` format is strict and minimal — `## <version> — <date>`, `### <section>`, `- <item>`. `scripts/build-changelog.mjs` parses exactly that into `src/data/changelog.generated.js`; **never hand-edit the generated file**.
+- Version lives only in `package.json` (`src/config.js` reads it for the footer + in-app changelog). At release time keep it in sync with an annotated git tag `vX.Y.Z`; tags do not trigger the deploy workflow (it keys off `push master` + path filters).
+- In-app entry: avatar menu and footer → `ChangelogDialog`. The unread dot compares `localStorage.acmusic_seen_changelog` with the current version.
