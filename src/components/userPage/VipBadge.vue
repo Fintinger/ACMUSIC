@@ -234,7 +234,7 @@ export default {
 
   // 只有音乐包：用主题紫区分，不冒充黑胶
   &.is-package {
-    background: rgba(134, 133, 239, .16);
+    background: rgba(var(--theme-accent-rgb), .16);
     color: $color-main-1;
   }
 

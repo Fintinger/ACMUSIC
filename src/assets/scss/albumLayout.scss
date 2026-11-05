@@ -1,45 +1,56 @@
 @import "base/variables";
 @import "base/motion";
 
+/**
+ * 专辑卡片（首页「最新专辑」/ 搜索「专辑」共用）
+ * 2026-11：圆角与动效走 token；专辑名回到 14px（原 17.6px）；副信息 12px。
+ */
 ul {
   li.album {
     .el-card {
       border: none;
       position: relative;
-      border-radius: 14px;
+      border-radius: $radius-card;
       overflow: hidden;
-      transition: transform $motion-fast $ease-standard, box-shadow $motion-fast $ease-standard;
+      background: var(--c-bg-elevated);
+      transition: transform $motion-fast $ease-standard;
 
       .img-wrapper {
         overflow: hidden;
-        border-radius: 10px;
-        margin: 10px;
-        background: linear-gradient(135deg, #f2f2f4 0%, #ecebfa 55%, #e0def8 100%);
+        border-radius: $radius-img;
+        margin: $sp-2;
+        background: var(--c-bg-sunken);
 
-        img {
-          border-radius: 10px;
+        ::v-deep img {
+          border-radius: $radius-img;
           display: block;
           width: 100%;
-          transition: transform 1.5s ease;
+          aspect-ratio: 1;
+          object-fit: cover;
+          transition: transform $media-cover-duration $ease-standard;
         }
       }
 
       .info {
-        margin-top: .5rem;
-        padding: 0 14px 14px;
+        margin-top: 0;
+        padding: 0 $sp-3 $sp-3;
 
         & > div {
-          margin-bottom: .5rem;
+          margin-bottom: $sp-1;
           color: $font-black-2;
-          font-size: .8rem;
-          line-height: 1.1rem;
+          font-size: $fs-aux;
+          line-height: 1.4;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .albumName {
-          width: 80%;
+          width: 100%;
           color: $font-black;
-          font-size: 1.1rem;
-          font-weight: bold;
+          font-size: $fs-card-title;
+          font-weight: 600;
+          line-height: 1.4;
         }
 
         .artist {
@@ -50,17 +61,16 @@ ul {
           }
         }
         .pub-time{
-          font-size: .6rem;
+          font-size: 11px;
         }
       }
 
       &:hover {
-        transform: translateY($card-hover-y);
-        box-shadow: $card-shadow-hover;
+        .img-wrapper ::v-deep img { transform: scale($media-cover-scale); }
       }
 
       &:active {
-        transform: scale(.98);
+        transform: scale(.99);
       }
 
       &:hover .play-btn{
@@ -71,8 +81,8 @@ ul {
         position: absolute;
         left: 0;
         right: 0;
-        top: 10px;
-        bottom: 100px;
+        top: $sp-2;
+        bottom: 80px;
         display: none;
         align-items: center;
         justify-content: center;

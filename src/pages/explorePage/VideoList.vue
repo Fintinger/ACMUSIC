@@ -18,6 +18,7 @@
           @click="scrollTags(1)"
       >›</button>
     </div>
+    <EmptyState v-if="tagsError" compact title="视频标签加载失败" action-text="重试标签" @action="loadVideoTags"/>
     <el-row class="video-result">
       <GridSkeleton v-if="loading && !renderList.length" type="video"/>
       <VideoLayout v-if="renderList.length" :list="renderList"/>
@@ -28,13 +29,15 @@
       <div v-else-if="!loading && !renderList.length" class="video-empty">
         {{ curId ? '该标签下暂无视频，换个标签看看' : '暂无推荐视频，稍后再试' }}
       </div>
-      <LoadMore v-if="renderList.length && !curId" :load="loadRec" :loading="loadingMore" :no-more="noMore"/>
-      <LoadMore v-if="renderList.length && curId" :load="load" :loading="loadingMore" :no-more="noMore"/>
+      <EmptyState v-if="pageError" compact title="更多视频加载失败" desc="已加载内容仍可浏览" action-text="重试加载更多" @action="curId ? load() : loadRec()"/>
+      <LoadMore v-if="renderList.length && !curId && !pageError" :load="loadRec" :loading="loadingMore" :no-more="noMore"/>
+      <LoadMore v-if="renderList.length && curId && !pageError" :load="load" :loading="loadingMore" :no-more="noMore"/>
     </el-row>
   </div>
 </template>
 
 <script>
+import EmptyState from '@/components/common/EmptyState';
 import VideoLayout from "@/components/layout/VideoLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
@@ -46,7 +49,7 @@ const VIDEO_SEARCH_TYPE = 1014
 
 export default {
   name: "VideoList",
-  components: {VideoLayout, LoadMore, GridSkeleton},
+  components: {EmptyState, VideoLayout, LoadMore, GridSkeleton},
   data() {
     return {
       tags: [],
@@ -56,7 +59,10 @@ export default {
       limit: 30,
       offset: 0,
       renderList: [],
-      loading: false,
+      loading: true,
+      pageError: false,
+      tagsError: false,
+      tagsLoading: false,
       loadingMore: false,
       more: true,
       tagError: "",
@@ -90,16 +96,21 @@ export default {
      * 实测匿名与真实 MUSIC_U 均返回 { code: 200, datas: null }, 且多组参数变体都无效;
      * 因此改用视频搜索 keywords=标签名&type=1014 (实测各标签均有结果, offset 为条数偏移)。
      */
-    getVideosByTag() {
+    getVideosByTag(offset = this.offset) {
       return searchApi.searchV2({
         keywords: this.curName,
         type: VIDEO_SEARCH_TYPE,
         limit: this.limit,
-        offset: this.offset
+        offset
       })
     },
     /** 把响应按当前模式(标签/推荐)合并进 renderList, 按 vid 去重 */
     applyResult(res) {
+      const body = res && res.data
+      const code = body && (body.code || body.status)
+      if (!body || (code != null && Number(code) !== 200)) throw new Error('Invalid video response')
+      if (this.curId && !body.result) throw new Error('Missing search result')
+      if (!this.curId && body.datas !== null && !Array.isArray(body.datas)) throw new Error('Missing video feed')
       if (this.curId) {
         const videos = (res.data && res.data.result && res.data.result.videos) || []
         videos.forEach(v => this.pushUnique(v))
@@ -121,12 +132,14 @@ export default {
     reload() {
       const seq = ++this.reqSeq
       this.offset = 0
+      this.loadingMore = false
+      this.pageError = false
       this.renderList = []
       this.more = true
       this.tagError = ""
       this.loading = true
       const fetcher = this.curId ? () => this.getVideosByTag() : () => this.getRecommendedVideos()
-      this.retryOnce(fetcher)
+      return this.retryOnce(fetcher)
           .then(res => {
             // 期间又切了标签/回推荐流: 丢弃这次结果
             if (seq !== this.reqSeq) return
@@ -180,58 +193,35 @@ export default {
       this.curName = ""
       this.curId = ""
     },
-    loadRec() {
-      if (this.loadingMore || !this.more) return
-      this.offset++;
-      this.loadingMore = true
-      return this.getRecommendedVideos().then(res => {
+    loadRec() { return this.loadNextPage(false) },
+    load() { return this.loadNextPage(true) },
+    async loadNextPage(tagMode) {
+      if (this.loading || this.loadingMore || !this.more) return
+      const seq = this.reqSeq
+      const next = this.offset + (tagMode ? this.limit : 1)
+      this.loadingMore = true; this.pageError = false
+      try {
+        const res = await (tagMode ? this.getVideosByTag(next) : this.getRecommendedVideos(next))
+        if (seq !== this.reqSeq) return
         this.applyResult(res)
-      }).catch(() => {
-        // 失败回退 offset, 允许重试
-        this.offset--
-      }).finally(() => {
-        this.loadingMore = false
-      })
+        this.offset = next
+      } catch (_) { if (seq === this.reqSeq) this.pageError = true }
+      finally { if (seq === this.reqSeq) this.loadingMore = false }
     },
-    /** 标签模式翻页: offset 按条数递增 */
-    load() {
-      if (this.loadingMore || !this.more) return
-      this.offset += this.limit
-      this.loadingMore = true
-      return this.getVideosByTag().then(res => {
-        this.applyResult(res)
-      }).catch(() => {
-        this.offset -= this.limit
-      }).finally(() => {
-        // 修正: 之前清的是 loading(首屏标志), 而按钮读的是 loadingMore, 导致永久"加载中"
-        this.loadingMore = false
-      })
+    getRecommendedVideos(offset = this.offset) { return videoApi.timelineRecommend(offset) },
+    async loadVideoTags() {
+      if (this.tagsLoading) return
+      this.tagsLoading = true; this.tagsError = false
+      try {
+        const res = await this.retryOnce(() => this.getVideoTags())
+        if (!res.data || !Array.isArray(res.data.data)) throw new Error('Invalid video tags')
+        this.tags = res.data.data
+        this.applyRouteTag()
+        this.$nextTick(() => this.updateArrows())
+      } catch (_) { this.tagsError = true }
+      finally { this.tagsLoading = false }
     },
-    getRecommendedVideos() {
-      return videoApi.timelineRecommend(this.offset)
-    },
-    concurrentRequests() {
-      this.loading = true
-      this.tagError = ""
-      if (!this.curId) {
-        this.offset = 0
-        this.renderList = []
-        this.more = true
-      }
-      // 标签模式下只补标签, 不覆盖当前列表
-      const jobs = [this.retryOnce(() => this.getVideoTags())]
-      if (!this.curId) jobs.push(this.retryOnce(() => this.getRecommendedVideos()))
-      this.$axios.all(jobs)
-          .then(this.$axios.spread((tags, recommend) => {
-            this.tags = (tags.data && tags.data.data) || []
-            if (recommend) this.applyResult(recommend)
-            // 首次进入带 ?tag= 参数时，等标签就绪后再选中
-            this.applyRouteTag()
-            this.$nextTick(() => this.updateArrows())
-          }))
-          .catch(() => { if (!this.curId) this.tagError = "加载失败，请稍后重试" })
-          .finally(() => { this.loading = false; this.$nextTick(() => this.updateArrows()) })
-    },
+    concurrentRequests() { return Promise.all([this.loadVideoTags(), this.reload()]) },
     updateArrows() {
       const el = this.$refs.videoTags && this.$refs.videoTags.$el ? this.$refs.videoTags.$el : this.$refs.videoTags
       if (!el) return
@@ -251,6 +241,7 @@ export default {
   updated() {
     this.updateArrows()
   },
+  beforeDestroy() { this.reqSeq++ },
   activated() {
     // 首次进入拉标签 + 推荐流; 已选标签时保留标签视图, 只重拉一次避免数据过期
     if (!this.tags.length) this.concurrentRequests()
@@ -288,10 +279,10 @@ export default {
   flex-shrink: 0;
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(0,0,0,.06);
+  border: 1px solid var(--c-border-strong);
   border-radius: 50%;
-  background: rgba(255,255,255,.9);
-  color: #666;
+  background: var(--c-glass);
+  color: var(--c-text-secondary);
   font-size: 22px;
   line-height: 1;
   display: flex;
@@ -303,8 +294,8 @@ export default {
   transition: all .2s ease;
 }
 .video-list .scroll-arrow:hover {
-  background: #fff;
-  color: #8178ff;
+  background: var(--c-bg-elevated);
+  color: var(--c-accent-text);
   box-shadow: 0 6px 16px rgba(0,0,0,.12);
 }
 .video-list .scroll-arrow.disabled {
@@ -313,8 +304,8 @@ export default {
   box-shadow: none;
 }
 .video-list .scroll-arrow.disabled:hover {
-  background: rgba(255,255,255,.9);
-  color: #666;
+  background: var(--c-glass);
+  color: var(--c-text-secondary);
   box-shadow: none;
 }
 .video-list .scroll-arrow--left { margin-right: 10px; }
@@ -322,16 +313,16 @@ export default {
 
 .video-list .video-tag-btn.is-active,
 .video-list .video-tag-btn.is-active:hover {
-  background: #8685EF;
-  border-color: #8685EF;
-  color: #fff;
+  background: var(--c-button-primary);
+  border-color: var(--c-button-primary);
+  color: var(--c-text-on-accent);
 }
 
 .video-list .video-empty {
   width: 100%;
   padding: 60px 0;
   text-align: center;
-  color: #999;
+  color: var(--c-text-tertiary);
   font-size: 14px;
 }
 

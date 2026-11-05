@@ -2,7 +2,10 @@ import Vue from 'vue'
 import App from './App.vue'
 //ElementUI
 import ElementUI from 'element-ui';
-import "./assets/scss/base/element-variables.scss"
+// 语义 token 层（--c-* CSS 变量）：全站色值的唯一出处，深色模式靠覆写它实现
+import "./assets/scss/base/tokens.scss"
+import {applyAccent, getAccent} from './utils/accent'
+applyAccent(getAccent())
 //VueRouter
 import VueRouter from 'vue-router'
 import router from './router'
@@ -19,6 +22,11 @@ import "animate.css"
 import 'element-ui/lib/theme-chalk/index.css';
 //ElementUI 浮层皮肤覆盖：必须排在主题 CSS 之后，否则同优先级规则会被反压
 import "./assets/scss/base/element-overrides.scss"
+//ElementUI Tab 主题：同样必须排在主题 CSS 之后（原先在前面，靠更高优先级硬压）
+import "./assets/scss/base/element-variables.scss"
+import "./assets/scss/base/element-dark.scss"
+import "./assets/scss/base/tabs.scss"
+import "./assets/scss/base/player-surfaces.scss"
 //统一通知出口
 import {toast, confirmBox, confirmTyped} from "./utils/notify";
 //Tools(用于过滤器)

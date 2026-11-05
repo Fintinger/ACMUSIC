@@ -1,0 +1,168 @@
+/**
+ * 语义 token 层（唯一色值出处）
+ *
+ * 规则：
+ * 1. 全站只有本文件允许出现「页面级」具体色值；业务样式一律用 var(--c-*) 或
+ *    variables.scss 里的别名（$font-black / $color-theme-sec …）。
+ * 2. 组件接入语义变量后，由 html[data-theme="dark"] 统一切换配色。
+ * 3. 页面评论随主题切换；播放器内评论使用局部恒深色变量。
+ *
+ * 对比度基准（白底）：#000 21:1 / #555 7.46:1 / #666 5.74:1 / #5B5AD4 4.5:1+。
+ * 三级文字使用 #666，保证在次级块与 hover 表面上仍达到 4.5:1。
+ */
+
+:root {
+  --theme-accent: #8685ef;
+  --theme-accent-rgb: 134, 133, 239;
+  --theme-ink-light: color-mix(in srgb, var(--theme-accent), black 35%);
+  --theme-ink-dark: color-mix(in srgb, var(--theme-accent), white 45%);
+  --theme-on-accent: #101013;
+  scrollbar-gutter: stable;
+  /* ---- 背景 ---- */
+  --c-bg-base: #ffffff;          /* 页面底 */
+  --c-bg-elevated: #ffffff;      /* 卡片 / 下拉 / 弹窗（深色下比 base 亮一档） */
+  --c-bg-sunken: #f2f2f4;        /* 输入框 / 次级块（原 $color-theme-sec） */
+  --c-bg-sunken-hover: #ebebee;  /* 替代 darken($color-theme-sec, 3%) */
+  --c-bg-hover: rgba(0, 0, 0, .04);
+
+  /* ---- 描边 ---- */
+  --c-border: rgba(0, 0, 0, .06);
+  --c-border-strong: rgba(0, 0, 0, .12);
+
+  /* ---- 文字 ---- */
+  --c-text-primary: #000000;
+  --c-text-secondary: #555555;
+  --c-text-tertiary: #666666;
+  --c-text-inverse: #ffffff;
+  --c-text-on-accent: var(--theme-on-accent);
+  --c-button-primary: var(--theme-accent);
+  --c-button-primary-hover: var(--theme-accent);
+  --c-shimmer-start: #f0f0f0;
+  --c-shimmer-mid: #e6e6e6;
+  --c-scroll-thumb: rgba(0, 0, 0, .3);
+  --c-glass: rgba(255, 255, 255, .65);
+  --c-fm-ambient: radial-gradient(circle at 20% 20%, rgba(var(--theme-accent-rgb),.20), transparent 45%), radial-gradient(circle at 80% 30%, rgba(255,120,180,.15), transparent 50%), linear-gradient(135deg, #f8f9ff, #fff5f8);
+
+  /* ---- 主题色 ---- */
+  --c-accent: var(--theme-accent);                                 /* 色块场景（按钮底 / 进度条 / 装饰线） */
+  --c-accent-hover: var(--theme-accent);
+  --c-accent-text: var(--theme-ink-light);                            /* 文字场景（链接 / 激活 tab），保证 4.5:1+ */
+  --c-accent-soft: rgba(var(--theme-accent-rgb), .12);           /* 选中态浅底 */
+  --c-accent-soft-strong: rgba(var(--theme-accent-rgb), .20);
+
+  /* ---- 语义色 ---- */
+  --c-danger: #e5484d;
+  --c-danger-text: #b62e35;
+  --c-success: #12a87a;
+  --c-warning: #d98b0a;
+  --c-success-text: #267354;
+  --c-success-soft: rgba(38, 115, 84, .12);
+
+  /* 搜索弹层始终采用蓝紫深色语境，与页面主题独立。 */
+  --search-backdrop: rgba(30, 38, 56, .94);
+  --search-surface: #293448;
+  --search-input: #35435a;
+  --search-hover: #3d4b63;
+  --search-text: #edf1f7;
+  --search-muted: #b5c1d3;
+  --search-accent: var(--theme-ink-dark);
+  --search-border: rgba(237, 241, 247, .14);
+  --search-scroll: rgba(181, 193, 211, .4);
+
+  /* 播放器弹层独立于页面浅深主题，包含挂到 body 的下拉菜单。 */
+  --player-menu-bg: #29313e;
+  --player-menu-input: #202938;
+  --player-menu-hover: #3a4556;
+  --player-menu-text: #edf1f7;
+  --player-menu-secondary: #c1c9d6;
+  --player-menu-muted: #b0b9c8;
+  --player-menu-accent: var(--theme-ink-dark);
+  --player-menu-soft: rgba(var(--theme-accent-rgb), .14);
+  --player-menu-border: rgba(237, 241, 247, .16);
+  --player-menu-shadow: rgba(10, 16, 28, .36);
+
+  /* ---- 阴影 ---- */
+  --c-shadow-low: rgba(0, 0, 0, .04);
+  --c-shadow-mid: rgba(0, 0, 0, .12);
+  --c-shadow-high: rgba(0, 0, 0, .25);
+
+  /* 评论默认随页面主题，播放器在局部覆写这组变量。 */
+  --comment-text: var(--c-text-primary);
+  --comment-secondary: var(--c-text-secondary);
+  --comment-muted: var(--c-text-tertiary);
+  --comment-bg: var(--c-bg-sunken);
+  --comment-hover: var(--c-bg-sunken-hover);
+  --comment-dialog: var(--c-bg-elevated);
+  --comment-border: var(--c-border-strong);
+  --comment-accent: var(--c-accent-text);
+  --comment-button: var(--c-button-primary);
+  --comment-on-button: var(--c-text-on-accent);
+}
+
+// 播放器是独立的恒深色语境，不覆写全站 c-*，避免影响浮层外页面。
+.playerWrapper {
+  color-scheme: dark;
+  --comment-text: #e8e8ec;
+  --comment-secondary: #b8b8c2;
+  --comment-muted: #a0a0ac;
+  --comment-bg: rgba(255, 255, 255, .04);
+  --comment-hover: rgba(255, 255, 255, .08);
+  --comment-dialog: var(--player-menu-bg);
+  --comment-border: rgba(255, 255, 255, .12);
+  --comment-accent: var(--theme-ink-dark);
+  --comment-button: var(--theme-accent);
+  --comment-on-button: var(--theme-on-accent);
+}
+
+/**
+ * 深色模式（Phase 3 启用）
+ * 层级原则：深色下「浮起」靠 surface 比背景更亮 + 白描边，不靠阴影
+ * 页面使用蓝灰底，避免接近纯黑；卡片和输入框逐层提亮。
+ */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-bg-base: #202633;
+  --c-bg-elevated: #29313e;
+  --c-bg-sunken: #303949;
+  --c-bg-sunken-hover: #3a4556;
+  --c-bg-hover: rgba(255, 255, 255, .06);
+
+  --c-border: rgba(255, 255, 255, .09);
+  --c-border-strong: rgba(255, 255, 255, .16);
+
+  --c-text-primary: #edf1f7;
+  --c-text-secondary: #c1c9d6;
+  --c-text-tertiary: #b0b9c8;
+  --c-text-inverse: #ffffff;
+  --c-text-on-accent: var(--theme-on-accent);
+  --c-button-primary: var(--theme-accent);
+  --c-button-primary-hover: var(--theme-accent);
+  --c-shimmer-start: #2b3443;
+  --c-shimmer-mid: #354154;
+  --c-scroll-thumb: rgba(255, 255, 255, .3);
+  --c-glass: rgba(41, 49, 62, .94);
+  --c-fm-ambient: radial-gradient(circle at 20% 20%, rgba(var(--theme-accent-rgb),.12), transparent 45%), radial-gradient(circle at 80% 30%, rgba(255,120,180,.10), transparent 50%), linear-gradient(135deg, #293348, #242d3d);
+
+  --c-accent: var(--theme-accent);
+  --c-accent-hover: var(--theme-accent);
+  --c-accent-text: var(--theme-ink-dark);
+  --c-accent-soft: rgba(var(--theme-accent-rgb), .12);
+  --c-accent-soft-strong: rgba(var(--theme-accent-rgb), .20);
+
+  --c-danger: #ff5c61;
+  --c-danger-text: #ff9398;
+  --c-success: #2bc492;
+  --c-success-text: #87dbb7;
+  --c-success-soft: rgba(135, 219, 183, .14);
+  --c-warning: #e9a23b;
+
+  --c-shadow-low: rgba(0, 0, 0, .15);
+  --c-shadow-mid: rgba(0, 0, 0, .28);
+  --c-shadow-high: rgba(0, 0, 0, .42);
+}
+
+/* 防刷新白闪：主题切换/首帧时页面底色跟随 token */
+html {
+  background: var(--c-bg-base);
+}

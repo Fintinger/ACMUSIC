@@ -15,13 +15,16 @@ $ease-smooth: cubic-bezier(.4, 0, .2, 1);
 // Card Interaction Token
 $card-hover-y: -4px;
 $card-cover-scale: 1.04;
+$media-cover-scale: 1.3;
+$media-cover-duration: 1.3s;
+$playlist-cover-duration: 2.6s;
 $card-shadow-hover: 0 12px 30px rgba(0,0,0,.12);
 
 // Skeleton Shimmer Token
 $shimmer-duration: 1.6s;
-$shimmer-color-start: #f0f0f0;
-$shimmer-color-mid: #e6e6e6;
-$shimmer-color-end: #f0f0f0;
+$shimmer-color-start: var(--c-shimmer-start);
+$shimmer-color-mid: var(--c-shimmer-mid);
+$shimmer-color-end: var(--c-shimmer-start);
 
 // Player Expand Token
 $player-expand-scale: .96;

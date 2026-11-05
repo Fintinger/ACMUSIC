@@ -24,21 +24,25 @@
           @click="scrollTags(1)"
       >›</button>
     </div>
+    <EmptyState v-if="tagsError" compact title="歌单标签加载失败" action-text="重试标签" @action="loadTags"/>
     <el-row class="list">
       <GridSkeleton v-if="loading && !listForCurrentTag.length" type="playlist"/>
       <transition
-          v-if="!loading && listForCurrentTag.length"
+          v-if="listForCurrentTag.length"
           name="btq-fade"
           mode="out-in"
       >
         <PlaylistLayout :key="fadeKey" :list="listForCurrentTag" pic-name="coverImgUrl"/>
       </transition>
     </el-row>
-    <LoadMore :load="load" :loading="loading" :no-more="noMore"/>
+    <EmptyState v-if="listError" compact :title="listForCurrentTag.length ? '更多精品歌单加载失败' : '精品歌单加载失败'" desc="请检查网络后重试" action-text="重试" @action="retryList"/>
+    <EmptyState v-else-if="!initialLoading && !loading && !listForCurrentTag.length" compact title="这个标签暂无精品歌单"/>
+    <LoadMore v-if="!initialLoading && !listError && listForCurrentTag.length" :load="load" :loading="loading" :no-more="noMore"/>
   </div>
 </template>
 
 <script>
+import EmptyState from '@/components/common/EmptyState';
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
@@ -46,10 +50,15 @@ import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "BoutiquePlaylist",
-  components: {PlaylistLayout, LoadMore, GridSkeleton},
+  components: {EmptyState, PlaylistLayout, LoadMore, GridSkeleton},
   data() {
     return {
       loading: false,
+      initialLoading: true,
+      listError: false,
+      tagsError: false,
+      tagsLoading: false,
+      requestVersion: 0,
       BoutiquePlaylistTags: [],
       listForCurrentTag: [],
       currentTag: "",
@@ -71,32 +80,38 @@ export default {
     this.updateArrows()
   },
   methods: {
-    //加载更多
-    load() {
-      if (this.loading || this.noMore) return
-      this.loading = true
-      return this.getList(this.currentTag, this.lastTime).then(res => {
-        this.loadCallback(res.data)
-      }).catch(() => {
-        // 失败恢复 loading, 否则"加载中..."永久卡死
-        this.loading = false
-      })
-    },
-    //获取当前标签的歌单
+    load() { return this.fetchList(false) },
     getListForCurrentTag(cat) {
-      this.loading = true
-      this.listForCurrentTag = []
-      this.fadeKey++
-      this.getList(cat).then(res => {
-        this.currentTag = cat
-        this.listForCurrentTag = res.data.playlists
-        this.lastTime = res.data.lasttime
-      }).finally(() => { this.loading = false })
+      this.currentTag = cat
+      return this.fetchList(true)
     },
-    loadCallback(data) {
-      this.listForCurrentTag.push(...data.playlists)
-      this.lastTime = data.lasttime
-      this.loading = false
+    retryList() { return this.fetchList(!this.listForCurrentTag.length) },
+    async fetchList(reset) {
+      if (!reset && (this.loading || this.noMore)) return
+      if (reset) { this.requestVersion++; this.listForCurrentTag = []; this.lastTime = ''; this.fadeKey++; this.initialLoading = true }
+      const version = this.requestVersion
+      this.loading = true; this.listError = false
+      try {
+        const res = await this.getList(this.currentTag, reset ? '' : this.lastTime)
+        if (version !== this.requestVersion) return
+        const data = res.data || {}
+        if (!Array.isArray(data.playlists)) throw new Error('Invalid playlists')
+        const seen = new Set(this.listForCurrentTag.map(item => item.id))
+        this.listForCurrentTag = this.listForCurrentTag.concat(data.playlists.filter(item => !seen.has(item.id)))
+        this.lastTime = data.more === false || !data.playlists.length ? '' : data.lasttime
+      } catch (_) { if (version === this.requestVersion) this.listError = true }
+      finally { if (version === this.requestVersion) { this.loading = false; this.initialLoading = false } }
+    },
+    async loadTags() {
+      if (this.tagsLoading) return
+      this.tagsLoading = true; this.tagsError = false
+      try {
+        const res = await this.getTags()
+        if (!res.data || !Array.isArray(res.data.tags)) throw new Error('Invalid tags')
+        this.BoutiquePlaylistTags = res.data.tags
+        this.$nextTick(() => this.updateArrows())
+      } catch (_) { this.tagsError = true }
+      finally { this.tagsLoading = false }
     },
     //歌单点击
     plClk(id) {
@@ -127,14 +142,10 @@ export default {
       el.scrollBy({ left: dir * 320, behavior: 'smooth' })
     }
   },
+  beforeDestroy() { this.requestVersion++ },
   beforeMount() {
-    //获取精品歌单tags,默认加载一些歌单（无tag参数）
-    this.$axios.all([this.getTags(), this.getList()])
-        .then(this.$axios.spread((tags, list) => {
-          this.BoutiquePlaylistTags = tags.data.tags
-          this.loadCallback(list.data)
-          this.$nextTick(() => this.updateArrows())
-        }))
+    this.loadTags()
+    this.getListForCurrentTag('')
   },
 }
 </script>
@@ -177,10 +188,10 @@ export default {
       align-self: center;
       width: 32px;
       height: 32px;
-      border: 1px solid rgba(0,0,0,.06);
+      border: 1px solid var(--c-border-strong);
       border-radius: 50%;
-      background: rgba(255,255,255,.9);
-      color: #666;
+      background: var(--c-bg-elevated);
+      color: var(--c-text-secondary);
       font-size: 22px;
       line-height: 1;
       display: flex;
@@ -190,8 +201,8 @@ export default {
       box-shadow: 0 4px 12px rgba(0,0,0,.08);
       transition: all .2s ease;
       &:hover {
-        background: #fff;
-        color: #8178ff;
+        background: var(--c-bg-elevated);
+        color: var(--c-accent-text);
         box-shadow: 0 6px 16px rgba(0,0,0,.12);
       }
       &.disabled {
@@ -199,8 +210,8 @@ export default {
         cursor: default;
         box-shadow: none;
         &:hover {
-          background: rgba(255,255,255,.9);
-          color: #666;
+          background: var(--c-bg-elevated);
+          color: var(--c-text-secondary);
           box-shadow: none;
         }
       }

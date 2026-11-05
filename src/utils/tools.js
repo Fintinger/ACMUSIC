@@ -6,7 +6,7 @@ export function toggleScrollY(status) {
     } else {
         const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
         document.documentElement.style.overflowY = 'hidden'
-        if (scrollbarWidth > 0) {
+        if (scrollbarWidth > 0 && !(window.CSS && window.CSS.supports('scrollbar-gutter: stable'))) {
             document.documentElement.style.paddingRight = scrollbarWidth + 'px'
         }
     }

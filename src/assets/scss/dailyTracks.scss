@@ -1,16 +1,71 @@
+/**
+ * 每日推荐页
+ *
+ * 原方案 h1 = 6rem（96px）+ 主题紫 + 副标题 12.8px + 下方 8rem 空白，
+ * 与站点其他页面（28px 页面标题）完全脱节。现收敛为统一 hero 规格：
+ * 28px 标题 + 日期副标题 + 右侧「播放全部」（列表内不再重复按钮组）。
+ */
 @import "base/variables";
 
-.daily-songs{
-  text-align: center;
-  h1{
-    font-size: 6rem;
-    margin: 5rem 0  2rem 0;
-    color: $color-main;
+.daily-songs {
+  padding-bottom: 80px;
 
+  .daily-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: $sp-4;
+    flex-wrap: wrap;
+    padding: $sp-6 0 $sp-5;
+    border-bottom: 1px solid var(--c-border);
+    margin-bottom: $sp-3;
+
+    .daily-hero-main {
+      min-width: 0;
+    }
+
+    .daily-title {
+      font-size: $fs-page;
+      font-weight: 700;
+      line-height: 1.3;
+      color: $font-black;
+      margin: 0 0 $sp-2;
+    }
+
+    .daily-sub {
+      font-size: 14px;
+      color: $font-black-2;
+      margin: 0;
+    }
+
+    // 播放全部：主色实心胶囊，与播放器主按钮同一套视觉
+    .daily-play {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 38px;
+      padding: 0 20px;
+      border: none;
+      border-radius: $radius-pill;
+      background: var(--c-button-primary);
+      color: var(--c-text-on-accent);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .2s ease, transform .15s ease;
+
+      .ac-icon { font-size: 14px; }
+
+      &:hover { background: var(--c-button-primary-hover); }
+      &:active { transform: scale(.97); }
+    }
   }
-  p{
-    font-size: .8rem;
+
+  .daily-songs__tip {
     color: $font-black-2;
-    margin-bottom: 8rem;
+    font-size: 14px;
+    padding: $sp-4 0;
   }
 }

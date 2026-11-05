@@ -6,12 +6,12 @@
           <cover-image :src="mv[picName] | imgParam('500y280')" :alt="mv.name + '的封面'" custom-class="image"/>
         </div>
         <div class="moreInfo">
-          <div class="mvName">{{ mv.name }}</div>
-          <div class="mvArtist">{{ mv.artistName }}</div>
+          <div class="mvName" :title="mv.name">{{ mv.name }}</div>
+          <div class="mvArtist" :title="mv.artistName">{{ mv.artistName }}</div>
           <div class="meta-row">
             <span class="meta-item"><BaseIcon name="play"/>{{ mv.playCount | Div1w(mv.playCount) }}</span>
             <span class="meta-item"><i class="icon-time"></i>{{ mv.duration | formatDuration }}</span>
-            <span class="meta-item"><i class="icon-date"></i>{{ mv.publishTime | formatMs("YYYY年MM月DD日") }}</span>
+            <span v-if="mv.publishTime" class="meta-item"><BaseIcon name="calendar"/>{{ mv.publishTime | formatMs("YYYY年MM月DD日") }}</span>
           </div>
         </div>
       </el-card>
@@ -35,19 +35,21 @@ export default {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "src/assets/scss/base/variables";
+@import "src/assets/scss/base/motion";
 .mvList > li {
-  background: #fff;
+  background: var(--c-bg-elevated);
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,.08);
-  transition: transform .3s ease, box-shadow .3s ease;
+  transition: transform $motion-normal $ease-standard, box-shadow $motion-normal $ease-standard;
   cursor: pointer;
   padding: 0;
 }
 .mvList > li:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 30px rgba(0,0,0,.14);
+  box-shadow: $card-shadow-hover;
 }
 .mvList .el-card {
   border: none !important;
@@ -67,18 +69,18 @@ export default {
 }
 .moreInfo { padding: 14px 16px 16px; }
 .mvName {
-  font-size: 15px; font-weight: 600; color: #222;
+  font-size: 15px; font-weight: 600; color: var(--c-text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   line-height: 1.4; margin-bottom: 6px;
 }
 .mvArtist {
-  font-size: 13px; color: #999;
+  font-size: 13px; color: var(--c-text-tertiary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   line-height: 1.4; margin-bottom: 10px;
 }
 .meta-row {
   display: flex; align-items: center; gap: 12px;
-  font-size: 12px; color: #999; flex-wrap: wrap;
+  font-size: 12px; color: var(--c-text-tertiary); flex-wrap: wrap;
 }
 .meta-item {
   display: inline-flex; align-items: center; gap: 4px;

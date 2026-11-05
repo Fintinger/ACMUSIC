@@ -236,14 +236,14 @@ export default {
     animation: pulse 1.6s infinite;
   }
   &--success { color: $color-ornament; .dot { background: $color-ornament; animation: none; } }
-  &--scan { color: $color-main; .dot { background: $color-main; } }
+  &--scan { color: $color-main-text; .dot { background: $color-main; } }
   &--expired { color: #e6a23c; .dot { background: #e6a23c; animation: none; } }
   &--error { color: #f56c6c; .dot { background: #f56c6c; animation: none; } }
 }
 
 .qr-refresh {
   border: none; background: transparent;
-  color: $color-main; font-size: 13px; cursor: pointer;
+  color: $color-main-text; font-size: 13px; cursor: pointer;
   &:hover { text-decoration: underline; }
 }
 

@@ -9,6 +9,7 @@
         <BaseIcon name="close"/>
       </button>
 
+      <div class="playerAtmosphere" :style="{ backgroundImage: 'url(' + coverUrl + ')' }"></div>
       <section class="heroSection">
         <div class="heroLeft">
           <div class="coverWrapper">
@@ -24,39 +25,41 @@
           </div>
           <div class="progressSection" ref="progressPanel">
             <div class="progressTrack" @click="progressClk">
+              <div v-if="chorusBand" class="expandedChorusBand" :style="chorusBand" title="副歌区间"></div>
               <div class="progressBuffer" :style="{ width: bufferPercent + '%' }"></div>
               <div class="progressFill" :style="{ width: progressPercent + '%' }"><div class="progressThumb" @mousedown.stop="dragProgress"></div></div>
             </div>
             <div class="progressTimes"><span>{{ formatTime(timeNow) }}</span><span>{{ formatTime(duration) }}</span></div>
           </div>
-          <div class="controlsRow">
-            <span
+          <p v-if="expandedHint" class="expandedHint" role="status">{{ expandedHint }}</p>
+          <div class="controlsRow" @keydown.space.stop @keydown.left.stop @keydown.right.stop>
+            <button type="button"
                 class="modeBtn"
                 :class="'mode-' + playMode"
-                :title="playMode === 'order' ? '列表循环' : playMode === 'random' ? '随机播放' : '单曲循环'"
+                :title="playMode === 'order' ? '列表循环' : playMode === 'sequence' ? '顺序播放' : playMode === 'random' ? '随机播放' : '单曲循环'"
                 @click="togglePlayMode"
             >
               <BaseIcon v-if="playMode === 'order'" name="loopList" :size="20"/>
               <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="20"/>
               <BaseIcon v-else-if="playMode === 'sequence'" name="sequence" :size="20"/>
               <BaseIcon v-else name="loopOne" :size="20"/>
-            </span>
-            <span class="trackBtn prevBtn" @click="prevTrack"><BaseIcon name="prev" :size="20"/></span>
-            <div class="playBtn" @click="togglePlay"><i v-if="isLoading" class="player-loading-spinner"></i><BaseIcon v-else-if="!isPlaying" name="play"/><BaseIcon v-else name="pause"/></div>
-            <span class="trackBtn nextBtn" @click="nextTrack"><BaseIcon name="next" :size="20"/></span>
-            <span class="modeBtn mode-spacer"></span>
+            </button>
+            <button type="button" aria-label="上一首" class="trackBtn prevBtn" @click="prevTrack"><BaseIcon name="prev" :size="20"/></button>
+            <button type="button" class="playBtn" :aria-label="isPlaying ? '暂停' : '播放'" @click="togglePlay"><i v-if="isLoading" class="player-loading-spinner"></i><BaseIcon v-else-if="!isPlaying" name="play"/><BaseIcon v-else name="pause"/></button>
+            <button type="button" aria-label="下一首" class="trackBtn nextBtn" @click="nextTrack"><BaseIcon name="next" :size="20"/></button>
+            <span class="modeBtn mode-spacer" aria-hidden="true"></span>
           </div>
-          <div class="actionsRow">
-            <button class="actionBtn" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>喜欢</span></button>
+          <div class="actionsRow" @keydown.space.stop>
+            <button class="actionBtn" :aria-pressed="isLiked" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>喜欢</span></button>
             <button class="actionBtn" :disabled="downloading" @click="downloadSong"><BaseIcon name="download"/><span>{{ downloading ? '获取中' : '下载' }}</span></button>
-            <button class="actionBtn" @click="shareSong"><BaseIcon name="share"/><span>分享</span></button>
+
           </div>
         </div>
         <div class="heroRight">
           <div class="rightTabs">
-            <span :class="{ active: rightTab === 'lyric' }" @click="rightTab = 'lyric'"><BaseIcon name="radio"/> 歌词</span>
+            <span :class="{ active: rightTab === 'lyric' }" @click="rightTab = 'lyric'"><BaseIcon name="lyrics"/> 歌词</span>
             <span :class="{ active: rightTab === 'tracks' }" @click="rightTab = 'tracks'"><BaseIcon name="play"/> 相似歌曲</span>
-            <span :class="{ active: rightTab === 'playlist' }" @click="rightTab = 'playlist'"><BaseIcon name="share"/> 相似歌单</span>
+            <span :class="{ active: rightTab === 'playlist' }" @click="rightTab = 'playlist'"><BaseIcon name="list"/> 相似歌单</span>
           </div>
           <div class="rightContent">
             <div v-show="rightTab === 'lyric'" class="tabPanel">
@@ -119,6 +122,7 @@ export default {
   data() {
     return {
       isExpand: false,
+      coreReady: false,
       isModalOpen: false,
       lyric: [],
       // 下载按钮请求中标志，防止连点
@@ -127,12 +131,9 @@ export default {
       currentSong: {},
       simiTracks: [],
       simiPlaylist: [],
-      // 大播放器的红心状态：由 PlayerCore emit('likeChange') 同步
-      // 不在本地另存数据，避免双份状态不一致
-      likeMirror: false,
       rightTab: 'lyric',
       lastActiveIdx: -1,
-      bgStyle: 'linear-gradient(170deg, #1a1a2e 0%, #0f0f23 100%)',
+      bgStyle: 'linear-gradient(150deg, #30394b, #202633)',
       fsm: 'TOP',
       scrollObserver: null,
       wheelAccum: 0,
@@ -141,6 +142,8 @@ export default {
     }
   },
   computed: {
+    chorusBand() { return this.coreReady ? this.$refs.pgPanel.chorusStyle : null },
+    expandedHint() { return this.coreReady ? this.$refs.pgPanel.hintText : '' },
     coverUrl() {
       const s = this.currentSong
       return (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || ''
@@ -164,8 +167,8 @@ export default {
     playMode() { return this.$refs.pgPanel ? this.$refs.pgPanel.playMode : 'order' },
     progressPercent() { return this.duration ? (this.timeNow / this.duration) * 100 : 0 },
     bufferPercent() { return this.duration ? (this.bufferedTime / this.duration) * 100 : 0 },
-    // 红心状态来自 PlayerCore（单一数据源），这里镜像同步
-    isLiked() { return this.likeMirror },
+    // 直接订阅 Core 的响应式状态，乐观更新与失败回滚同步显示。
+    isLiked() { return this.coreReady ? this.$refs.pgPanel.isLiked : false },
   },
   watch: {
     isExpand(val) {
@@ -189,6 +192,7 @@ export default {
     },
     expanded() {
       document.body.style.overflow = 'hidden'
+      this.timeNow = Number(this.$refs.pgPanel.timeNow) || 0
       this.$refs.pgPanel.$on('tUpdate', (t) => this.timeUpdate(t))
       this.$nextTick(() => this.setupScrollObserver())
     },
@@ -250,6 +254,8 @@ export default {
     },
 
     onWheel(e) {
+      // 歌词、队列和设置各自滚动，避免滚歌词时整页跳到评论区。
+      if (e.target.closest && e.target.closest('.lyricsScroll, .cardScroll')) return
       const scroller = this.$refs.scrollEl
       if (!scroller) return
       if (this.transitioning) { e.preventDefault(); return }
@@ -313,7 +319,7 @@ export default {
       const sid = this.currentSong.id
       if (!sid || sid === this.colorSongId) return
       this.colorSongId = sid
-      this.bgStyle = buildBackground(img)
+      this.bgStyle = 'linear-gradient(rgba(41,49,62,.72), rgba(32,38,51,.88)), ' + buildBackground(img)
     },
     getLyric(id) {
       this.lyric = []; this.lastActiveIdx = -1
@@ -412,7 +418,6 @@ export default {
         this.$toast.warning('下载失败，请稍后重试')
       }).then(() => { this.downloading = false })
     },
-    shareSong() {},
     formatTime(s) { s = s * 1; if (!s || isNaN(s)) return '00:00'; const m = Math.floor(s / 60); return String(m).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0') },
     trackAlbumPic(t) { return (t.album && t.album.picUrl) || (t.al && t.al.picUrl) || '' },
     trackArtists(t) { const ar = t.ar || t.artists; return ar && ar.length ? ar.map(a => a.name).join(' / ') : '' },
@@ -423,7 +428,9 @@ export default {
     progressClk(evt) {
       const p = this.$refs.pgPanel; if (!p || !this.$refs.progressPanel) return
       const r = this.$refs.progressPanel.getBoundingClientRect()
-      p.sel.currentTime = Math.max(0, Math.min(1, (evt.clientX - r.left) / r.width)) * this.duration
+      const time = Math.max(0, Math.min(1, (evt.clientX - r.left) / r.width)) * this.duration
+      if (p.abSetting) { p._abPickPoint(time); return }
+      p._seekTo(time)
     },
     dragProgress(evt) {
       const p = this.$refs.pgPanel; if (!p || !this.$refs.progressPanel) return
@@ -438,12 +445,7 @@ export default {
     this.$refs.pgPanel.$on('songChange', (s) => { this.currentSong = s; this.lastActiveIdx = -1; this.colorSongId = null })
     this.$refs.pgPanel.$on('getLyric', this.getLyric)
     this.$refs.pgPanel.$on('getSimi', this.concurrentRequestsGetSimi)
-    // 同步 PlayerCore 的红心状态（用户点击会触发 PlayerCore.toggleLike()）
-    this.$refs.pgPanel.$on('likeChange', ({ liked }) => { this.likeMirror = liked })
-    // 初始化镜像状态（已加载歌曲）
-    if (this.$refs.pgPanel.currentSong && this.$refs.pgPanel.currentSong.id) {
-      this.likeMirror = !!this.$refs.pgPanel.isLiked
-    }
+    this.coreReady = true
     this._restoreUi()
   },
   beforeDestroy() {
@@ -539,8 +541,9 @@ export default {
 
   .songMeta {
     text-align: center; width: 100%;
+    .songTitle { text-align: center; }
     .songTitle { font-size: 24px; font-weight: 700; color: rgba(255,255,255,0.92); line-height: 1.3; margin: 0 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 8px; }
-    .songArtist { font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.5); cursor: pointer; margin: 0 0 3px; &:hover { color: #8685EF; } }
+    .songArtist { font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.5); cursor: pointer; margin: 0 0 3px; &:hover { color: var(--c-accent); } }
     .songAlbum { font-size: 13px; color: rgba(255,255,255,0.32); cursor: pointer; margin: 0; &:hover { color: rgba(255,255,255,0.5); } }
   }
 
@@ -548,7 +551,7 @@ export default {
     width: 100%; max-width: 300px;
     .progressTrack { width: 100%; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; cursor: pointer; position: relative; &:hover { height: 6px; }
       .progressBuffer { position: absolute; inset: 0; height: 100%; background: rgba(255,255,255,0.1); border-radius: inherit; pointer-events: none; }
-      .progressFill { height: 100%; background: #8685EF; border-radius: inherit; position: relative; transition: width 0.1s linear; box-shadow: 0 0 8px rgba(134,133,239,0.2);
+      .progressFill { height: 100%; background: var(--c-accent); border-radius: inherit; position: relative; transition: width 0.1s linear; box-shadow: 0 0 8px rgba(var(--theme-accent-rgb), 0.2);
         .progressThumb { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; background: #fff; border-radius: 50%; box-shadow: 0 1px 6px rgba(0,0,0,0.4); opacity: 0; transition: opacity 180ms ease; }
       }
       &:hover .progressFill .progressThumb { opacity: 1; }
@@ -576,16 +579,16 @@ export default {
       cursor: pointer;
       color: rgba(255,255,255,0.42);
       transition: all 180ms ease;
-      &.mode-random, &.mode-loop { color: #8685EF; }
+      &.mode-random, &.mode-loop { color: var(--c-accent); }
       &:hover {
         color: rgba(255,255,255,0.9);
         background: rgba(255,255,255,0.07);
         border-color: rgba(255,255,255,0.06);
       }
-      &.mode-random:hover, &.mode-loop:hover { color: #8685EF; }
+      &.mode-random:hover, &.mode-loop:hover { color: var(--c-accent); }
       &.mode-spacer { pointer-events: none; border-color: transparent; background: none; }
     }
-    .playBtn { width: 44px; height: 44px; border-radius: 50%; background: #8685EF; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(134,133,239,0.35); transition: all 220ms ease; i { font-size: 20px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(134,133,239,0.5); } &:active { transform: scale(0.95); } }
+    .playBtn { width: 44px; height: 44px; border-radius: 50%; background: var(--c-accent); color: var(--theme-on-accent); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(var(--theme-accent-rgb), 0.35); transition: all 220ms ease; i { font-size: 20px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(var(--theme-accent-rgb), 0.5); } &:active { transform: scale(0.95); } }
   }
 
   .actionsRow {
@@ -606,8 +609,8 @@ export default {
       &:disabled { opacity: 0.5; cursor: not-allowed; }
       &.active {
         color: rgba(255,255,255,0.92);
-        border-color: rgba(134,133,239,0.3);
-        background: rgba(134,133,239,0.12);
+        border-color: rgba(var(--theme-accent-rgb), 0.3);
+        background: rgba(var(--theme-accent-rgb), 0.12);
         i { color: #ef4444; }
       }
     }
@@ -617,7 +620,7 @@ export default {
 
   .rightTabs {
     display: flex; border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
-    span { padding: 12px 20px; font-size: 13px; color: rgba(255,255,255,0.35); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 180ms ease; display: flex; align-items: center; gap: 5px; i { font-size: 14px; } &:hover { color: rgba(255,255,255,0.6); } &.active { color: rgba(255,255,255,0.88); font-weight: 600; border-bottom-color: #8685EF; } }
+    span { padding: 12px 20px; font-size: 13px; color: rgba(255,255,255,0.35); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 180ms ease; display: flex; align-items: center; gap: 5px; i { font-size: 14px; } &:hover { color: rgba(255,255,255,0.6); } &.active { color: rgba(255,255,255,0.88); font-weight: 600; border-bottom-color: var(--c-accent); } }
   }
 
   .rightContent { flex: 1; min-height: 0; overflow: hidden; padding-top: 16px; }
@@ -634,7 +637,7 @@ export default {
     /* 逐字（yrc）：未唱到的字压暗，唱到的字提亮 */
     .lyricWord { opacity: .45; transition: opacity 120ms linear, color 120ms linear; }
     .lyricWord.on { opacity: 1; }
-    p.active .lyricWord.on { color: #fff; text-shadow: 0 0 14px rgba(134,133,239,0.5); }
+    p.active .lyricWord.on { color: #fff; text-shadow: 0 0 14px rgba(var(--theme-accent-rgb), 0.5); }
     /* 翻译副行 */
     .lyricTr { display: block; font-size: .6em; font-weight: 400; line-height: 1.7; color: rgba(255,255,255,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     p.active .lyricTr { color: rgba(255,255,255,0.62); }
@@ -653,20 +656,7 @@ export default {
     padding: 80px 6% 120px; box-sizing: border-box; max-width: 1400px; margin: 0 auto;
     border-top: 1px solid rgba(255,255,255,0.06);
     .sectionHeader { margin-bottom: 28px; h2 { font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.88); margin: 0; } }
-    .comment-container {
-      .comment-header-bar { display: none; }
-      .section-divider { background: linear-gradient(to right, rgba(255,255,255,0.08), transparent); }
-      .empty-state p { color: rgba(255,255,255,.28); }
-      .load-more {
-        button { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.08); color: rgba(255,255,255,.5); &:hover { background: rgba(255,255,255,.1); } }
-        p { color: rgba(255,255,255,.3); }
-      }
-      .comment-content .comment-item {
-        .main { .name { color: rgba(255,255,255,0.8); .nickname { color: rgba(255,255,255,0.45); &:hover { color: #8685EF; } } } .content { color: rgba(255,255,255,0.7); }
-          .time-ribbon { .ribbon > span { color: rgba(255,255,255,0.3); &:hover { color: rgba(255,255,255,0.55); } } .comment-delete .el-button { color: rgba(255,255,255,0.3); &:hover { color: #ef4444; } } }
-        }
-      }
-    }
+    .comment-container .comment-header-bar { display: none; }
   }
 
   .overlayBtn {
@@ -714,6 +704,64 @@ export default {
     .lyricsScroll { max-height: calc(60vh - 100px); height: calc(60vh - 100px); .lyricsInner { padding: 20vh 0; } }
     .musicCard { flex: 0 0 120px; width: 120px; .cardCover { width: 120px; height: 120px; } }
     .commentsSection { padding: 60px 32px 80px; }
+  }
+}
+</style>
+
+<style lang="scss">
+@import "../../assets/scss/base/variables";
+@import "../../assets/scss/base/motion";
+
+.playerWrapper.expandWindow {
+  .playerAtmosphere { position: fixed; inset: -10%; background-size: cover; background-position: center; filter: blur(100px); opacity: .16; pointer-events: none; }
+  .heroSection { position: relative; display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.35fr); gap: clamp(40px, 6vw, 100px); min-height: 100vh; padding: 80px 6% 100px; }
+  .heroLeft { position: relative; width: 100%; min-width: 0; max-width: 420px; justify-self: center; gap: $sp-5; }
+  .coverWrapper { width: clamp(220px, 25vw, 340px); height: auto; aspect-ratio: 1; }
+  .coverWrapper .coverArt { border-radius: $player-radius-xl; box-shadow: $player-shadow-lg; }
+  .songMeta .songTitle { text-align: center; font-size: clamp(24px, 2.2vw, 32px); }
+  .songMeta .songArtist { color: var(--player-menu-secondary); }
+  .songMeta .songAlbum { color: var(--player-menu-muted); margin-top: $sp-1; }
+  .progressSection { max-width: 380px; }
+  .progressSection .progressTrack { height: 6px; isolation: isolate; }
+  .expandedChorusBand { position: absolute; top: -3px; height: 12px; background: var(--player-menu-accent); opacity: .38; border-radius: $radius-pill; pointer-events: none; }
+  .progressSection .progressTimes { color: var(--player-menu-muted); }
+  .expandedHint { color: var(--player-menu-accent); font-size: $fs-aux; text-align: center; line-height: 1.5; margin: 0; }
+  .controlsRow button { padding: 0; font: inherit; color: inherit; }
+  .controlsRow .playBtn { width: 58px; height: 58px; border: none; }
+  .controlsRow .modeBtn { background: transparent; color: var(--player-menu-secondary); }
+  .actionsRow .actionBtn.active { background: var(--player-menu-soft); border-color: var(--player-menu-accent); color: var(--player-menu-text); }
+  .actionsRow .actionBtn.active .ac-icon { color: $player-danger; }
+  .actionsRow .actionBtn.active svg path { fill: currentColor; }
+  .heroRight { align-self: center; width: 100%; min-width: 0; height: clamp(440px, 72vh, 760px); }
+  .rightTabs { justify-content: center; span { color: var(--player-menu-muted); padding: $sp-3 $sp-4; } }
+  .rightContent { padding-top: $sp-5; min-height: 0; flex: 1; }
+  .rightTabs { flex: 0 0 auto; }
+  .tabPanel { height: 100%; }
+  .tabPanel .lyricsScroll, .tabPanel .cardScroll { height: 100%; min-height: 0; max-height: none; box-sizing: border-box; }
+  .lyricsScroll { height: 66vh; max-height: 700px; min-height: 400px;
+    .lyricsInner { padding: 30vh 0; }
+    p { font-size: clamp(16px, 1.6vw, 22px); line-height: 2.8; color: var(--player-menu-muted); white-space: nowrap; word-break: keep-all; }
+    p.active { font-size: clamp(22px, 2.2vw, 32px); color: var(--player-menu-text); }
+    p span { white-space: nowrap; }
+  }
+  .cardScroll { max-height: 66vh; overflow-y: auto; }
+  button:focus-visible { outline: 2px solid var(--player-menu-accent); outline-offset: 3px; }
+}
+@media (max-width: 900px) {
+  .playerWrapper.expandWindow {
+    .heroSection { grid-template-columns: minmax(0, 1fr); padding: 80px $sp-5 100px; gap: $sp-6; }
+    .heroLeft { max-width: 360px; }
+    .heroRight { min-height: 0; height: 58vh; }
+    .coverWrapper { width: 240px; }
+    .lyricsScroll { height: 50vh; min-height: 300px; .lyricsInner { padding: 20vh 0; } }
+  }
+}
+@media (min-width: 901px) and (max-height: 800px) {
+  .playerWrapper.expandWindow {
+    .heroSection { padding-top: 48px; padding-bottom: 80px; }
+    .heroLeft { gap: $sp-4; }
+    .coverWrapper { width: clamp(190px, 32vh, 270px); }
+    .lyricsScroll { min-height: 300px; height: 65vh; }
   }
 }
 </style>

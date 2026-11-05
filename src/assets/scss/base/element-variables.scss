@@ -1,36 +1,54 @@
+/**
+ * Element UI 主题接入层（Tab 组件）
+ *
+ * 引入顺序：main.js 中排在 theme-chalk 与 element-overrides 之后
+ *（同优先级规则才压得住 Element 出厂样式，见 main.js 注释）。
+ *
+ * 设计约定：全站「视图切换」类 tab 只有一种语言——「下划线 + 主题色」，
+ * 与发现页 .explore-tabs、搜索页 .search-tabs、登录页 .login-tabs 同一视觉。
+ * 原「灰底胶囊 + 固定 5rem 宽」方案已废弃（固定宽会把长文案挤折行，
+ * 且与发现页风格分裂）；窄列里的紧凑筛选（如 UserDetailLayout 的云盘/专辑）
+ * 仍可用局部胶囊覆盖——那是标签组语义，不是视图切换。
+ *
+ * 另：原 `$--color-primary: $color-main;` 是死代码——项目从未把该变量喂给
+ * Element 的 SCSS 构建，删掉以免误导。主按钮配色改由 element-overrides.scss 接管。
+ */
 @import "variables";
 
-$--color-primary: $color-main;
-
-//tab主题色改变
 .el-tabs__header {
-  .el-tabs__item{
-    font: {
-      size: 1.1rem;
-      weight: bold;
-    };
-    width: 5rem;
-    margin-right: 1rem;
-    box-sizing: border-box;
-    text-align: center;
-    padding: .5rem!important;
-    line-height: 1.2rem;
-    border-radius: 8px;
-    &:hover{
-      color: $color-main;
-    }
-  }
-  .el-tabs__item.is-active {
-    background: $color-theme-sec;
-    color: $color-main;
+  margin-bottom: 20px;
+
+  // 去掉底部灰长线与滑动下划线：激活态由 item 自己的 border-bottom 表达
+  .el-tabs__nav-wrap::after {
+    display: none;
   }
 
-  .el-tabs__nav-wrap::after{
-    content: "";
+  .el-tabs__active-bar {
     display: none;
   }
-  .el-tabs__active-bar{
-    display: none;
-    //background:  $color-main;
+
+  .el-tabs__item {
+    height: 40px;
+    line-height: 40px;
+    // Element 自带 .is-top:nth-child(2){padding-left:0} / :last-child{padding-right:0}
+    //（0,3,0 权重），必须 !important 才能压住
+    padding: 0 2px;
+    margin-right: 28px;
+    font-size: 15px;
+    font-weight: 500;
+    color: $font-black-2;
+    border-bottom: 2px solid transparent;
+    transition: color .2s, border-color .2s;
+
+    &:hover {
+      color: $font-black-1;
+    }
+
+    // 文字用加深档主色（$color-main-text），纯 var(--c-accent) 作文字对比度不达标
+    &.is-active {
+      color: $color-main-text;
+      font-weight: 600;
+      border-bottom-color: $color-main;
+    }
   }
 }

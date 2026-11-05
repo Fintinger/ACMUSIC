@@ -47,11 +47,11 @@ export default {
   max-width: 520px;
   padding: 48px 40px;
   border-radius: 24px;
-  background: rgba(255, 255, 255, .55);
+  background: var(--c-glass);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
-  border: 1px solid rgba(255, 255, 255, .45);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, .06);
+  border: 1px solid var(--c-border-strong);
+  box-shadow: 0 12px 40px var(--c-shadow-low);
 }
 
 .nf-code {
@@ -59,7 +59,7 @@ export default {
   font-size: 72px;
   font-weight: 700;
   line-height: 1;
-  color: $color-main;
+  color: $color-main-text;
   letter-spacing: 2px;
 }
 
@@ -87,7 +87,7 @@ export default {
   height: 38px;
   padding: 0 24px;
   border-radius: 19px;
-  border: 1px solid rgba(0, 0, 0, .1);
+  border: 1px solid var(--c-border-strong);
   background: transparent;
   font-size: 14px;
   color: $font-black-1;
@@ -96,18 +96,18 @@ export default {
 
   &:hover {
     border-color: $color-main;
-    color: $color-main;
+    color: $color-main-text;
   }
 
   &.primary {
-    background: $color-main;
-    border-color: $color-main;
-    color: $font-white;
+    background: var(--c-button-primary);
+    border-color: var(--c-button-primary);
+    color: var(--c-text-on-accent);
 
     &:hover {
-      background: $color-main-1;
-      border-color: $color-main-1;
-      color: $font-white;
+      background: var(--c-button-primary-hover);
+      border-color: var(--c-button-primary-hover);
+      color: var(--c-text-on-accent);
     }
   }
 }

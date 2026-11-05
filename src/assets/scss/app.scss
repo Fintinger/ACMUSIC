@@ -1,15 +1,29 @@
 /**
-首页样式
+ * 应用外壳样式
+ *
+ * 容器规范（全站唯一）：内容区 max-width 1400px 居中，左右 24px 内边距，
+ * 顶部 40px 呼吸。导航栏行用同一组数值（见 navigationBar.scss），保证
+ * logo / 内容左边缘在任意视口下都对齐。
+ *
+ * 历史问题：原 `width: 80%` 无上限 —— 1280 视口下导航内容行只有 1024px，
+ * 而发现页自己写的 max-width:1200px 反而更宽，顶对齐直接断层；
+ * 2K 屏下首页一行 5 张卡每张 300px+，阅读动线过长。
+ * 2026-11：1200 → 1400（1440 视口下内容 1352，5 列网格每列 ~257，卡片更舒展）。
+ * 页面级不再各自写 max-width —— 宽度只由这里和 navigationBar 决定。
  */
 
+@import "base/variables";
+// 导航栏样式（原先在 app.scss 顶部 import，容器改造时遗漏过一次——勿删）
 @import "navigationBar";
 
 .el-container {
   .el-main {
-    width: 80%;
+    width: 100%;
+    max-width: 1400px;
+    box-sizing: border-box;
     overflow: hidden;
-    margin: 50px auto 0;
-    padding: 0;
+    margin: $sp-6 auto 0;
+    padding: 0 $sp-5;
   }
 }
 
@@ -17,3 +31,15 @@
   z-index: 100;
 }
 
+.theme-switch {
+  position: relative; display: inline-flex; align-items: center; justify-content: space-around;
+  width: 64px; height: 34px; padding: 0; flex-shrink: 0;
+  border: 1px solid var(--c-border-strong); border-radius: $radius-pill;
+  background: var(--c-bg-sunken); color: var(--c-text-secondary); cursor: pointer;
+  .ac-icon { position: relative; z-index: 1; }
+  .theme-switch-thumb { position: absolute; left: 3px; top: 3px; width: 26px; height: 26px; border-radius: 50%; background: var(--c-accent-soft-strong); transition: transform .3s ease; }
+  &.is-dark .theme-switch-thumb { transform: translateX(30px); }
+  &:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
+}
+
+html[data-theme="dark"] .logo img { filter: invert(1); }

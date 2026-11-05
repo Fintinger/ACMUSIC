@@ -25,6 +25,10 @@
           <!--右侧-->
           <el-col :span="8" class="right">
             <div class="right-inner">
+              <button type="button" class="theme-switch" role="switch" :aria-checked="themeDark"
+                :aria-label="themeDark ? '深色模式，切换为浅色' : '浅色模式，切换为深色'" :class="{ 'is-dark': themeDark }" @click="toggleTheme">
+                <BaseIcon name="sun" :size="16"/><BaseIcon name="moon" :size="16"/><span class="theme-switch-thumb"></span>
+              </button>
               <div class="search">
                 <div class="input-container">
                   <input placeholder="搜索单曲、歌手、专辑、MV等" type="text"
@@ -52,6 +56,7 @@
                     <el-dropdown-item :command="goUserPage" class="menu-item">
                       <BaseIcon name="user"/>个人主页
                     </el-dropdown-item>
+                    <el-dropdown-item :command="openAccentPicker" class="menu-item"><BaseIcon name="palette"/>主题颜色</el-dropdown-item>
                     <el-dropdown-item :command="logout" class="menu-item logout-item">
                       <BaseIcon name="logout"/>退出登录
                     </el-dropdown-item>
@@ -64,12 +69,11 @@
       </el-header>
       <el-main>
         <transition name="page-fade">
-          <!-- :key="$route.fullPath" 必须保留：详情页与 9 个搜索子视图只在 activated() 里取数
-               （见 docs/ARCHITECTURE_DECISIONS.md 决策 4：query → props），靠 URL 变化重建实例来刷新。
+          <!-- 详情页按 fullPath 缓存；搜索外壳按关键词复用，分类取数由内部结果视图负责。
                :max 限制缓存条目数，被驱逐实例的销毁由 reapEvictedPages() 兜底（Vue 2 的 pruneCacheEntry
                在同名组件下不会调用 $destroy）。 -->
           <keep-alive ref="pageCache" :max="pageCacheMax">
-            <router-view :key="$route.fullPath"/>
+            <router-view :key="pageCacheKey"/>
           </keep-alive>
         </transition>
         <!-- 全站页脚：放在 keep-alive 之外，避免随页面缓存重复挂载 -->
@@ -77,6 +81,9 @@
       </el-main>
     </el-container>
     <!--播放器组件 -->
+    <el-dialog title="主题颜色" :visible.sync="showAccentPicker" width="340px" append-to-body>
+      <AccentPicker v-if="showAccentPicker"/>
+    </el-dialog>
     <div v-show="showPlayer" class="player">
       <MusicPlayer :song="song"/>
     </div>
@@ -94,22 +101,32 @@ import DoSearch from "@/components/DoSearch";
 import PageBack from "@/components/common/PageBack";
 import AppFooter from "@/components/common/AppFooter";
 import MobileNotice from "@/components/common/MobileNotice";
+import AccentPicker from '@/components/common/AccentPicker';
+import {watchAccent} from '@/utils/accent';
 import {doLogout} from "@/utils/auth";
 import { saveScroll, restoreScroll } from "@/utils/scrollMemory";
 import config from "./config"
+import {getStoredTheme, setTheme, watchTheme} from '@/utils/theme'
 
 export default {
   name: 'App',
-  components: {MusicPlayer, DoSearch, PageBack, AppFooter, MobileNotice},
+  components: {MusicPlayer, DoSearch, PageBack, AppFooter, MobileNotice, AccentPicker},
   data() {
     return {
       song: {},
+      themePreference: getStoredTheme(),
+      themeDark: document.documentElement.dataset.theme === 'dark',
       showSearch: false,
+      showAccentPicker: false,
       //keep-alive 缓存页面实例上限（模板中 :max 绑定）
       pageCacheMax: 10,
     }
   },
   computed: {
+    pageCacheKey() {
+      const isSearch = this.$route.matched.some(record => record.name === 'search')
+      return isSearch ? 'search:' + JSON.stringify(this.$route.query.keyword || '') : this.$route.fullPath
+    },
     profile() {
       //获取保存的用户信息
       return this.$store.getters["UserAbout/userProfile"]
@@ -131,6 +148,12 @@ export default {
     }
   },
   methods: {
+    openAccentPicker() { this.showAccentPicker = true },
+    toggleTheme() {
+      this.themeDark = !this.themeDark
+      this.themePreference = this.themeDark ? 'dark' : 'light'
+      setTheme(this.themePreference)
+    },
     //兜底释放 keep-alive 未能销毁的页面实例
     //背景：Vue 2 的 keep-alive 在 max 溢出时调用 pruneCacheEntry，其中
     //`entry.tag !== current.tag` 判断会让「同一组件、不同 key」（如 /listDetail?id=A → B）
@@ -231,6 +254,8 @@ export default {
     }
   },
   mounted() {
+    this._stopAccentWatch = watchAccent(() => {})
+    this._stopThemeWatch = watchTheme(mode => { this.themePreference = mode; this.themeDark = document.documentElement.dataset.theme === 'dark' })
     this.$bus.$on('plClk', this.playlistClick)
     this.$bus.$on('alClk', this.albumClick)
     this.$bus.$on('arClk', this.artistClick)
@@ -268,6 +293,8 @@ export default {
     })
   },
   beforeDestroy() {
+    if (this._stopAccentWatch) this._stopAccentWatch()
+    if (this._stopThemeWatch) this._stopThemeWatch()
     window.removeEventListener('scroll', this._onScroll)
     window.removeEventListener('pagehide', this._onPageHide)
     if (this._scrollTimer) { clearTimeout(this._scrollTimer); this._scrollTimer = null }

@@ -3001,7 +3001,7 @@ mounted() {
 
 <style lang="scss" scoped>
 @import "../../assets/scss/base/motion";
-$bar-h: 60px; $mini-h: 4px; $accent: #8685EF;
+$bar-h: 60px; $mini-h: 4px; $accent: var(--c-accent);
 $bg: #1c1d28; $text: rgba(255,255,255,0.9); $text-sec: rgba(255,255,255,0.44); $text-ter: rgba(255,255,255,0.24);
 $border: rgba(255,255,255,0.06); $radius: 12px;
 
@@ -3028,18 +3028,18 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     transition: height 180ms ease;
     .miniFill {
       height: 100%;
-      background: linear-gradient(90deg, $accent, lighten($accent, 6%));
+      background: linear-gradient(90deg, $accent, var(--c-accent-hover));
       border-radius: 0 2px 2px 0;
       transition: width 0.1s linear;
-      box-shadow: 0 0 8px rgba($accent, 0.2);
+      box-shadow: 0 0 8px rgba(var(--theme-accent-rgb), 0.2);
     }
     // 折叠态也标出副歌位置：这是「发现这个功能」的最低成本入口
     .miniChorus {
       position: absolute; top: 0; bottom: 0;
-      background: rgba($accent, 0.42);
+      background: rgba(var(--theme-accent-rgb), 0.42);
       pointer-events: none;
       transition: background 200ms ease;
-      &.on { background: rgba($accent, 0.85); }
+      &.on { background: rgba(var(--theme-accent-rgb), 0.85); }
     }
   }
   &:hover .miniTrack { height: 6px; }
@@ -3170,9 +3170,9 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 
     // 真的叠了东西才上主题色，全默认时不该抢视觉
     &.is-stacked {
-      border-color: rgba(134, 133, 239, 0.45);
-      background: rgba(134, 133, 239, 0.14);
-      color: #b9b8f5;
+      border-color: rgba(var(--theme-accent-rgb), 0.45);
+      background: rgba(var(--theme-accent-rgb), 0.14);
+      color: var(--theme-ink-dark);
     }
   }
 
@@ -3232,12 +3232,12 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       &.mode-random:hover, &.mode-loop:hover, &.is-chorus:hover { color: $accent; }
     }
     .barPlay {
-      width: 32px; height: 32px; border-radius: 50%; background: $accent; color: #fff;
+      width: 32px; height: 32px; border-radius: 50%; background: $accent; color: var(--theme-on-accent);
       display: flex; align-items: center; justify-content: center; cursor: pointer;
-      box-shadow: 0 2px 12px rgba($accent, 0.3);
+      box-shadow: 0 2px 12px rgba(var(--theme-accent-rgb), 0.3);
       transition: all 200ms cubic-bezier(0.22,0.61,0.36,1);
       i { font-size: 18px; margin-left: 1px; }
-      &:hover { transform: scale(1.1); box-shadow: 0 4px 18px rgba($accent, 0.45); }
+      &:hover { transform: scale(1.1); box-shadow: 0 4px 18px rgba(var(--theme-accent-rgb), 0.45); }
       &:active { transform: scale(0.94); }
     }
     .player-loading-spinner {
@@ -3264,11 +3264,11 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       &.is-arming {
         height: 6px; border-radius: 3px;
         background: rgba(255,255,255,0.12);
-        box-shadow: 0 0 0 1px rgba($accent, 0.55), 0 0 10px rgba($accent, 0.35);
+        box-shadow: 0 0 0 1px rgba(var(--theme-accent-rgb), 0.55), 0 0 10px rgba(var(--theme-accent-rgb), 0.35);
       }
       .barFill {
         height: 100%; background: $accent; border-radius: inherit; position: relative;
-        transition: width 0.1s linear; box-shadow: 0 0 6px rgba($accent, 0.18);
+        transition: width 0.1s linear; box-shadow: 0 0 6px rgba(var(--theme-accent-rgb), 0.18);
         .barThumb {
           position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
           width: 15px; height: 15px; background: #fff; border-radius: 50%;
@@ -3282,13 +3282,13 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       // 否则会把「点进度条定位」的点击吞掉（点带子本身就该等于在那一点定位）
       .chorusBand {
         position: absolute; top: 0; bottom: 0;
-        background: rgba($accent, 0.26);
-        border-left: 1px solid rgba($accent, 0.7);
-        border-right: 1px solid rgba($accent, 0.7);
+        background: rgba(var(--theme-accent-rgb), 0.26);
+        border-left: 1px solid rgba(var(--theme-accent-rgb), 0.7);
+        border-right: 1px solid rgba(var(--theme-accent-rgb), 0.7);
         border-radius: 2px;
         pointer-events: none;
         transition: background 200ms ease;
-        &.on { background: rgba($accent, 0.5); }
+        &.on { background: rgba(var(--theme-accent-rgb), 0.5); }
       }
 
       // A-B 区间：与副歌带子同规格，但用琥珀色区分来源
@@ -3395,9 +3395,9 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     &:hover { background: rgba(255, 255, 255, 0.1); color: $text; border-color: rgba(255, 255, 255, 0.18); }
     &.on {
       color: $accent;
-      background: rgba($accent, 0.1);
-      border-color: rgba($accent, 0.3);
-      &:hover { background: rgba($accent, 0.16); border-color: rgba($accent, 0.45); }
+      background: rgba(var(--theme-accent-rgb), 0.1);
+      border-color: rgba(var(--theme-accent-rgb), 0.3);
+      &:hover { background: rgba(var(--theme-accent-rgb), 0.16); border-color: rgba(var(--theme-accent-rgb), 0.45); }
     }
     // 选点中：呼吸一下，提示"还差一步"
     &.is-arming {
@@ -3422,10 +3422,10 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     &:hover { background: rgba(255, 255, 255, 0.1); color: $text; border-color: rgba(255, 255, 255, 0.18); }
     &.on {
       color: $accent;
-      background: rgba($accent, 0.1);
-      border-color: rgba($accent, 0.3);
+      background: rgba(var(--theme-accent-rgb), 0.1);
+      border-color: rgba(var(--theme-accent-rgb), 0.3);
       .sleepLabel { font-variant-numeric: tabular-nums; }
-      &:hover { background: rgba($accent, 0.16); border-color: rgba($accent, 0.45); }
+      &:hover { background: rgba(var(--theme-accent-rgb), 0.16); border-color: rgba(var(--theme-accent-rgb), 0.45); }
     }
   }
 }
@@ -3511,10 +3511,10 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       }
 
       &.active {
-        background: rgba(134,133,239,0.1);
-        color: #8685EF; font-weight: 600;
-        border-left: 2px solid #8685EF;
-        .plSongArtist { color: rgba(134,133,239,0.5); }
+        background: rgba(var(--theme-accent-rgb), 0.1);
+        color: var(--c-accent); font-weight: 600;
+        border-left: 2px solid var(--c-accent);
+        .plSongArtist { color: rgba(var(--theme-accent-rgb), 0.5); }
       }
     }
 
@@ -3561,8 +3561,8 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 
     &:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
     &.is-active {
-      color: #8685EF;
-      background: rgba(134,133,239,0.12);
+      color: var(--c-accent);
+      background: rgba(var(--theme-accent-rgb), 0.12);
       font-weight: 600;
     }
 
@@ -3594,8 +3594,8 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 
     &:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
     &.is-active {
-      color: #8685EF;
-      background: rgba(134,133,239,0.12);
+      color: var(--c-accent);
+      background: rgba(var(--theme-accent-rgb), 0.12);
       font-weight: 600;
     }
   }
@@ -3609,7 +3609,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     transition: background 160ms ease, color 160ms ease;
 
     &:hover { background: rgba(255,255,255,0.06); }
-    &.is-active { color: #8685EF; background: rgba(134,133,239,0.1); font-weight: 600; }
+    &.is-active { color: var(--c-accent); background: rgba(var(--theme-accent-rgb), 0.1); font-weight: 600; }
 
     .sdLabel { flex-shrink: 0; }
     .sdUnit { flex-shrink: 0; font-weight: 400; }
@@ -3643,7 +3643,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       border-radius: 6px;
       outline: none;
       transition: border-color 140ms ease, background 140ms ease;
-      &:focus { border-color: rgba(134,133,239,0.6); background: rgba(0,0,0,0.34); }
+      &:focus { border-color: rgba(var(--theme-accent-rgb), 0.6); background: rgba(0,0,0,0.34); }
     }
   }
 
@@ -3674,7 +3674,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     }
 
     &.on {
-      background: rgba(134,133,239,0.55);
+      background: rgba(var(--theme-accent-rgb), 0.55);
       &::after { transform: translateX(12px); background: #fff; }
     }
   }

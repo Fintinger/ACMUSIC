@@ -13,7 +13,7 @@
       </div>
     </section>
 
-    <section class="search-tabs">
+    <section class="search-tabs ac-tabs">
       <router-link
         v-for="t in tabList"
         :key="t.name"
@@ -23,12 +23,10 @@
     </section>
 
     <section class="search-content">
-      <!-- 这里曾经是 :key="$route.fullpath"（大小写拼错，实际值恒为 undefined）。
-           外层 App.vue 的 router-view 已用 $route.fullPath 作 key，URL（含 keyword）变化时
-           整个 SearchResult 会被 keep-alive 重建 → 9 个搜索子视图的 activated() 必然重新取数，
-           所以本层 key 既冗余、又只会在「SearchResult 被复用」时制造出拿不到 activated() 的
-           新子实例，故直接移除，不再补 :key。 -->
-      <router-view/>
+      <!-- 只替换分类内容；keep-alive 保证现有九分类 activated 取数入口继续生效。 -->
+      <keep-alive :max="1">
+        <router-view :key="$route.name"/>
+      </keep-alive>
     </section>
   </div>
 </template>
@@ -99,27 +97,28 @@ export default {
 @import "src/assets/scss/base/variables";
 
 .searchResult {
-  max-width: 1200px; margin: 0 auto; padding-bottom: 60px;
+  // 容器由外层 el-main 统一（max-width 1200 + 24 padding）
+  padding-bottom: 60px;
   background: transparent;
 }
 
 .search-header {
-  padding: 40px 0 24px;
-  h1 { font-size: 28px; font-weight: 700; color: $font-black; margin: 0 0 8px; }
+  padding: $sp-6 0 $sp-5;
+  h1 { font-size: $fs-page; font-weight: 700; line-height: 1.3; color: $font-black; margin: 0 0 $sp-2; }
   p { font-size: 14px; color: $font-black-2; margin: 0; }
 }
 
 .multimatch-section {
   margin-bottom: 28px;
-  h2 { font-size: 18px; font-weight: 700; color: $font-black-1; margin: 0; }
+  h2 { font-size: $fs-module; font-weight: 700; color: $font-black-1; margin: 0; }
   .mm-panel {
     display: flex;
     align-items: flex-start;
-    gap: 24px;
+    gap: $sp-5;
     width: 100%;
-    padding: 24px 24px 14px;
+    padding: $sp-5 $sp-5 14px;
     box-sizing: border-box;
-    background: #f7f8fa;
+    background: var(--c-bg-sunken);
     border-radius: 24px;
     overflow-x: auto;
     overflow-y: hidden;
@@ -136,19 +135,7 @@ export default {
   }
 }
 
-.search-tabs {
-  display: flex; gap: 0; margin-bottom: 24px;
-  border-bottom: 1px solid rgba(0,0,0,.06);
-  overflow-x: auto;
-  a {
-    padding: 12px 18px; font-size: 14px; font-weight: 500;
-    color: $font-black-2; border-bottom: 2px solid transparent;
-    margin-bottom: -1px; text-decoration: none;
-    transition: color .2s, border-color .2s; white-space: nowrap;
-    &:hover { color: $font-black-1; }
-    &.active, &.router-link-active { color: $color-main; font-weight: 600; border-bottom-color: $color-main; }
-  }
-}
+.search-tabs { --tab-inline-space: 18px; }
 
 .search-content { margin-top: 8px; min-height: 500px; }
 ::v-deep h2 + * { margin-top: 20px; }

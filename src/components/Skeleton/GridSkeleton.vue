@@ -56,10 +56,10 @@ export default {
 }
 
 .skel-card {
-  background: #fff;
+  background: var(--c-bg-elevated);
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(0,0,0,.04);
+  border: 1px solid var(--c-border);
 
   &--artist {
     text-align: center;

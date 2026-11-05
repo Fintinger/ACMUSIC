@@ -1,12 +1,19 @@
 <template>
   <div class="VoiceRes">
     <h2>声音</h2>
+    <EmptyState
+        v-if="!searchLoading && !list.length"
+        :title="searchError ? '搜索暂时不可用' : '没有找到相关结果'"
+        :desc="searchError ? '请检查网络后重新加载' : '试试其他关键词，或切换搜索分类'"
+        :action-text="searchError ? '重新加载' : ''"
+        @action="initLoad"
+    />
     <div v-if="searchLoading" class="skel-list">
       <div v-for="n in 6" :key="n" class="skel-row"><div class="skel-bar skeleton-item"></div></div>
     </div>
-    <TracksLayout v-if="!searchLoading" :list="list"/>
+    <TracksLayout v-if="!searchLoading && list.length" :list="list"/>
     <el-row>
-      <LoadMore :load="load" :loading="loading" :noMore="noMore"/>
+      <LoadMore :error="searchPageError" v-if="!searchLoading && list.length" :load="load" :loading="loading" :noMore="noMore"/>
     </el-row>
   </div>
 </template>
@@ -36,14 +43,19 @@ export default {
     initLoad() {
       // 重置分页, 否则切换关键词后会沿用上一次的 offset
       this.page = 0
+      this.searchLoading = true
+      this.searchError = false
       return this.getList().then(res => {
         this.list = []
         const resources = (res.data && res.data.data && res.data.data.resources) || []
         resources.forEach(val => { this.dataProcessing(val.baseInfo.mainSong); this.list.push(val.baseInfo.mainSong) })
-        this.totalCount = res.data.data.totalCount
+        this.totalCount = Number(res.data.data.totalCount) || this.list.length
       }).catch(() => {
         this.list = []
         this.totalCount = 0
+        this.searchError = true
+      }).finally(() => {
+        this.searchLoading = false
       })
     },
     load() {

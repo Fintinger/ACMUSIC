@@ -9,7 +9,6 @@
       <a :href="site.blog" target="_blank" rel="noopener noreferrer" :title="site.blogLabel">我的博客</a>
       <a :href="site.repo" target="_blank" rel="noopener noreferrer">源码</a>
       <a :href="site.issues" target="_blank" rel="noopener noreferrer">反馈</a>
-      <a :href="site.apiRepo" target="_blank" rel="noopener noreferrer">API 仓库</a>
       <a :href="site.apiDocs" target="_blank" rel="noopener noreferrer">API 文档</a>
       <button type="button" class="af-link-btn" @click="showDisclaimer = true">免责声明</button>
     </nav>
@@ -130,7 +129,7 @@ export default {
     cursor: pointer;
     transition: color .18s;
 
-    &:hover { color: $color-main; }
+    &:hover { color: $color-main-text; }
   }
 }
 
@@ -144,7 +143,7 @@ export default {
   p { margin: 0 0 10px; }
   p:last-child { margin-bottom: 0; }
   strong { color: $font-black-1; }
-  a { color: $color-main; text-decoration: none; &:hover { text-decoration: underline; } }
+  a { color: $color-main-text; text-decoration: none; &:hover { text-decoration: underline; } }
 }
 
 @media (max-width: 768px) {

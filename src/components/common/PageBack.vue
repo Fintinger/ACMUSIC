@@ -1,7 +1,7 @@
 <template>
   <transition name="back-fade">
     <button v-if="visible" class="page-back-btn" @click="goBack" title="返回">
-      <i class="el-icon-arrow-left"></i>
+      <BaseIcon class="el-icon-arrow-left" name="arrowLeft"/>
     </button>
   </transition>
 </template>
@@ -36,11 +36,11 @@ export default {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--c-border-strong);
+  background: var(--c-bg-sunken);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  color: #333;
+  color: var(--c-text-primary);
   font-size: 20px;
   cursor: pointer;
   display: flex;
@@ -50,13 +50,14 @@ export default {
   padding: 0;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.08);
+    background: var(--c-bg-sunken-hover);
     transform: translateX(-2px);
   }
 
   &:active {
     transform: scale(.94);
   }
+  &:focus-visible { outline: 2px solid var(--c-accent-text); outline-offset: 3px; }
 }
 
 .back-fade-enter-active,

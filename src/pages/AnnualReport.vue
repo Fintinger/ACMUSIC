@@ -409,7 +409,7 @@ export default {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 2px;
-    color: $color-main;
+    color: $color-main-text;
     text-transform: uppercase;
   }
 
@@ -440,7 +440,7 @@ export default {
 
 .an-stat {
   background: $color-theme-sec;
-  border: 1px solid rgba(0, 0, 0, .04);
+  border: 1px solid var(--c-border-strong);
   border-radius: 16px;
   padding: 18px 20px;
 
@@ -449,7 +449,7 @@ export default {
     font-size: 28px;
     font-weight: 700;
     line-height: 1;
-    color: $color-main-1;
+    color: $color-main-text;
     font-variant-numeric: tabular-nums;
   }
 
@@ -507,7 +507,7 @@ export default {
     top: 22px;
     bottom: -14px;
     width: 1px;
-    background: linear-gradient(180deg, rgba($color-main, .35), rgba(0, 0, 0, .06));
+    background: linear-gradient(180deg, rgba(var(--theme-accent-rgb), .35), var(--c-border));
   }
 
   .an-dot {
@@ -518,7 +518,7 @@ export default {
     margin-top: 18px;
     border-radius: 50%;
     background: $color-main;
-    box-shadow: 0 0 0 4px rgba($color-main, .14);
+    box-shadow: 0 0 0 4px rgba(var(--theme-accent-rgb), .14);
   }
 }
 
@@ -548,7 +548,7 @@ export default {
       font-style: italic;
       opacity: .75;
       cursor: help;
-      border-bottom: 1px dashed rgba(0, 0, 0, .18);
+      border-bottom: 1px dashed var(--c-border-strong);
     }
   }
 }
@@ -557,14 +557,14 @@ export default {
   height: 4px;
   margin-bottom: 12px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, .05);
+  background: var(--c-bg-hover);
   overflow: hidden;
 
   .an-bar-fill {
     display: block;
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba($color-main, .55), $color-main);
+    background: linear-gradient(90deg, rgba(var(--theme-accent-rgb), .55), $color-main);
     transition: width .5s $player-ease-out;
   }
 }
@@ -575,16 +575,16 @@ export default {
   align-items: center;
   gap: 14px;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, .62);
-  border: 1px solid rgba(0, 0, 0, .05);
+  background: var(--c-bg-elevated);
+  border: 1px solid var(--c-border-strong);
   border-radius: 16px;
   cursor: pointer;
   transition: background .2s, transform .2s, box-shadow .2s;
 
   &:hover {
-    background: rgba(255, 255, 255, .92);
+    background: var(--c-bg-sunken-hover);
     transform: translateY(-1px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, .06);
+    box-shadow: 0 8px 24px var(--c-shadow-low);
 
     .an-play { opacity: 1; }
   }
@@ -633,8 +633,8 @@ export default {
     padding: 5px 12px;
     border: none;
     border-radius: 999px;
-    background: rgba($color-main, .12);
-    color: $color-main-1;
+    background: rgba(var(--theme-accent-rgb), .12);
+    color: $color-main-text;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
@@ -674,8 +674,8 @@ export default {
   .an-singer-badge {
     padding: 1px 7px;
     border-radius: 999px;
-    background: rgba($color-ornament, .2);
-    color: #3f8f70;
+    background: var(--c-success-soft);
+    color: var(--c-success-text);
     font-size: 11px;
   }
 
@@ -691,34 +691,34 @@ export default {
   flex-wrap: wrap;
   gap: 10px;
   padding: 14px 16px;
-  border: 1px dashed rgba(0, 0, 0, .09);
+  border: 1px dashed var(--c-border-strong);
   border-radius: 16px;
   font-size: 13px;
   color: $font-black-2;
 
   .an-agg-btn {
     padding: 4px 12px;
-    border: 1px solid rgba($color-main, .35);
+    border: 1px solid rgba(var(--theme-accent-rgb), .35);
     border-radius: 999px;
     background: transparent;
-    color: $color-main-1;
+    color: $color-main-text;
     font-size: 12px;
     cursor: pointer;
     transition: background .2s;
 
-    &:hover { background: rgba($color-main, .08); }
+    &:hover { background: rgba(var(--theme-accent-rgb), .08); }
   }
 
   .an-agg-progress {
     font-size: 12px;
-    color: $color-main-1;
+    color: $color-main-text;
     font-variant-numeric: tabular-nums;
   }
 
   .an-agg-error {
     flex-basis: 100%;
     font-size: 12px;
-    color: #c04a45;
+    color: var(--c-danger-text);
   }
 }
 
@@ -727,8 +727,8 @@ export default {
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba($color-ornament, .18);
-  color: #3f8f70;
+  background: var(--c-success-soft);
+  color: var(--c-success-text);
   font-size: 10px;
   font-weight: 500;
   vertical-align: middle;
@@ -739,9 +739,9 @@ export default {
 .an-state {
   padding: 56px 24px;
   text-align: center;
-  background: rgba(255, 255, 255, .5);
+  background: var(--c-bg-elevated);
   border-radius: 20px;
-  border: 1px solid rgba(0, 0, 0, .05);
+  border: 1px solid var(--c-border-strong);
 
   .an-state-title {
     margin: 0 0 8px;
@@ -750,25 +750,27 @@ export default {
     color: $font-black;
   }
 
+  .an-state-desc a { color: $color-main-text; text-decoration: underline; }
+
   .an-state-desc {
     margin: 0;
     font-size: 13px;
     color: $font-black-2;
   }
 
-  &.is-error .an-state-title { color: #c04a45; }
+  &.is-error .an-state-title { color: var(--c-danger-text); }
 
   .an-retry {
     margin-top: 18px;
     padding: 7px 20px;
-    border: 1px solid rgba($color-main, .35);
+    border: 1px solid rgba(var(--theme-accent-rgb), .35);
     border-radius: 999px;
     background: transparent;
-    color: $color-main-1;
+    color: $color-main-text;
     font-size: 13px;
     cursor: pointer;
 
-    &:hover { background: rgba($color-main, .08); }
+    &:hover { background: rgba(var(--theme-accent-rgb), .08); }
   }
 }
 
@@ -784,7 +786,7 @@ export default {
   .an-skel-year,
   .an-skel-card {
     border-radius: 12px;
-    background: linear-gradient(90deg, rgba(0, 0, 0, .045) 25%, rgba(0, 0, 0, .07) 37%, rgba(0, 0, 0, .045) 63%);
+    background: linear-gradient(90deg, var(--c-shimmer-start) 25%, var(--c-shimmer-mid) 37%, var(--c-shimmer-start) 63%);
     background-size: 400% 100%;
     animation: an-shimmer 1.4s ease infinite;
   }
@@ -810,7 +812,7 @@ export default {
   margin: 12px 0 0;
   padding: 10px 14px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, .03);
+  background: var(--c-bg-hover);
   font-size: 12px;
   color: $font-black-2;
 }
@@ -818,7 +820,7 @@ export default {
 .an-foot {
   margin: 28px 0 0;
   padding-top: 18px;
-  border-top: 1px solid rgba(0, 0, 0, .05);
+  border-top: 1px solid var(--c-border-strong);
   font-size: 12px;
   line-height: 1.8;
   color: $font-black-2;
@@ -826,7 +828,7 @@ export default {
   code {
     padding: 1px 5px;
     border-radius: 4px;
-    background: rgba(0, 0, 0, .05);
+    background: var(--c-bg-hover);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
   }

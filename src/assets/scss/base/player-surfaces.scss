@@ -1,0 +1,54 @@
+// PlayerCore 的 Element 下拉挂到 body；配色只限定这些播放器类名。
+// 旧皮肤含 !important，表面与 hover 覆盖需同样声明，以免被全局透明 hover 压掉。
+html .playlistDropdown,
+html .chorusDropdown,
+html .sleepDropdown {
+  color-scheme: dark;
+  background: var(--player-menu-bg) !important;
+  border-color: var(--player-menu-border) !important;
+  box-shadow: 0 16px 48px var(--player-menu-shadow) !important;
+  color: var(--player-menu-text);
+
+  .el-dropdown-menu__item {
+    color: var(--player-menu-secondary);
+    &.is-active, &.active { color: var(--player-menu-accent); background: var(--player-menu-soft); }
+    &:focus, &:not(.is-disabled):hover {
+      background: var(--player-menu-hover) !important;
+      color: var(--player-menu-text);
+    }
+  }
+  .popper__arrow, .popper__arrow::after { border-top-color: var(--player-menu-bg) !important; }
+}
+
+html .playlistDropdown {
+  .plHeader { color: var(--player-menu-text); }
+  .plHeader .plTotal { color: var(--player-menu-muted); }
+  .plActions .el-button--text { color: var(--player-menu-muted); background: transparent; }
+  .plItems .el-dropdown-menu__item {
+    color: var(--player-menu-secondary);
+    .plSongArtist { color: var(--player-menu-muted); }
+    &.active { color: var(--player-menu-accent); border-left-color: var(--player-menu-accent); }
+    &.active .plSongArtist { color: var(--player-menu-secondary); }
+    &:hover .plSongArtist { color: var(--player-menu-secondary); }
+  }
+  .plItems .plOp { color: var(--player-menu-secondary); }
+  .plItems .el-dropdown-menu__item:focus-within .plOps { opacity: 1; }
+  .plEmpty, .plEmpty .plEmptyHint { color: var(--player-menu-muted); }
+}
+
+html .chorusDropdown .el-dropdown-menu__item .opt-hint {
+  color: var(--player-menu-muted);
+  background: var(--player-menu-input);
+}
+
+html .sleepDropdown {
+  .sdRow, .sdFade { color: var(--player-menu-secondary); }
+  .sdRow.is-active { color: var(--player-menu-accent); background: var(--player-menu-soft); }
+  .sdRow .sdNum {
+    color: var(--player-menu-text);
+    background: var(--player-menu-input);
+    border-color: var(--player-menu-border);
+  }
+  .sdRow .sdNum:focus { border-color: var(--player-menu-accent); }
+  .sdRow .sdStep { color: var(--player-menu-text); }
+}

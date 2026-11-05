@@ -16,9 +16,10 @@
       </div>
 
       <!-- 分类导航：横向排列 + 悬浮下拉 -->
-      <div v-if="!categories.length" class="category-nav">
+      <div v-if="categoriesLoading && !categories.length" class="category-nav">
         <span v-for="i in 5" :key="i" class="skel-nav-pill skeleton-item"></span>
       </div>
+      <EmptyState v-else-if="categoriesError" compact title="分类加载失败" action-text="重试分类" @action="loadCategories"/>
       <div v-else class="category-nav">
         <div
             v-for="c in categories"
@@ -52,16 +53,19 @@
 
     <!-- 歌单列表 -->
     <el-row class="render-list">
-      <GridSkeleton v-if="loading && !renderList.length" type="playlist"/>
+      <GridSkeleton v-if="(loading || initialLoading) && !renderList.length" type="playlist"/>
       <PlaylistLayout v-if="renderList.length" :list="renderList" pic-name="coverImgUrl"/>
     </el-row>
-    <el-row class="load-more">
+    <EmptyState v-if="listError" compact :title="renderList.length ? '更多歌单加载失败' : '歌单加载失败'" desc="请检查网络后重试" action-text="重试" @action="retryList"/>
+    <EmptyState v-else-if="!initialLoading && !loading && !renderList.length" compact title="这个分类暂无歌单"/>
+    <el-row v-if="!initialLoading && !listError && renderList.length" class="load-more">
       <LoadMore :load="load" :loading="loading" :no-more="noMore"/>
     </el-row>
   </div>
 </template>
 
 <script>
+import EmptyState from '@/components/common/EmptyState';
 import PlaylistLayout from "@/components/layout/PlaylistLayout";
 import LoadMore from "@/components/LoadMore";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
@@ -69,7 +73,7 @@ import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "AllList",
-  components: {PlaylistLayout, LoadMore, GridSkeleton},
+  components: {EmptyState, PlaylistLayout, LoadMore, GridSkeleton},
   data() {
     return {
       categories: [],
@@ -84,6 +88,11 @@ export default {
       },
       page: 0,
       loading: false,
+      initialLoading: true,
+      listError: false,
+      categoriesError: false,
+      categoriesLoading: false,
+      requestVersion: 0,
       more: true,
     }
   },
@@ -96,14 +105,9 @@ export default {
     }
   },
   watch: {
-    curTag(n) {
-      this.page = 0;
-      this.getListByClass(n).then(res => {
-        this.renderList = res.data.playlists
-        this.more = res.data.more
-      }).finally(() => { this.loading = false })
-    }
+    curTag() { this.fetchList(true) }
   },
+  beforeDestroy() { this.requestVersion++ },
   methods: {
     getCategories() {
       return playlistApi.catlist()
@@ -125,50 +129,49 @@ export default {
         this.allTag[this.categories[val.category]].push(val)
       })
     },
-    concurrentRequests() {
-      this.loading = true
-      this.$axios.all([this.getCategories(), this.getListByClass("全部")])
-          .then(this.$axios.spread((categories, list) => {
-            this.handleCategoricalData(categories.data);
-            this.renderList = list.data.playlists
-            this.more = list.data.more
-          }))
-          .finally(() => { this.loading = false })
+    async loadCategories() {
+      if (this.categoriesLoading) return
+      this.categoriesLoading = true; this.categoriesError = false
+      try {
+        const res = await this.getCategories()
+        if (!res.data || !res.data.categories || !Array.isArray(res.data.sub)) throw new Error('Invalid categories')
+        this.handleCategoricalData(res.data)
+      } catch (_) { this.categoriesError = true }
+      finally { this.categoriesLoading = false }
+    },
+    concurrentRequests() { return Promise.all([this.loadCategories(), this.fetchList(true)]) },
+    retryList() { return this.fetchList(!this.renderList.length) },
+    async fetchList(reset) {
+      if (!reset && (this.loading || this.noMore)) return
+      if (reset) { this.requestVersion++; this.page = 0; this.more = true; this.renderList = []; this.initialLoading = true }
+      const version = this.requestVersion
+      const page = reset ? 0 : this.page + 1
+      this.loading = true; this.listError = false
+      try {
+        const res = await playlistApi.top({...this.params, cat: this.curTag, offset: page * this.params.limit})
+        if (version !== this.requestVersion) return
+        const data = res.data || {}
+        if (!Array.isArray(data.playlists)) throw new Error('Invalid playlists')
+        const seen = new Set(this.renderList.map(item => item.id))
+        this.renderList = this.renderList.concat(data.playlists.filter(item => !seen.has(item.id)))
+        this.page = page
+        this.more = data.playlists.length > 0 && (data.more === undefined ? data.playlists.length >= this.params.limit : !!data.more)
+      } catch (_) { if (version === this.requestVersion) this.listError = true }
+      finally { if (version === this.requestVersion) { this.loading = false; this.initialLoading = false } }
     },
     tagClick(tag) {
       this.curTag = tag
       this.curCat = null
-      this.loading = true
     },
     resetTag() {
       this.curTag = '全部'
-      this.loading = true
+      this.curCat = null
     },
     toggleCategory(c) {
       //再次点击当前分类则收起
       this.curCat = this.curCat === c ? null : c
     },
-    load() {
-      if (this.loading || this.noMore) return
-      this.page++
-      this.loading = true
-      return this.getListByClass(this.curTag).then(res => {
-        const playlists = (res.data && res.data.playlists) || []
-        playlists.forEach(val => {
-          if (this.renderList.findIndex(item => item.id === val.id) === -1) {
-            this.renderList.push(val)
-          }
-        })
-        //记录是否还有更多数据的量
-        this.more = res.data.more
-      }).catch(() => {
-        // 失败回退页码, 允许重新点击加载更多
-        this.page--
-      }).finally(() => {
-        // 无论成功失败都要恢复, 否则按钮永久转圈
-        this.loading = false
-      })
-    }
+    load() { return this.fetchList(false) }
   },
   activated() {
     //初步加载分类名和全部分类下的歌单
@@ -189,7 +192,7 @@ export default {
   .glass-panel {
     position: relative;
     z-index: 1;
-    background: rgba(255,255,255,.55);
+    background: var(--c-bg-elevated);
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
     border-radius: 24px;
@@ -211,7 +214,7 @@ export default {
 
     .filter-text {
       font-size: 13px;
-      color: #555;
+      color: var(--c-text-secondary);
       font-weight: 500;
       line-height: 30px;
     }
@@ -220,21 +223,21 @@ export default {
       display: inline-flex; align-items: center; gap: 6px;
       height: 30px; padding: 0 14px;
       border-radius: 15px;
-      background: rgba(129,120,255,.12);
-      color: #8178ff; font-size: 13px; font-weight: 500;
+      background: rgba(var(--theme-accent-rgb),.12);
+      color: var(--c-accent-text); font-size: 13px; font-weight: 500;
 
       .chip-close {
         display: inline-flex; align-items: center; justify-content: center;
         width: 18px; height: 18px; border-radius: 50%;
         font-style: normal; font-size: 14px; cursor: pointer; line-height: 1;
         transition: background .2s;
-        &:hover { background: rgba(129,120,255,.2); }
+        &:hover { background: rgba(var(--theme-accent-rgb),.2); }
       }
     }
 
     .reset-btn {
       font-size: 13px; color: #999; cursor: pointer;
-      &:hover { color: #8178ff; }
+      &:hover { color: var(--c-accent-text); }
     }
   }
 
@@ -259,18 +262,18 @@ export default {
       padding: 0 16px;
       border: 1px solid rgba(0,0,0,.05);
       border-radius: 17px;
-      background: rgba(255,255,255,.45);
+      background: var(--c-bg-elevated);
       color: #666;
       font-size: 14px;
       cursor: pointer;
       white-space: nowrap;
       transition: all .25s ease;
-      &:hover { background: rgba(129,120,255,.08); color: #8178ff; }
+      &:hover { background: rgba(var(--theme-accent-rgb),.08); color: var(--c-accent-text); }
       &.active, &.open {
-        background: #8178ff;
-        color: #fff;
+        background: var(--c-button-primary);
+        color: var(--c-text-on-accent);
         border-color: transparent;
-        box-shadow: 0 5px 12px rgba(129,120,255,.25);
+        box-shadow: 0 5px 12px rgba(var(--theme-accent-rgb),.25);
       }
 
       .nav-arrow {
@@ -306,7 +309,7 @@ export default {
     max-height: 220px;
     overflow-y: auto;
     padding: 12px 14px;
-    background: rgba(255,255,255,.9);
+    background: var(--c-bg-elevated);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255,255,255,.6);
@@ -330,7 +333,7 @@ export default {
     padding: 0 16px;
     border-radius: 16px;
     border: 1px solid rgba(0,0,0,.05);
-    background: rgba(255,255,255,.45);
+    background: var(--c-bg-elevated);
     color: #666;
     font-size: 13px;
     cursor: pointer;
@@ -338,14 +341,14 @@ export default {
     transition: all .25s ease;
     &:hover {
       transform: translateY(-1px);
-      background: rgba(129,120,255,.08);
-      color: #8178ff;
+      background: rgba(var(--theme-accent-rgb),.08);
+      color: var(--c-accent-text);
     }
     &.active {
-      background: #8178ff;
-      color: #fff;
+      background: var(--c-button-primary);
+      color: var(--c-text-on-accent);
       border-color: transparent;
-      box-shadow: 0 5px 12px rgba(129,120,255,.25);
+      box-shadow: 0 5px 12px rgba(var(--theme-accent-rgb),.25);
     }
   }
 }

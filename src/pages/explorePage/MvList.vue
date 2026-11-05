@@ -59,7 +59,9 @@
       </transition>
     </el-row>
 
-    <div class="mv-load-more">
+    <EmptyState v-if="listError" compact :title="renderedList.length ? '更多 MV 加载失败' : 'MV 加载失败'" desc="请检查网络后重试" action-text="重试" @action="retryList"/>
+    <EmptyState v-else-if="!loading && !renderedList.length" compact title="当前筛选下暂无 MV"/>
+    <div v-if="!listError && renderedList.length" class="mv-load-more">
       <button v-if="!loading && !loadingMore && hasMore" @click="load()">加载更多</button>
       <p v-if="loading || loadingMore">加载中...</p>
       <p v-if="!hasMore">没有更多了</p>
@@ -68,17 +70,21 @@
 </template>
 
 <script>
+import EmptyState from '@/components/common/EmptyState';
 import MvLayout from "@/components/layout/MvLayout";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 import * as mvApi from "@/api/Mv";
 
 export default {
   name: "mvList",
-  components: {MvLayout, GridSkeleton},
+  components: {EmptyState, MvLayout, GridSkeleton},
   data() {
     return {
       renderedList: [],
-      loading: false,
+      loading: true,
+      listError: false,
+      requestVersion: 0,
+      offset: 0,
       //翻页专用标志: 与首屏 loading 分离, 避免翻页时列表整体卸载重挂
       loadingMore: false,
       title: "",
@@ -113,15 +119,12 @@ export default {
     }
   },
   methods: {
-    handleClick(title, i) {
-      //更新监听的值
-      this.title = title
-      this.item = i
-      this.params.page = 1
-    },
     selectItem(title, i) {
-      this.handleClick(title, i)
+      this.title = title; this.item = i
+      const key = { '地区': 'area', '类型': 'type', '排序': 'order' }[title]
+      if (key) this.params[key] = i
       this.curCat = null
+      return this.refreshTheRenderList()
     },
     toggleCategory(c) {
       //再次点击当前分类则收起
@@ -140,17 +143,26 @@ export default {
       this.refreshTheRenderList()
     },
     //GET请求数据触发页面更新（切换筛选条件时调用，重置为第一页）
-    refreshTheRenderList() {
-      this.loading = true
-      this.renderedList = []
-      this.fadeKey++
-      return this.fetchPage(0).then(res => {
-        this.hasMore = typeof res.data.hasMore === 'undefined' ? true : res.data.hasMore
-        this.renderedList = (res.data && res.data.data) || []
-      }).catch(() => {
-        this.renderedList = []
-        this.hasMore = false
-      }).finally(() => { this.loading = false })
+    retryList() { return this.renderedList.length ? this.load() : this.refreshTheRenderList() },
+    refreshTheRenderList() { return this.fetchList(true) },
+    async fetchList(reset) {
+      if (!reset && (this.loading || this.loadingMore || !this.hasMore)) return
+      if (reset) { this.requestVersion++; this.offset = 0; this.renderedList = []; this.fadeKey++; this.loadingMore = false; this.loading = true; this.hasMore = true }
+      else this.loadingMore = true
+      const version = this.requestVersion
+      const offset = this.offset
+      this.listError = false
+      try {
+        const res = await this.fetchPage(offset)
+        if (version !== this.requestVersion) return
+        const body = res.data || {}
+        if (!Array.isArray(body.data)) throw new Error('Invalid MV list')
+        const seen = new Set(this.renderedList.map(item => item.id))
+        this.renderedList.push(...body.data.filter(item => !seen.has(item.id)))
+        this.offset = offset + body.data.length
+        this.hasMore = body.data.length > 0 && (body.hasMore === undefined ? body.data.length >= this.params.limit : !!body.hasMore)
+      } catch (_) { if (version === this.requestVersion) this.listError = true }
+      finally { if (version === this.requestVersion) { this.loading = false; this.loadingMore = false } }
     },
     fetchPage(offset) {
       return mvApi.all({
@@ -161,60 +173,12 @@ export default {
         offset
       })
     },
-    load() {
-      if (this.loading || this.loadingMore || !this.hasMore) return
-      // 关键: 翻页不能复用 loading。模板里列表的 <transition v-if="!loading && renderedList.length">
-      // 绑在 loading 上, 复用会导致每次"加载更多"都把整个列表卸载重挂 → 视觉上"全部重新加载"。
-      this.loadingMore = true
-      return this.fetchPage(this.renderedList.length).then(res => {
-        const data = (res.data && res.data.data) || []
-        const exists = new Set(this.renderedList.map(mv => mv.id))
-        const fresh = data.filter(mv => !exists.has(mv.id))
-        this.renderedList.push(...fresh)
-        // 服务端给了 hasMore 就用它; 没给则用"本页是否有新数据"推断
-        this.hasMore = typeof res.data.hasMore === 'undefined' ? fresh.length > 0 : res.data.hasMore
-        if (!data.length) {
-          this.hasMore = false
-        }
-      }).catch(() => {
-        // 失败不动列表, 允许用户重新点"加载更多"
-      }).finally(() => {
-        this.loadingMore = false
-      })
-    },
+    load() { return this.fetchList(false) },
     mvClk(id) {
       this.$bus.$emit('mvClk', id)
     }
   },
-  watch: {
-    title(val) {
-      switch (val) {
-        case "地区":
-          this.params.area = this.item
-          break;
-        case "类型":
-          this.params.type = this.item
-          break;
-        case "排序":
-          this.params.order = this.item
-          break;
-      }
-    },
-    item(val) {
-      switch (this.title) {
-        case "地区":
-          this.params.area = val
-          break;
-        case "类型":
-          this.params.type = val
-          break;
-        case "排序":
-          this.params.order = val
-          break;
-      }
-      this.refreshTheRenderList();
-    }
-  },
+  beforeDestroy() { this.requestVersion++ },
   beforeMount() {
     //首屏与翻页统一走 /mv/all, 保证列表口径一致。
     //原实现首屏用 /mv/first(100): 实测两个接口返回的数据零重叠, 点"加载更多"会从一批
@@ -238,11 +202,11 @@ export default {
   .glass-panel {
     position: relative;
     z-index: 1;
-    background: rgba(255,255,255,.55);
+    background: var(--c-glass);
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
     border-radius: 24px;
-    border: 1px solid rgba(255,255,255,.45);
+    border: 1px solid var(--c-border-strong);
     box-shadow: 0 12px 40px rgba(0,0,0,.06);
     padding: 16px 24px;
     margin-bottom: 28px;
@@ -256,11 +220,11 @@ export default {
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(0,0,0,.04);
 
-    .status-label { font-size: 13px; color: #999; }
+    .status-label { font-size: 13px; color: var(--c-text-tertiary); }
 
     .filter-text {
       font-size: 13px;
-      color: #555;
+      color: var(--c-text-secondary);
       font-weight: 500;
       line-height: 30px;
     }
@@ -269,21 +233,21 @@ export default {
       display: inline-flex; align-items: center; gap: 6px;
       height: 30px; padding: 0 14px;
       border-radius: 15px;
-      background: rgba(129,120,255,.12);
-      color: #8178ff; font-size: 13px; font-weight: 500;
+      background: rgba(var(--theme-accent-rgb),.12);
+      color: var(--c-accent-text); font-size: 13px; font-weight: 500;
 
       .chip-close {
         display: inline-flex; align-items: center; justify-content: center;
         width: 18px; height: 18px; border-radius: 50%;
         font-style: normal; font-size: 14px; cursor: pointer; line-height: 1;
         transition: background .2s;
-        &:hover { background: rgba(129,120,255,.2); }
+        &:hover { background: rgba(var(--theme-accent-rgb),.2); }
       }
     }
 
     .reset-btn {
-      font-size: 13px; color: #999; cursor: pointer;
-      &:hover { color: #8178ff; }
+      font-size: 13px; color: var(--c-text-tertiary); cursor: pointer;
+      &:hover { color: var(--c-accent-text); }
     }
   }
 
@@ -306,20 +270,20 @@ export default {
       gap: 6px;
       height: 34px;
       padding: 0 16px;
-      border: 1px solid rgba(0,0,0,.05);
+      border: 1px solid var(--c-border-strong);
       border-radius: 17px;
-      background: rgba(255,255,255,.45);
-      color: #666;
+      background: var(--c-glass);
+      color: var(--c-text-secondary);
       font-size: 14px;
       cursor: pointer;
       white-space: nowrap;
       transition: all .25s ease;
-      &:hover { background: rgba(129,120,255,.08); color: #8178ff; }
+      &:hover { background: rgba(var(--theme-accent-rgb),.08); color: var(--c-accent-text); }
       &.active, &.open {
-        background: #8178ff;
-        color: #fff;
+        background: var(--c-button-primary);
+        color: var(--c-text-on-accent);
         border-color: transparent;
-        box-shadow: 0 5px 12px rgba(129,120,255,.25);
+        box-shadow: 0 5px 12px rgba(var(--theme-accent-rgb),.25);
       }
 
       .nav-arrow {
@@ -347,14 +311,14 @@ export default {
     max-height: 220px;
     overflow-y: auto;
     padding: 12px 14px;
-    background: rgba(255,255,255,.9);
+    background: var(--c-glass);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255,255,255,.6);
+    border: 1px solid var(--c-border-strong);
     border-radius: 16px;
     box-shadow: 0 12px 32px rgba(0,0,0,.12);
     scrollbar-width: thin;
-    scrollbar-color: rgba(0,0,0,.12) transparent;
+    scrollbar-color: var(--c-text-tertiary) transparent;
     &::-webkit-scrollbar { width: 4px; }
     &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
     &::-webkit-scrollbar-track { background: transparent; }
@@ -376,23 +340,23 @@ export default {
     height: 32px;
     padding: 0 16px;
     border-radius: 16px;
-    border: 1px solid rgba(0,0,0,.05);
-    background: rgba(255,255,255,.45);
-    color: #666;
+    border: 1px solid var(--c-border-strong);
+    background: var(--c-glass);
+    color: var(--c-text-secondary);
     font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
     transition: all .25s ease;
     &:hover {
       transform: translateY(-1px);
-      background: rgba(129,120,255,.08);
-      color: #8178ff;
+      background: rgba(var(--theme-accent-rgb),.08);
+      color: var(--c-accent-text);
     }
     &.active {
-      background: #8178ff;
-      color: #fff;
+      background: var(--c-button-primary);
+      color: var(--c-text-on-accent);
       border-color: transparent;
-      box-shadow: 0 5px 12px rgba(129,120,255,.25);
+      box-shadow: 0 5px 12px rgba(var(--theme-accent-rgb),.25);
     }
   }
 }

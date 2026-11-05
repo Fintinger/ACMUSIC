@@ -1,88 +1,70 @@
 <template>
-  <div class="tracksContainer">
+  <div class="tracksContainer" :class="{ 'has-actions': showActions }">
     <el-row v-if="needBtn" class="btns">
       <div class="btn-container">
-        <div class="btn-item" @click="playAllTracks(list)"><BaseIcon name="play"/><span> 播放全部</span></div>
-        <div class="btn-item" @click="pushAllTracks(list)"><BaseIcon name="share"/></div>
+        <button type="button" class="btn-item" :disabled="!list.length" @click="playAllTracks(list)"><BaseIcon name="play"/><span> 播放全部</span></button>
+        <button type="button" class="btn-item" :disabled="!list.length" aria-label="全部加入播放列表" title="全部加入播放列表" @click="pushAllTracks(list)"><BaseIcon name="listPlus"/></button>
       </div>
-      <!--      <el-button type="warning" @click="playAllTracks(list)">播放全部</el-button>-->
-      <!--      <el-button type="warning" @click="pushAllTracks(list)">添加到播放列表</el-button>-->
     </el-row>
-    <el-row v-for="(t, index) in list" :key="t.id" class="tracks"
-            :class="{ 'has-actions': showActions }">
-      <div class="tracks-wrap" @dblclick="songClk(t)">
-        <template cover-img>
-          <el-col v-if="t.al" :span="2" class="coverImg"><cover-image :src="t.al.picUrl" :alt="t.name + '的封面'" height="50"/></el-col>
-          <el-col v-else-if="t.album" :span="2" class="coverImg">
-            <cover-image v-if="t.album.picUrl" :src="t.album.picUrl" :alt="t.name + '的封面'" height="50"/>
-          </el-col>
-          <el-col v-else :span="2" class="coverImg">
-            <cover-image :src="defaultImg" :alt="t.name + '的封面'" height="50"/>
-          </el-col>
 
-        </template>
-        <el-col :span="7" class="name-artist">
-          <template name>
-            <scoText v-if=" t.name" class="name">{{ t.name }}</scoText>
-            <span v-else>未知</span>
-          </template>
-          <template artist>
-            <!-- t.ar / t.artists 在 normalizeTrack 后互相备份，永远存在（见 utils/normalize.js:84-85），
-                 v-else-if / v-else 分支是死代码，删除 -->
-            <scoText v-if="t.ar">
-            <span v-for="(a,ind) in t.ar" :key="ind" class="artist" @click="arClk(a.id)">{{ a.name }} <i
-                v-if="ind!==t.ar.length-1">, </i></span>
-            </scoText>
-          </template>
-        </el-col>
-        <template album-name>
-          <el-col v-if="t.al&&t.al.name" :span="7" class="album"><span @click="alClk(t.al.id)">{{ t.al.name }}</span>
-          </el-col>
-          <el-col v-else-if="t.album&&t.album.name" :span="7" class="album">
-            <span @click="alClk(t.album.id)">{{ t.album.name }}</span>
-          </el-col>
-          <el-col v-else :span="7" class="album">未知</el-col>
-        </template>
-        <template duration>
-          <el-col v-if="t.dt" :span="7" class="duration">{{ t.dt | formatS }}</el-col>
-          <el-col v-else-if="t.duration" :span="7" class="duration">{{ t.duration | formatS }}</el-col>
-        </template>
-        <!--      <template v-if="needBtn">
-                <el-col v-if="t.mv" :span="2" class="mv">
-                  <button :disabled="!t.mv" @click="mvClk(t.mv)">MV</button>
-                </el-col>
-                <el-col v-else-if="t.mvid" :span="2" class="mv">
-                  <button :disabled="!t.mvid" @click="mvClk(t.mv)">MV</button>
-                </el-col>
-                <el-col v-else :span="2" class="placeholder">
-                  <button disabled>MV</button>
-                </el-col>
-              </template>
-              <el-col v-if="needBtn" :span="2" class="play">
-                <button @click="songClk(t)">play</button>
-              </el-col>-->
-        <!--播放次数-->
-        <el-col v-if="t.recordPlayCount" :span="3" class="playCount">{{ t.recordPlayCount }}</el-col>
-        <!--文件大小-->
-        <el-col v-if="t.fileSize" :span="2" class="fileSize">{{ (t.fileSize / 1024 / 1024).toFixed(2) }}MB</el-col>
+    <!-- 列头：让「歌曲 / 专辑 / 时长」的列义可读（原先四列全靠猜） -->
+    <div v-if="list.length" class="tracks-head" aria-hidden="true">
+      <span class="col-index">#</span>
+      <span class="col-cover"></span>
+      <span class="col-title">歌曲</span>
+      <span class="col-album">专辑</span>
+      <span v-if="hasExtra" class="col-extra">{{ extraLabel }}</span>
+      <span class="col-duration">时长</span>
+    </div>
+
+    <!-- 行结构：flex + 垂直居中（原 el-col 栅格 + margin-top 补偿，
+         字号一变就基线错位，且 span 总和可超 24 列导致换行） -->
+    <div
+        v-for="(t, index) in list"
+        :key="t.id"
+        class="tracks"
+        :class="{ 'has-actions': showActions, 'is-current': isCurrent(t) }"
+    >
+      <div class="tracks-wrap">
+        <span class="col-index">
+          <BaseIcon v-if="isCurrent(t)" name="play" :size="12" class="index-play"/>
+          <template v-else>{{ index + 1 }}</template>
+        </span>
+        <span class="col-cover">
+          <cover-image :src="coverOf(t)" :alt="(t.name || '未知') + '的封面'"/>
+        </span>
+        <div class="col-title">
+          <button type="button" class="name" :title="'播放 ' + (t.name || '未知')" @click="songClk(t)">{{ t.name || '未知' }}</button>
+          <span class="artist" :title="artistList(t).map(a => a.name).join(', ')">
+            <span
+                v-for="(a, ind) in artistList(t)"
+                :key="ind"
+                class="artist-link"
+                @click.stop="arClk(a.id)"
+            >{{ a.name }}<i v-if="ind !== artistList(t).length - 1">, </i></span>
+          </span>
+        </div>
+        <span class="col-album" :title="albumName(t)" @click.stop="albumClick(t)">{{ albumName(t) || '未知' }}</span>
+        <span v-if="hasExtra" class="col-extra">{{ extraOf(t) }}</span>
+        <span class="col-duration">{{ durationOf(t) }}</span>
       </div>
       <!-- 行操作：由调用方通过作用域插槽提供（如歌单详情的删歌/排序）。
            TracksLayout 是全站共用的展示组件，这里只留位置，不放业务逻辑。 -->
-      <div v-if="showActions" class="trackActions" @dblclick.stop @click.stop>
+      <div v-if="showActions" class="trackActions" @click.stop>
         <slot name="actions" :track="t" :index="index"/>
       </div>
-    </el-row>
+    </div>
   </div>
 </template>
 
 <script>
 import {mapActions} from 'vuex'
-import scoText from "@/components/scoText";
 import CoverImage from "@/components/common/CoverImage";
+import {format_s} from "@/utils/filters";
 
 export default {
   name: "TracksLayout",
-  components: {scoText, CoverImage},
+  components: {CoverImage},
   props: {
     list: {
       type: Array,
@@ -104,11 +86,53 @@ export default {
       defaultImg: "http://p3.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg",
     }
   },
+  computed: {
+    hasExtra() {
+      return this.list.some(t => t.recordPlayCount != null || t.fileSize != null)
+    },
+    extraLabel() {
+      return this.list.some(t => t.recordPlayCount != null) ? '播放次数' : '文件大小'
+    },
+    /** 当前播放曲目 id：PlayerCore 切歌时给队列项打 curSong 标记（见 PlayerCore.vue:739） */
+    currentId() {
+      const cp = (this.$store.state.TracksAbout && this.$store.state.TracksAbout.currentPlaylist) || []
+      const cur = cp.find(s => s && s.curSong)
+      return cur ? cur.id : null
+    }
+  },
   methods: {
+    extraOf(t) {
+      if (this.extraLabel === '播放次数') return t.recordPlayCount != null ? `${t.recordPlayCount} 次` : '—'
+      return t.fileSize != null ? `${(t.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'
+    },
+    isCurrent(t) {
+      return this.currentId != null && t.id === this.currentId
+    },
+    coverOf(t) {
+      return (t.al && t.al.picUrl) || (t.album && t.album.picUrl) || this.defaultImg
+    },
+    artistList(t) {
+      return t.ar || t.artists || []
+    },
+    albumName(t) {
+      return (t.al && t.al.name) || (t.album && t.album.name) || ''
+    },
+    albumId(t) {
+      return (t.al && t.al.id) || (t.album && t.album.id)
+    },
+    albumClick(t) {
+      const id = this.albumId(t)
+      if (id) this.alClk(id)
+    },
+    durationOf(t) {
+      const v = t.dt || t.duration
+      return v ? format_s(v) : ''
+    },
     mvClk(id) {
       this.$bus.$emit('mvClk', id)
     },
     songClk(song) {
+      // 单击播放（原为 dblclick：与全站卡片单击跳转的习惯相反，新用户发现不了）
       this.$bus.$emit('songClk', song)
     },
     arClk(id) {
@@ -126,27 +150,18 @@ export default {
 @import "src/assets/scss/tracksLayout";
 
 // 行操作区（可选插槽）：hover 才出现，避免日常浏览时干扰
-.tracks {
-  position: relative;
-
-  &.has-actions {
-    // 给悬浮操作条留出空间，免得盖住时长列
-    padding-right: 9.5rem;
-  }
-}
-
 .trackActions {
   position: absolute;
   top: 50%;
-  right: 1rem;
+  right: $sp-3;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: .25rem;
   padding: .25rem .4rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+  background: var(--c-bg-elevated);
+  box-shadow: 0 2px 10px var(--c-shadow-mid);
   opacity: 0;
   pointer-events: none;
   transition: opacity .18s ease;

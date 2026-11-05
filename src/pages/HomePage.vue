@@ -58,7 +58,8 @@
         <h2>网友精选碟</h2>
         <transition name="fade-slide" mode="out-in">
           <GridSkeleton v-if="discLoading || !discReady" key="skeleton" type="playlist" :count="5" :title="false"/>
-          <PlaylistLayout v-else key="content" :list="netizensFeaturedDiscs" pic-name="coverImgUrl"/>
+          <PlaylistLayout v-else-if="netizensFeaturedDiscs.length" key="content" :list="netizensFeaturedDiscs" pic-name="coverImgUrl"/>
+          <EmptyState v-else key="empty" title="暂无精选歌单" desc="接口暂时没有返回数据，稍后刷新试试"/>
         </transition>
       </el-row>
     </div>
@@ -68,7 +69,8 @@
         <h2>最新专辑</h2>
         <transition name="fade-slide" mode="out-in">
           <GridSkeleton v-if="albumLoading || !albumReady" key="skeleton" type="album" :count="5" :title="false"/>
-          <AlbumLayout v-else key="content" :list="albums"/>
+          <AlbumLayout v-else-if="albums.length" key="content" :list="albums"/>
+          <EmptyState v-else key="empty" title="暂无新专辑" desc="接口暂时没有返回数据，稍后刷新试试"/>
         </transition>
       </el-row>
     </div>
@@ -85,7 +87,8 @@
       <h2>热门歌手</h2>
       <transition name="fade-slide" mode="out-in">
         <GridSkeleton v-if="artistLoading || !artistReady" key="skeleton" type="artist" :count="5" :title="false"/>
-        <ArtistLayout v-else key="content" :list="hotArtists"/>
+        <ArtistLayout v-else-if="hotArtists.length" key="content" :list="hotArtists"/>
+        <EmptyState v-else key="empty" title="暂无歌手数据" desc="接口暂时没有返回数据，稍后刷新试试"/>
       </transition>
     </div>
     <!--获取排行榜-->
@@ -94,7 +97,7 @@
         <h2>排行榜</h2>
         <transition name="fade-slide" mode="out-in">
           <GridSkeleton v-if="rankLoading || !rankReady" key="skeleton" type="rank" :count="6" :title="false"/>
-          <div v-else key="content">
+          <div v-else-if="lists.length" key="content">
             <el-col v-for="l in lists" :key="l.id" :span="4">
           <div class="topList" @click="plClk(l.id)">
             <el-card :body-style="{ padding: 0 }" shadow="never">
@@ -110,6 +113,7 @@
           </div>
         </el-col>
           </div>
+          <EmptyState v-else key="empty" title="暂无榜单数据" desc="接口暂时没有返回数据，稍后刷新试试"/>
         </transition>
       </el-row>
     </div>
@@ -127,6 +131,7 @@ import PersonalFM from "@/components/PersonalFM";
 import FmRoamCards from "@/components/FmRoamCards";
 import HeartModeCard from "@/components/HeartModeCard";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
+import EmptyState from "@/components/common/EmptyState";
 
 import playTracksBtn from "@/components/playTracksBtn";
 
@@ -163,7 +168,7 @@ export default {
     }
   },
   mixins: [coverLight],
-  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, FmRoamCards, HeartModeCard, GridSkeleton, playTracksBtn},
+  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, FmRoamCards, HeartModeCard, GridSkeleton, playTracksBtn, EmptyState},
   computed: {
     isLogin() {
       return this.$store.getters["UserAbout/isLogin"];

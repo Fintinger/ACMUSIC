@@ -1,0 +1,37 @@
+@import "variables";
+@import "motion";
+
+// 页面视图切换统一为下划线；按钮仍用原生按钮，路由仍用链接。
+.ac-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: $sp-5;
+  border-bottom: 1px solid var(--c-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+
+  > a, > button {
+    flex-shrink: 0;
+    padding: $sp-3 var(--tab-inline-space, #{$sp-5});
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: $font-black-2;
+    font-family: inherit;
+    font-size: $fs-body;
+    font-weight: 500;
+    line-height: 1.4;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color $motion-fast $ease-standard, border-color $motion-fast $ease-standard;
+    &:hover { color: $font-black-1; }
+    &.active, &.router-link-active {
+      color: $color-main-text;
+      font-weight: 600;
+      border-bottom-color: var(--c-accent);
+    }
+    &:focus-visible { outline-offset: -3px; }
+  }
+}

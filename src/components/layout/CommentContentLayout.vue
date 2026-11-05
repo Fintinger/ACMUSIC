@@ -87,7 +87,7 @@
               <button class="dialog-close" @click="replyTarget = null"><BaseIcon name="close"/></button>
             </div>
             <div class="dialog-body">
-              <SendComment :comment-id="replyTarget.commentId" :sid="id" :stype="type" :type="2" @reply="onReplySent"/>
+              <SendComment :comment-id="replyTarget.commentId" :sid="id" :stype="type" :type="2" @reply="onReplySent" @cancel="replyTarget = null"/>
             </div>
           </div>
         </transition>

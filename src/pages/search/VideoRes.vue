@@ -1,12 +1,19 @@
 <template>
   <div class="videoRes">
     <h2>视频</h2>
+    <EmptyState
+        v-if="!searchLoading && !list.length"
+        :title="searchError ? '搜索暂时不可用' : '没有找到相关结果'"
+        :desc="searchError ? '请检查网络后重新加载' : '试试其他关键词，或切换搜索分类'"
+        :action-text="searchError ? '重新加载' : ''"
+        @action="initLoad"
+    />
     <el-row class="video-res-grid">
       <GridSkeleton v-if="searchLoading" :count="8" type="video"/>
-      <VideoLayout v-if="!searchLoading" :list="list"/>
+      <VideoLayout v-if="!searchLoading && list.length" :list="list"/>
     </el-row>
     <el-row>
-      <LoadMore :load="load" :loading="loading" :noMore="noMore"/>
+      <LoadMore :error="searchPageError" v-if="!searchLoading && list.length" :load="load" :loading="loading" :noMore="noMore"/>
     </el-row>
   </div>
 </template>

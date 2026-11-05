@@ -76,13 +76,13 @@ export default {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  background: var(--c-bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--c-border), 0 4px 14px var(--c-shadow-low);
   transition: transform 200ms ease, box-shadow 200ms ease;
 
   &:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 8px 22px var(--c-shadow-mid);
   }
 
   &.busy { cursor: progress; opacity: 0.7; &:hover { transform: none; } }
@@ -104,11 +104,11 @@ export default {
   box-sizing: border-box;
   // 只圆上方两角：下方紧接着白色说明条，圆了会在中间露出一段缝
   border-radius: 12px 12px 0 0;
-  background: linear-gradient(135deg, #ff7a9c 0%, #ff5f6d 100%);
+  background: linear-gradient(135deg, #c96f85 0%, #a84a5e 100%);
   color: #fff;
   transition: background 220ms ease, box-shadow 220ms ease;
 
-  .heart-entry:hover & { background: linear-gradient(135deg, #ff6d92 0%, #ff5060 100%); }
+  .heart-entry:hover & { background: linear-gradient(135deg, #bd6479 0%, #993f52 100%); }
 }
 
 .he-name {
@@ -140,9 +140,9 @@ export default {
 // 开启态：底色已经固定成实心红了，这里只加描边和一圈同色投影，
 // 否则"正在生效"和"可以点"两者长得一模一样
 .heart-entry.on {
-  outline: 2px solid $color-main;
+  outline: 2px solid var(--c-accent);
   outline-offset: -2px;
-  box-shadow: 0 6px 20px rgba(255, 95, 109, 0.35);
+  box-shadow: 0 6px 20px var(--c-shadow-mid);
 }
 
 // 与 .card-caption 完全同规格（padding / min-height / 字号），保证两张卡一样高
@@ -152,8 +152,8 @@ export default {
   box-sizing: border-box;
   font-size: 11px;
   line-height: 1.4;
-  color: rgba(0, 0, 0, 0.55);
-  background: #fff;
+  color: var(--c-text-secondary);
+  background: var(--c-bg-elevated);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -17,10 +17,10 @@
  * MultimatchLayout —— 智能匹配里的一个类型，展开成若干张「同尺寸卡片」
  *
  * 布局约定（外层 .mm-panel 负责横向滚动）：
- * - 每张卡固定 240px 宽、封面固定 16:9、标题固定两行、meta 固定一行
+ * - 每张卡固定 200px 宽、封面固定 1:1、标题固定两行
  *   → 所有类型的所有条目尺寸完全一致，横向排成一条，超出由面板滚动
  * - 类型名做成封面左上角的角标，不再占用卡片内部首行，卡片高度只由内容决定
- * - 封面统一 16:9 裁切（歌单/专辑的方图也裁），换取整条卡片高度齐平
+ * - 统一卡片背景、内距与高度，歌手保持圆头像
  */
 import CoverImage from "@/components/common/CoverImage";
 import {imgParam} from "@/utils/filters";
@@ -66,6 +66,7 @@ export default {
 
 <style lang="scss" scoped>
 @import "src/assets/scss/base/variables";
+@import "src/assets/scss/base/motion";
 
 /* 一个类型 = 一组同尺寸卡片横向连排；宽度由卡片数决定，不参与压缩 */
 .mm-strip-group {
@@ -78,6 +79,11 @@ export default {
 .mm-item {
   flex: 0 0 200px;
   width: 200px;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 16px;
+  background: var(--c-bg-elevated);
   cursor: pointer;
   outline: none;
 
@@ -95,7 +101,7 @@ export default {
   aspect-ratio: 1 / 1;
   border-radius: 12px;
   overflow: hidden;
-  background: #f2f3f5;
+  background: var(--c-bg-sunken);
 }
 
 /* 绝对定位 + inset:0 + object-fit:cover：无论原图比例如何都完整覆盖底框，不会露出灰边 */
@@ -110,6 +116,8 @@ export default {
 }
 
 .mm-item:hover .mm-media ::v-deep .mm-img { transform: scale(1.04); }
+.type-playlist .mm-media ::v-deep .mm-img { transition: transform $playlist-cover-duration $ease-smooth; }
+.type-playlist .mm-item:hover .mm-media ::v-deep .mm-img { transform: scale($media-cover-scale); }
 
 /* 类型角标：贴在封面上，不再占卡片内部的一行高度 */
 .mm-tag {
@@ -128,18 +136,21 @@ export default {
 /* 标题固定两行高度 → 每张卡等高（不再展示下方的字段信息） */
 .mm-title {
   margin-top: 10px;
+  padding: 0 4px;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
-  color: #222;
+  color: var(--c-text-primary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 2.8em;
+  height: 2.8em;
 }
 
 /* 歌手：圆头像居中，不跟着方图裁成硬边方框 */
+.type-artist .mm-media { background: transparent; }
+
 .type-artist .mm-media ::v-deep .mm-img {
   position: absolute;
   inset: 0;

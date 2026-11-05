@@ -20,7 +20,7 @@
       <el-col :span="4">
         <div class="btn-send row-col-center">
           <button class="btn-cancel" type="button" @click="$emit('cancel')">取消</button>
-          <span :class="{ 'is-disabled': !canSend }" @click="sendComment">发送</span>
+          <button class="btn-submit" type="button" :disabled="!canSend" @click="sendComment">发送</button>
         </div>
       </el-col>
     </el-row>

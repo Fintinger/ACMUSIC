@@ -1,7 +1,7 @@
 <template>
   <div class="VideoPlay">
-    <!-- id 为 undefined 时（如直接访问 /video 路径），不渲染子组件避免 Vue required prop 警告 -->
-    <VideoPlayerLayout v-if="newId || id" :id="newId || id" :detail="detail" :nameConfig="nameConfig" :simi-click-evt="vClk"
+    <!-- 无 id 时仍渲染错误与重试入口，给展示组件传空串避免 required prop 警告。 -->
+    <VideoPlayerLayout :id="newId || id || ''" :detail-failed="detailFailed" @retry-detail="loadMedia" @retry-url="loadUrl" :detail="detail" :nameConfig="nameConfig" :simi-click-evt="vClk"
                          :simi-video="simiVid"
                          :simi-loading="simiLoading"
                          :simi-fallback="simiFallback"
@@ -22,6 +22,8 @@ export default {
   data() {
     return {
       detail: {},
+      detailFailed: false,
+      requestVersion: 0,
       //保存mlog转换成video后的id
       newId: "",
       url: "",
@@ -55,7 +57,7 @@ export default {
       return videoApi.url(id)
     },
     /** 相关推荐: /related/allvideo 上游已废(恒 data:[])，改按标题搜索 */
-    async loadSimi(id) {
+    async loadSimi(id, version = this.requestVersion) {
       const d = this.detail || {}
       const title = d.title || d.name || ""
       // 标题搜索可能为空(如节目期数、生僻标题)，用作者/歌手名兜底，避免推荐区消失
@@ -67,15 +69,17 @@ export default {
       this.simiFallback = false
       try {
         let list = await fetchRelatedVideos(title, { excludeId: id, fallbackKeyword: fallback, extraKeywords: extras })
+        if (version !== this.requestVersion) return
         // 标题/标签/作者全部搜不到时，侧栏会因为列表为空被整个 v-if 拿掉，
         // 这里退化成推荐流补位，保证右侧始终有内容
         if (!list.length) {
           list = await fetchRecommendVideos({ excludeId: id, limit: 10 })
+          if (version !== this.requestVersion) return
           this.simiFallback = list.length > 0
         }
         this.simiVid = list
       } finally {
-        this.simiLoading = false
+        if (version === this.requestVersion) this.simiLoading = false
       }
     },
     mlog2video(id) {
@@ -84,48 +88,47 @@ export default {
     vClk(id) {
       this.$bus.$emit('vClk', id)
     },
-    concurrentRequests(id) {
-      return this.getUrl(id).then(res => {
-        // /video/url 可能返回空 urls 或 null 地址：转空串 + 失败态，避免把 null 传给必填 prop
+    async loadUrl() {
+      const version = this.requestVersion
+      const id = this.newId || this.id
+      this.url = ''; this.urlFailed = false
+      try {
+        const res = await this.getUrl(id)
+        if (version !== this.requestVersion) return
         const urls = (res.data && res.data.urls) || []
         const last = urls[urls.length - 1] || {}
-        this.url = last.url || ""
-        this.urlFailed = !this.url
-        return this.loadSimi(id)
-      }).catch(() => {
-        this.url = ""
-        this.urlFailed = true
-      })
+        this.url = last.url || ''; this.urlFailed = !this.url
+      } catch (_) { if (version === this.requestVersion) this.urlFailed = true }
     },
-    mlg_mv_video(id) {
-      if (/^a1/.test(id)) {//mlog
-        this.mlog2video(id).then(res => {
-          let newVid = res.data.data
-          //保存mblog转换后的新id
-          this.newId = newVid
-          this.getVidDetail(newVid).then(res => {
-            //正常，是视频
-            this.detail = res.data.data;
-            this.concurrentRequests(newVid)
-          })
-        })
-      } else if (Number.isInteger(id * 1)) {//是MV
-        this.$router.replace({
-          name: "mvPlay",
-          query: {id}
-        })
-      } else {//是视频
-        this.getVidDetail(id).then(res => {
-          //正常，是视频
-          this.detail = res.data.data;
-          this.concurrentRequests(id)
-        })
+    async loadMedia() {
+      const version = ++this.requestVersion
+      this.detail = {}; this.newId = ''; this.url = ''; this.simiVid = []
+      this.simiLoading = false; this.simiFallback = false; this.detailFailed = false; this.urlFailed = false
+      if (!String(this.id || '').trim()) { this.detailFailed = true; return }
+      if (/^[1-9]\d*$/.test(String(this.id))) {
+        this.$router.replace({name: 'mvPlay', query: {id: this.id}})
+        return
       }
+      try {
+        let id = this.id
+        if (/^a1/.test(id)) {
+          const converted = await this.mlog2video(id)
+          if (version !== this.requestVersion) return
+          id = converted.data && converted.data.data
+          if (typeof id !== 'string' || !id) throw new Error('Invalid Mlog ID')
+          this.newId = id
+        }
+        const res = await this.getVidDetail(id)
+        if (version !== this.requestVersion) return
+        const data = res.data && res.data.data
+        if (!data || !data.title) throw new Error('Invalid video detail')
+        this.detail = data
+        await Promise.all([this.loadUrl(), this.loadSimi(id, version).catch(() => {})])
+      } catch (_) { if (version === this.requestVersion) this.detailFailed = true }
     }
   },
-  activated() {
-    this.mlg_mv_video(this.id)
-  }
+  beforeDestroy() { this.requestVersion++ },
+  activated() { this.loadMedia() }
 }
 </script>
 

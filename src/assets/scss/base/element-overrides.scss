@@ -1,16 +1,47 @@
 /**
  * Element UI 浮层皮肤覆盖
  *
- * 只覆盖「通知 / 确认框 / 对话框」三类浮层，把 Element 出厂皮肤（4px 圆角、#409EFF 蓝、
- * 彩色底 toast）换成项目 token（12-16px 圆角、#8685EF 主色、白底 + 语义色图标）。
+ * 覆盖「按钮 / 通知 / 确认框 / 对话框」四类，把 Element 出厂皮肤（4px 圆角、#409EFF 蓝、
+ * 彩色底 toast）换成项目 token（12-16px 圆角、var(--c-accent) 主色、白底 + 语义色图标）。
  *
- * ⚠️ 不触碰 el-button / el-input / el-form 等公共基础组件的全局样式，
- *    按钮等只在本文件内以 `.el-message-box` 前缀限定作用域，避免污染业务组件。
+ * ⚠️ 按钮只接管「配色」，不碰尺寸 / 圆角 / 内距 / 字重——那些由各业务组件自己决定
+ *    （phoneLogin 的 .submit-btn、对话框的 size="small" 等）。
+ *    这是全站唯一一处允许修改 .el-button 全局样式的地方：Element 没有主题变量
+ *    接入通道（$--color-primary 从未参与构建，是死代码），不覆盖就永远是 #409EFF 蓝。
+ *
+ * ⚠️ 不触碰 el-input / el-form 等其余公共基础组件的全局样式。
  *
  * ⚠️ 必须在 `element-ui/lib/theme-chalk/index.css` 之后引入（见 main.js），
  *    否则同优先级的规则会被主题 CSS 反压。
  */
 @import "variables";
+
+// 根滚动槽已永久预留，Element 的 body padding 补偿会造成第二次位移。
+@supports (scrollbar-gutter: stable) {
+  body.el-popup-parent--hidden { padding-right: 0 !important; }
+}
+
+/* ---------------- 主按钮（Element 出厂蓝 → 主题紫） ---------------- */
+.el-button--primary {
+  background-color: var(--c-button-primary);
+  border-color: var(--c-button-primary);
+  color: var(--c-text-on-accent);
+
+  &:hover,
+  &:focus {
+    background-color: var(--c-button-primary-hover);
+    border-color: var(--c-button-primary-hover);
+    color: var(--c-text-on-accent);
+  }
+
+  &.is-disabled,
+  &.is-disabled:hover,
+  &.is-disabled:focus {
+    background-color: $color-main-light;
+    border-color: $color-main-light;
+    color: #fff;
+  }
+}
 
 $overlay-radius: 12px;
 $overlay-radius-lg: 16px;
@@ -65,7 +96,7 @@ $overlay-border: 1px solid rgba(0, 0, 0, .04);
 
 .el-message.el-message--info {
   background-color: #fff;
-  border-color: rgba(134, 133, 239, .18);
+  border-color: rgba(var(--theme-accent-rgb), .18);
   .el-message__icon, .el-message__content { color: $feedback-info; }
 }
 
@@ -106,13 +137,14 @@ $overlay-border: 1px solid rgba(0, 0, 0, .04);
   .el-button--default {
     border-color: #dcdfe6;
     color: $font-black-1;
-    &:hover { border-color: $color-main; color: $color-main; }
+    &:hover { border-color: $color-main; color: $color-main-text; }
   }
 
   .el-button--primary {
-    background: $color-main;
-    border-color: $color-main;
-    &:hover { background: $color-main-1; border-color: $color-main-1; }
+    background: var(--c-button-primary);
+    border-color: var(--c-button-primary);
+    color: var(--c-text-on-accent);
+    &:hover { background: var(--c-button-primary-hover); border-color: var(--c-button-primary-hover); }
   }
 
   .el-button--danger {

@@ -2,13 +2,14 @@
   <div v-cloak class="listDetail">
     <div class="listInfo">
       <PlaylistInfoSkeleton v-if="infoLoading"/>
+      <EmptyState v-else-if="infoError" :title="infoError" desc="请检查歌单链接或网络后重试" action-text="重新加载详情" @action="loadInfo"/>
       <el-row v-else>
         <el-col :span="6">
           <div class="imgContainer">
             <cover-image :alt="listInfo.name + '的封面'" :src="listInfo.coverImgUrl" eager />
           </div>
         </el-col>
-        <el-col class="info" :span="12">
+        <el-col class="info" :span="18">
           <div class="info-wrap">
             <scoText class="listName">{{ listInfo.name }}</scoText>
             <el-row class="creator">
@@ -17,10 +18,14 @@
                       <el-row class="listTag">
                         <span class="listCount">{{ listInfo.trackCount }}首</span> | <span class="play-count">播放{{ listInfo.playCount | Div1w(listInfo.playCount) }}</span>
                       </el-row>
-            <el-row class="listTime">创建于{{ listInfo.createTime |formatMs("YYYY年MM月DD日") }}，最后更新于{{ listInfo.updateTime|fromNow }}</el-row>
+            <el-row v-if="listInfo.createTime || listInfo.updateTime" class="listTime"><span v-if="listInfo.createTime">创建于{{ listInfo.createTime |formatMs("YYYY年MM月DD日") }}</span><span v-if="listInfo.updateTime">{{ listInfo.createTime ? '，' : '' }}最后更新于{{ listInfo.updateTime|fromNow }}</span></el-row>
             <el-row class="listDescription">
               <pre v-text="listInfo.description"></pre>
             </el-row>
+            <div class="detail-play-actions">
+              <button type="button" class="detail-play-all" :disabled="initialLoading || !songs.length" @click="$refs.songTracks.playAllTracks(songs)"><BaseIcon name="play"/> 播放全部</button>
+              <button type="button" class="detail-queue-all" :disabled="!songs.length" @click="$refs.songTracks.pushAllTracks(songs)"><BaseIcon name="listPlus"/> 加入列表</button>
+            </div>
             <!-- 只有歌单创建者能编辑：订阅来的歌单改不了 -->
             <el-row v-if="isOwner" class="ownerActions">
               <button class="actBtn" :disabled="saving" @click="openEdit">编辑信息</button>
@@ -39,12 +44,12 @@
         </el-col>
       </el-row>
     </div>
-    <div class="songs-comment">
+    <div v-if="!infoLoading && !infoError" class="songs-comment">
       <el-tabs v-model="activeName">
         <el-tab-pane label="歌曲" name="songs">
           <TrackListSkeleton v-if="initialLoading"/>
           <template v-else>
-            <TracksLayout :list="songs" :show-actions="isOwner && manageMode">
+            <TracksLayout v-if="songs.length" ref="songTracks" :need-btn="false" :list="songs" :show-actions="isOwner && manageMode">
               <template #actions="{ track, index }">
                 <button class="rowAct" title="上移" :disabled="saving || index === 0"
                         @click="moveTrack(index, -1)">↑
@@ -57,10 +62,12 @@
                 </button>
               </template>
             </TracksLayout>
-            <LoadMore :load="load" :loading="loading" :noMore="noMore"/>
+            <EmptyState v-if="songsError" compact :title="songs.length ? '更多歌曲加载失败' : '歌曲加载失败'" desc="已加载的歌曲会保留，请检查网络后重试" action-text="重试歌曲" @action="load"/>
+            <EmptyState v-else-if="!songs.length" compact title="这张歌单暂无可用歌曲"/>
+            <LoadMore v-if="songs.length && !songsError" :load="load" :loading="loading" :noMore="noMore"/>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="评论" name="comment">
+        <el-tab-pane :label="'评论' + (listInfo.commentCount != null ? ' ' + listInfo.commentCount : '')" name="comment">
           <CommentLayout :id="id" type="2"/>
         </el-tab-pane>
       </el-tabs>
@@ -89,6 +96,7 @@
 </template>
 
 <script>
+import EmptyState from '@/components/common/EmptyState';
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
 import CommentLayout from "@/components/layout/CommentLayout";
@@ -101,7 +109,7 @@ import * as playlistApi from "@/api/Playlist";
 
 export default {
   name: "listDetail",
-  components: {LoadMore, TracksLayout, CommentLayout, PlaylistInfoSkeleton, TrackListSkeleton, scoText, CoverImage},
+  components: {EmptyState, LoadMore, TracksLayout, CommentLayout, PlaylistInfoSkeleton, TrackListSkeleton, scoText, CoverImage},
   data() {
     // const LIMIT = 50, OFFSET = 50;
     return {
@@ -112,6 +120,10 @@ export default {
       creator: {},
       loading: false,
       infoLoading: true,
+      infoError: '',
+      songsError: false,
+      exhausted: false,
+      requestVersion: 0,
       initialLoading: true,
       params: {
         limit: this.LIMIT,
@@ -141,7 +153,7 @@ export default {
       return (this.params.offset + 1) * this.params.limit
     },
     noMore() {
-      return this.trackCount === this.songs.length
+      return this.exhausted || (this.trackCount != null && this.songs.length >= Number(this.trackCount))
     },
     profile() {
       return this.$store.getters["UserAbout/userProfile"] || {}
@@ -165,34 +177,56 @@ export default {
      */
     allLoaded() {
       const total = this.listInfo && this.listInfo.trackCount
-      return !total || this.songs.length >= total
+      return total != null && Number.isFinite(Number(total)) && Number(total) >= 0 && !this.infoError && this.songs.length >= Number(total)
     }
   },
   methods: {
-    loadSongs(id, limit) {
-      return playlistApi.getAllTrack(id, {
-        limit: limit || this.params.limit,
-        offset: this.params.offset
-      }).then(res => {
-        const songs = (res.data && res.data.songs) || []
-        songs.forEach(val => {
-          if (this.songs.findIndex(item => item.id === val.id) === -1) {
-            this.songs.push(val)
-          }
-        })
-        this.params.offset++
-      }).catch(() => {
-        // 失败不推进 offset, 允许重试同一页
-      }).finally(() => {
-        // 请求失败也必须恢复, 否则"加载中..."永久卡死
-        this.loading = false
-        this.initialLoading = false
-      })
+    async loadInfo() {
+      const version = this.requestVersion
+      this.infoLoading = true; this.infoError = ''
+      if (!/^[1-9]\d*$/.test(String(this.id || ''))) {
+        this.infoError = '歌单链接无效'; this.infoLoading = false; this.initialLoading = false; return
+      }
+      try {
+        const res = await playlistApi.detail(this.id)
+        if (version !== this.requestVersion) return
+        const pl = res.data && res.data.playlist
+        if (!pl || !pl.id) throw new Error('Invalid playlist response')
+        this.listInfo = pl; this.creator = pl.creator || {}
+      } catch (_) { if (version === this.requestVersion) this.infoError = '歌单详情加载失败' }
+      finally { if (version === this.requestVersion) this.infoLoading = false }
+    },
+    async loadSongs(id, limit) {
+      if (!/^[1-9]\d*$/.test(String(id || ''))) { this.initialLoading = false; return }
+      const version = this.requestVersion
+      const pageSize = limit || this.params.limit
+      const offset = this.params.offset
+      this.loading = true; this.songsError = false
+      if (!this.songs.length) this.initialLoading = true
+      try {
+        const res = await playlistApi.getAllTrack(id, {limit: pageSize, offset})
+        if (version !== this.requestVersion) return
+        const rows = res.data && res.data.songs
+        if (!Array.isArray(rows)) throw new Error('Invalid tracks response')
+        const seen = new Set(this.songs.map(track => track.id))
+        rows.forEach(track => { if (!seen.has(track.id)) { this.songs.push(track); seen.add(track.id) } })
+        this.params.offset = offset + rows.length
+        this.exhausted = rows.length < pageSize
+      } catch (_) { if (version === this.requestVersion) this.songsError = true }
+      finally { if (version === this.requestVersion) { this.loading = false; this.initialLoading = false } }
     },
     load() {
-      if (this.loading || this.noMore) return
-      this.loading = true
-      this.loadSongs(this.id)
+      if (this.loading || (!this.songsError && this.noMore)) return
+      return this.loadSongs(this.id)
+    },
+    initialize() {
+      this.requestVersion++
+      this.songs = []; this.listInfo = {}; this.creator = {}
+      this.infoLoading = true; this.initialLoading = true; this.loading = false
+      this.infoError = ''; this.songsError = false; this.exhausted = false
+      this.manageMode = false; this.editVisible = false
+      this.params.limit = this.LIMIT; this.params.offset = this.OFFSET
+      return Promise.all([this.loadInfo(), this.loadSongs(this.id)])
     },
     songClk(song) {
       this.$bus.$emit('songClk', song)
@@ -336,27 +370,8 @@ export default {
       }
     }
   },
-  activated() {
-    this.songs = []
-    this.listInfo = {}
-    this.creator = {}
-    this.infoLoading = true
-    this.initialLoading = true
-    this.manageMode = false
-    this.editVisible = false
-    this.params.limit = this.LIMIT
-    this.params.offset = this.OFFSET
-    playlistApi.detail(this.id).then(res => {
-      // 上游对不存在的歌单/匿名歌单会返回 playlist 缺失或 creator 为 null，
-      // 直接赋值会让模板里的 creator.nickname 抛 render 错（整页白一块）。
-      const pl = (res.data && res.data.playlist) || {}
-      this.listInfo = pl
-      this.creator = pl.creator || {}
-    }).catch(() => {
-      // 取详情失败：保持已清空的空态，由骨架屏/空列表兜住，不再向外抛
-    }).finally(() => { this.infoLoading = false })
-    this.loadSongs(this.id)
-  }
+  beforeDestroy() { this.requestVersion++ },
+  activated() { this.initialize() }
 }
 </script>
 
@@ -389,14 +404,14 @@ export default {
   transition: all .2s;
 
   &:hover:not(:disabled) {
-    border-color: #8685EF;
-    color: #8685EF;
+    border-color: var(--c-accent);
+    color: var(--c-accent);
   }
 
   &.active {
-    background: #8685EF;
-    border-color: #8685EF;
-    color: #fff;
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+    color: var(--theme-on-accent);
   }
 
   /* 破坏性操作：常态就带红，悬停加深；比 .actBtn:hover 优先级高，不会被紫色覆盖 */
@@ -431,8 +446,8 @@ export default {
   transition: all .15s;
 
   &:hover:not(:disabled) {
-    background: rgba(134, 133, 239, .16);
-    color: #8685EF;
+    background: rgba(var(--theme-accent-rgb), .16);
+    color: var(--c-accent);
   }
 
   &.danger:hover:not(:disabled) {
@@ -457,5 +472,12 @@ export default {
       margin-top: 0;
     }
   }
+}
+.detail-play-actions {
+  display: flex; gap: $sp-3; margin-top: $sp-5;
+  button { display: inline-flex; align-items: center; gap: $sp-2; border-radius: $radius-pill; padding: $sp-3 $sp-5; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--c-border-strong); }
+  .detail-play-all { background: var(--c-button-primary); border-color: var(--c-button-primary); color: var(--c-text-on-accent); }
+  .detail-queue-all { background: var(--c-bg-sunken); color: var(--c-text-primary); }
+  button:disabled { opacity: .5; cursor: default; }
 }
 </style>

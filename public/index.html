@@ -1,7 +1,17 @@
 <!DOCTYPE html>
-<html lang="">
+<html lang="zh-CN">
 <head>
     <meta charset="utf-8">
+    <script>
+        (function () {
+            var mode = 'system';
+            try { mode = localStorage.getItem('acmusic_theme') || 'system'; } catch (e) { /* 存储受限 */ }
+            var dark = mode === 'dark' || (mode !== 'light' && mode !== 'dark' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+            document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+            document.documentElement.style.backgroundColor = dark ? '#202633' : '#ffffff';
+        }());
+    </script>
     <meta content="IE=edge" http-equiv="X-UA-Compatible">
     <meta content="width=device-width,initial-scale=1.0" name="viewport">
     <meta content="ACMUSIC - 你的私人音乐播放器" name="description">

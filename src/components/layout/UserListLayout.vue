@@ -8,8 +8,8 @@
         <div class="info">
           <p class="name" :title="u.nickname">
             {{ u.nickname }}
-            <i v-if="u.gender===1" class="el-icon-male"></i>
-            <i v-if="u.gender===2" class="el-icon-female"></i>
+            <BaseIcon v-if="u.gender===1" class="el-icon-male" name="male"/>
+            <BaseIcon v-if="u.gender===2" class="el-icon-female" name="female"/>
           </p>
           <p class="sign" v-if="u.signature" :title="u.signature">{{ u.signature }}</p>
           <p class="meta">
@@ -25,7 +25,7 @@
       <!-- 操作按钮只在粉丝列表出现，且必须登录、且不是我自己 -->
       <button v-if="showAction && !isMe(u)" class="actBtn" :class="{ 'is-mutual': isMutual(u) }"
               :disabled="!!pending[u.userId]" @click.stop="onAction(u)">
-        <i v-if="pending[u.userId]" class="el-icon-loading"></i>
+        <BaseIcon v-if="pending[u.userId]" class="is-spinning" name="loader"/>
         <template v-else-if="isMutual(u)">互相关注</template>
         <template v-else>回关</template>
       </button>
@@ -59,6 +59,7 @@ export default {
   name: "UserListLayout",
   components: { CoverImage },
   props: {
+    self: { type: Boolean, default: false },
     list: {
       type: Array,
       required: true,
@@ -90,7 +91,7 @@ export default {
       return (this.$store.getters["UserAbout/userProfile"] || {}).userId
     },
     showAction() {
-      return this.mode === 'followeds' && this.isLogin
+      return this.self && this.mode === 'followeds' && this.isLogin
     },
   },
   mounted() {
@@ -211,7 +212,7 @@ export default {
     },
     buildSpanRow(h, label, value) {
       return h('p', { style: 'margin:10px 0 0;color:#555' },
-        [label, h('b', { style: 'color:#8685EF;font-weight:600;margin-left:2px' }, value)])
+        [label, h('b', { style: 'color:var(--c-accent);font-weight:600;margin-left:2px' }, value)])
     },
     doUnfollow(u) {
       this.setPending(u.userId, true)
@@ -260,14 +261,14 @@ export default {
   min-width: 0;
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(255,255,255,.72);
-  border: 1px solid rgba(0,0,0,.05);
+  background: var(--c-bg-elevated);
+  border: 1px solid var(--c-border);
   transition: transform .25s, box-shadow .25s, border-color .25s;
 
   &:hover {
-    transform: translateY(-3px);
-    border-color: rgba($color-main, .35);
-    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    transform: none;
+    border-color: var(--c-accent);
+    box-shadow: 0 8px 24px var(--c-shadow-low);
   }
 }
 
@@ -333,7 +334,7 @@ export default {
 
 // 关注时长：跟粉丝数/关注数区分开，用主题色标出来
 .since {
-  color: $color-main;
+  color: $color-main-text;
   white-space: nowrap;
 }
 
@@ -347,22 +348,22 @@ export default {
   font-size: 12px;
   cursor: pointer;
   transition: all .2s;
-  border: 1px solid $color-main;
+  border: 1px solid var(--c-accent);
   background: transparent;
-  color: $color-main;
+  color: $color-main-text;
 
-  &:hover { background: rgba($color-main, .1); }
+  &:hover { background: var(--c-accent-soft); }
 
   // 已互关：实心，hover 时提示可取消
   &.is-mutual {
-    border-color: rgba(0,0,0,.12);
+    border-color: var(--c-border-strong);
     background: $color-theme-sec;
     color: $font-black-1;
 
     &:hover {
-      border-color: #f56c6c;
-      color: #f56c6c;
-      background: rgba(245,108,108,.08);
+      border-color: var(--c-danger);
+      color: var(--c-danger);
+      background: var(--c-bg-hover);
     }
   }
 

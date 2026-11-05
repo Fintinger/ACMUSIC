@@ -1,129 +1,133 @@
 <template>
   <transition name="mode-menu">
-    <div v-if="visible" class="mode-menu" @click.stop>
+    <div v-if="visible" class="mode-menu" @click.stop
+         @keydown.space.stop @keydown.left.stop @keydown.right.stop>
       <!-- A 队列策略：下一首是队列里的谁 -->
       <div class="mm-header">队列</div>
-      <div
+      <button type="button"
         v-for="opt in policies"
         :key="opt.key"
         class="mm-item"
         :class="{ active: opt.key === layers.policy, muted: layers.fm }"
+        :aria-pressed="opt.key === layers.policy"
         @click="pickPolicy(opt.key)"
       >
         <span class="mm-label">{{ opt.label }}</span>
         <span v-if="opt.key === layers.policy" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
-      </div>
+      </button>
       <div v-if="layers.fm" class="mm-note">私人 FM 中，队列策略暂不生效</div>
 
       <!-- B 内容来源：下一首从哪来 -->
       <div class="mm-header mm-header-gap">来源</div>
-      <div
+      <button type="button"
           class="mm-item"
-          :class="{ active: layers.heart, muted: layers.heartBusy }"
+          :class="{ active: layers.heart, muted: layers.heartBusy }" :aria-pressed="layers.heart" :disabled="layers.heartBusy"
           @click="$emit('toggle-heart')"
       >
         <span class="mm-label">心动模式</span>
         <span v-if="layers.heartBusy" class="mm-busy">取流中</span>
         <span v-else-if="layers.heart" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
-      </div>
+      </button>
 
       <!-- C 单曲形态：这一首怎么播 -->
       <div class="mm-header mm-header-gap">单曲形态</div>
-      <div
+      <button type="button"
           class="mm-item"
-          :class="{ active: layers.form === 'full' }"
+          :class="{ active: layers.form === 'full' }" :aria-pressed="layers.form === 'full'"
           @click="$emit('select-form', 'full')"
       >
         <span class="mm-label">完整播放</span>
         <span v-if="layers.form === 'full'" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
-      </div>
-      <div
+      </button>
+      <button type="button"
           class="mm-item"
-          :class="{ active: layers.form === 'chorus', muted: !layers.chorusAvailable }"
+          :class="{ active: layers.form === 'chorus', muted: !layers.chorusAvailable }" :aria-pressed="layers.form === 'chorus'"
           @click="$emit('select-form', 'chorus')"
       >
         <span class="mm-label">只播副歌</span>
         <span v-if="!layers.chorusAvailable" class="mm-tag">本曲无数据</span>
         <span v-else-if="layers.form === 'chorus'" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
-      </div>
-      <div
+      </button>
+      <button type="button"
           class="mm-item"
-          :class="{ active: layers.form === 'ab' }"
+          :class="{ active: layers.form === 'ab' }" :aria-pressed="layers.form === 'ab'"
           @click="$emit('select-form', 'ab')"
       >
         <span class="mm-label">A-B 循环</span>
         <span class="mm-tag">{{ layers.abHint }}</span>
-      </div>
+      </button>
       <!-- 只有区间真的设好了才有"清除"可点，否则这一行是永远点不动的死按钮 -->
-      <div
+      <button type="button"
           v-if="layers.abValid"
           class="mm-item mm-item-sub"
           @click="$emit('select-form', 'ab-clear')"
       >
         <span class="mm-label">清除 A-B 区间</span>
-      </div>
+      </button>
 
       <!-- D 环境约束：什么时候停 -->
       <div class="mm-header mm-header-gap">定时停止</div>
-      <div
+      <button type="button"
           class="mm-item"
-          :class="{ active: layers.sleepMode === 'off' }"
+          :class="{ active: layers.sleepMode === 'off' }" :aria-pressed="layers.sleepMode === 'off'"
           @click="$emit('sleep-command', 'off')"
       >
         <span class="mm-label">不定时</span>
         <span v-if="layers.sleepMode === 'off'" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
-      </div>
-      <div
+      </button>
+      <button type="button"
           class="mm-item"
-          :class="{ active: layers.sleepMode === 'song' }"
+          :class="{ active: layers.sleepMode === 'song' }" :aria-pressed="layers.sleepMode === 'song'"
           @click="$emit('sleep-command', 'song')"
       >
         <span class="mm-label">播完本首停止</span>
         <span v-if="layers.sleepMode === 'song'" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
-      </div>
+      </button>
 
       <!-- 两档可调节：−/+ 步进，数字框里也能直接敲；改动即时生效。
            视觉与右下角定时下拉里的同一套行保持一致（那份样式挂在 .sleepDropdown 下，
            因为是 el-dropdown 传送到 body 的，这里没法直接复用，只能镜像一份） -->
       <div class="sdRow" :class="{ 'is-active': layers.sleepMode === 'count' }" title="从现在起重新计数">
         <span class="sdLabel">再播</span>
-        <span class="sdStep" :class="{ disabled: layers.countValue <= 1 }" @click="step('count', -1)">−</span>
+        <button class="sdStep" type="button" :disabled="layers.countValue <= 1" :class="{ disabled: layers.countValue <= 1 }" aria-label="定时首数减少" @click="step('count', -1)">−</button>
         <input
             class="sdNum"
             type="text"
             inputmode="numeric"
             :value="layers.countValue"
+            aria-label="定时停止首数"
             @click.stop
             @change="onNum('count', $event)"
         />
-        <span class="sdStep" :class="{ disabled: layers.countValue >= 99 }" @click="step('count', 1)">+</span>
+        <button class="sdStep" type="button" :disabled="layers.countValue >= 99" :class="{ disabled: layers.countValue >= 99 }" aria-label="定时首数增加" @click="step('count', 1)">+</button>
         <span class="sdUnit">首</span>
       </div>
       <div class="sdRow" :class="{ 'is-active': layers.sleepMode === 'time' }" title="从现在起重新计时">
         <span class="sdLabel">播放</span>
-        <span class="sdStep" :class="{ disabled: layers.timeValue <= 1 }" @click="step('time', -1)">−</span>
+        <button class="sdStep" type="button" :disabled="layers.timeValue <= 1" :class="{ disabled: layers.timeValue <= 1 }" aria-label="定时分钟减少" @click="step('time', -1)">−</button>
         <input
             class="sdNum"
             type="text"
             inputmode="numeric"
             :value="layers.timeValue"
+            aria-label="定时停止分钟"
             @click.stop
             @change="onNum('time', $event)"
         />
-        <span class="sdStep" :class="{ disabled: layers.timeValue >= 180 }" @click="step('time', 1)">+</span>
+        <button class="sdStep" type="button" :disabled="layers.timeValue >= 180" :class="{ disabled: layers.timeValue >= 180 }" aria-label="定时分钟增加" @click="step('time', 1)">+</button>
         <span class="sdUnit">分钟</span>
       </div>
 
-      <div class="sdFade" @click="$emit('toggle-fade')">
+      <button type="button" class="sdFade" role="switch" :aria-checked="layers.sleepFade" @click="$emit('toggle-fade')">
         <span>最后 {{ layers.fadeSec }} 秒渐弱淡出</span>
         <i class="sdSwitch" :class="{ on: layers.sleepFade }"></i>
-      </div>
+      </button>
 
       <!-- 复位：只清"临时叠上去的"三层，队列策略是长期偏好，不该被顺手抹掉 -->
-      <div class="mm-reset" title="关掉心动模式、回到完整播放、取消定时；队列策略保留" @click="$emit('reset')">
+      <button type="button" class="mm-reset" title="关掉心动模式、回到完整播放、取消定时；队列策略保留" @click="$emit('reset')">
         <span>复位</span>
         <span class="mm-reset-note">保留队列策略</span>
-      </div>
+      </button>
     </div>
   </transition>
 </template>
@@ -199,7 +203,7 @@ export default {
       if (!spec) return
       const cur = kind === 'count' ? this.layers.countValue : this.layers.timeValue
       const raw = parseInt(e.target.value, 10)
-      if (!raw || isNaN(raw)) { e.target.value = cur; return }
+      if (isNaN(raw)) { e.target.value = cur; return }
       const next = Math.min(spec.max, Math.max(spec.min, raw))
       e.target.value = next
       if (next === cur && this.layers.sleepMode === kind) return
@@ -211,7 +215,17 @@ export default {
 
 <style lang="scss" scoped>
 @import "src/assets/scss/base/motion";
-$accent: #8685EF;
+$accent: var(--player-menu-accent);
+
+.mm-item, .mm-reset, .sdFade {
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  &:focus-visible { outline: 2px solid var(--player-menu-accent); outline-offset: -2px; }
+}
 
 .mode-menu {
   position: absolute;
@@ -221,13 +235,13 @@ $accent: #8685EF;
   // 四层全展开比较高，小屏上要能滚，否则顶部会被截掉且够不着
   max-height: 62vh;
   overflow-y: auto;
-  background: rgba(20, 22, 32, 0.94);
+  background: var(--player-menu-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--player-menu-border);
   border-radius: 14px;
   padding: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 32px var(--player-menu-shadow);
   z-index: 110;
   cursor: default;
   scrollbar-width: thin;
@@ -239,7 +253,7 @@ $accent: #8685EF;
 .mm-header {
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--player-menu-muted);
   letter-spacing: .8px;
   padding: 6px 10px 6px;
 
@@ -247,7 +261,7 @@ $accent: #8685EF;
   &.mm-header-gap {
     margin-top: 4px;
     padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-top: 1px solid var(--player-menu-border);
   }
 }
 
@@ -262,26 +276,26 @@ $accent: #8685EF;
   transition: background 180ms $ease-standard;
 
   &:hover { background: rgba(255, 255, 255, 0.06); }
-  &.active { background: rgba(134, 133, 239, 0.12); }
-  &.muted { opacity: 0.55; }
+  &.active { background: var(--player-menu-soft); }
+  &.muted .mm-label { color: var(--player-menu-muted); }
 
-  .mm-label { font-size: 13px; font-weight: 400; color: rgba(255, 255, 255, 0.85); }
+  .mm-label { font-size: 13px; font-weight: 400; color: var(--player-menu-text); }
   &.active .mm-label { color: #fff; }
 
   // 附属操作（清除 A-B）缩进一档，读起来是"上一项的子操作"
   &.mm-item-sub {
     padding-top: 4px;
     padding-bottom: 6px;
-    .mm-label { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+    .mm-label { font-size: 12px; color: var(--player-menu-muted); }
   }
 }
 
 .mm-check { color: $accent; display: flex; align-items: center; flex-shrink: 0; }
-.mm-busy { font-size: 10px; color: rgba(255, 255, 255, 0.32); flex-shrink: 0; }
+.mm-busy { font-size: 10px; color: var(--player-menu-muted); flex-shrink: 0; }
 // 行内小注（本曲无数据 / A-B 的具体区间）：太长会挤掉主文案，所以限宽
 .mm-tag {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.34);
+  color: var(--player-menu-muted);
   flex-shrink: 0;
   max-width: 84px;
   overflow: hidden;
@@ -291,7 +305,7 @@ $accent: #8685EF;
 
 .mm-note {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--player-menu-muted);
   line-height: 1.5;
   padding: 0 10px 6px;
 }
@@ -303,14 +317,14 @@ $accent: #8685EF;
   gap: 8px;
   margin-top: 6px;
   padding: 9px 10px 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--player-menu-border);
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--player-menu-secondary);
   cursor: pointer;
   transition: color 160ms ease;
 
   &:hover { color: #fff; }
-  .mm-reset-note { font-size: 10px; color: rgba(255, 255, 255, 0.3); }
+  .mm-reset-note { font-size: 10px; color: var(--player-menu-muted); }
 }
 
 // ---- 定时两档的可调节行：与 PlayerCore 的 .sleepDropdown 同一套视觉 ----
@@ -321,16 +335,18 @@ $accent: #8685EF;
   padding: 7px 10px;
   border-radius: 8px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--player-menu-secondary);
   transition: background 160ms ease, color 160ms ease;
 
   &:hover { background: rgba(255, 255, 255, 0.06); }
-  &.is-active { color: $accent; background: rgba(134, 133, 239, 0.1); font-weight: 600; }
+  &.is-active { color: $accent; background: var(--player-menu-soft); font-weight: 600; }
 
   .sdLabel { flex-shrink: 0; }
   .sdUnit { flex-shrink: 0; font-weight: 400; }
 
   .sdStep {
+    padding: 0;
+    border: none;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -341,13 +357,14 @@ $accent: #8685EF;
     font-size: 14px;
     line-height: 1;
     background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--player-menu-text);
     cursor: pointer;
     user-select: none;
     transition: background 140ms ease, color 140ms ease;
 
     &:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
     &:active { transform: scale(0.92); }
+    &:focus-visible { outline: 2px solid var(--player-menu-accent); }
     // 到边界置灰但仍占位，避免按钮消失导致行宽跳动
     &.disabled { opacity: 0.3; cursor: not-allowed; &:hover { background: rgba(255, 255, 255, 0.08); } }
   }
@@ -364,13 +381,13 @@ $accent: #8685EF;
     font-variant-numeric: tabular-nums;
     font-family: inherit;
     color: inherit;
-    background: rgba(0, 0, 0, 0.22);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--player-menu-input);
+    border: 1px solid var(--player-menu-border);
     border-radius: 6px;
     outline: none;
     transition: border-color 140ms ease, background 140ms ease;
 
-    &:focus { border-color: rgba(134, 133, 239, 0.6); background: rgba(0, 0, 0, 0.34); }
+    &:focus { border-color: rgba(var(--theme-accent-rgb), 0.6); background: var(--player-menu-input); }
   }
 }
 
@@ -381,13 +398,13 @@ $accent: #8685EF;
   gap: 10px;
   margin-top: 4px;
   padding: 9px 10px 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--player-menu-border);
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--player-menu-muted);
   cursor: pointer;
   transition: color 160ms ease;
 
-  &:hover { color: rgba(255, 255, 255, 0.8); }
+  &:hover { color: var(--player-menu-text); }
 }
 
 .sdSwitch {
@@ -412,7 +429,7 @@ $accent: #8685EF;
   }
 
   &.on {
-    background: rgba(134, 133, 239, 0.55);
+    background: var(--player-menu-soft);
     &::after { transform: translateX(12px); background: #fff; }
   }
 }

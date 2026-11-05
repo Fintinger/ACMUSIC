@@ -405,7 +405,23 @@ export default {
 <style lang="scss" scoped>
 @import "src/assets/scss/base/variables";
 
+/**
+ * 尺寸体系（2026-11 重标定）
+ *
+ * 原实现是固定像素：中心卡 306、侧卡 261、偏移 285。那套尺寸是按旧容器
+ * （首页 80% 宽，2K 屏约 869px）设计的；容器统一到 1200px 后，私FM 区只剩
+ * 628px，侧卡外缘 = 285 + 130.5 = 415.5 > 半宽 314 → 左右各被裁 63px。
+ *
+ * 现在所有几何都由 --fm-c（中心卡边长）驱动：
+ *   侧卡 = 0.80C、偏移 = 0.95C、stage 高 = 1.45C、封面组上距 = 0.42C
+ * → 侧卡外缘 ≈ 1.35C，需 ≤ fmArea 半宽（0.29 × 容器宽）。
+ * 容器高度由 hero 的 daily-area 1:1 决定（= 0.42 × 容器宽），内容高 76 + 1.87C 必须塞得进去，
+ * 两个约束联立后 C 随视口线性变化，用 clamp 表达，不再需要媒体查询分档。
+ */
 .personal-fm {
+  // 视口 ≤1386 时 C = 22vw - 55（上限 250：1400 容器下 hero 568，内容 543 留 25px）
+  --fm-c: clamp(120px, calc(22vw - 55px), 250px);
+
   position: relative;
   width: 100%;
   height: 100%;
@@ -415,31 +431,31 @@ export default {
   align-items: center;
   border-radius: 32px;
   overflow: hidden;
-  /* 固定 Ambient 多色融合背景 (明亮高级, 不随歌曲变化) */
-  background:
-    radial-gradient(circle at 20% 20%, rgba(120,90,255,.35), transparent 45%),
-    radial-gradient(circle at 80% 30%, rgba(255,120,180,.3), transparent 50%),
-    radial-gradient(circle at 50% 90%, rgba(80,180,255,.25), transparent 55%),
-    linear-gradient(135deg, #f8f9ff, #fff5f8);
+  /* 固定 Ambient 多色融合背景 (明亮高级, 不随歌曲变化)
+     第一层白色椭圆光晕对准卡片组：1400 容器下私FM 有 744 宽，三卡只占 564，
+     光晕把视觉焦点收在中间，两侧留白不至于显得空 */
+  background: var(--c-fm-ambient);
 }
+
+// 容器分档已由 clamp(--fm-c) 取代，见上方尺寸体系说明
 
 // 播放全部按钮 (右上角, 玻璃质感)
 .fm-play-all-btn {
   position: absolute;
-  top: 24px;
-  right: 28px;
+  top: 20px;
+  right: 22px;
   z-index: 20;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 18px;
+  padding: 7px 15px;
   border: 1px solid rgba(255,255,255,.25);
   border-radius: 24px;
   background: rgba(255,255,255,.18);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  color: #5f6368;
-  font-size: 13px;
+  color: $font-black-1;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all .25s ease;
@@ -450,8 +466,8 @@ export default {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: rgba(95,99,104,.12);
   }
@@ -473,7 +489,7 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
-  padding: 24px 28px 0;
+  padding: 22px 24px 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -483,26 +499,26 @@ export default {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 26px;
+    font-size: 21px;
     font-weight: 700;
-    letter-spacing: -0.4px;
+    letter-spacing: -0.3px;
     line-height: 1.4;
-    color: #202124;
+    color: $font-black;
 
     .ac-icon {
-      font-size: 26px;
+      font-size: 21px;
       color: $color-main;
     }
   }
 
   .fm-section-subtitle {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 400;
     line-height: 1.6;
-    color: rgba(0,0,0,.45);
-    margin-top: 10px;
-    /* 对齐标题文字(非图标): 24px 标题padding + 26px 图标 + 8px gap */
-    padding-left: 34px;
+    color: $font-black-2;
+    margin-top: 6px;
+    /* 对齐标题文字(非图标): 22px 标题padding + 21px 图标 + 8px gap */
+    padding-left: 29px;
   }
 }
 
@@ -512,14 +528,15 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 120px;
+  // 0.42C：卡片组在 520px 高的 hero 里落下约一半高度，下方留出倒影空间
+  margin-top: calc(var(--fm-c) * .42);
 }
 
 .fm-stage {
   position: relative;
   width: 100%;
-  height: 440px;
-  perspective: 1400px;
+  height: calc(var(--fm-c) * 1.45);
+  perspective: calc(var(--fm-c) * 4.6);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -531,15 +548,15 @@ export default {
   position: absolute;
   left: 0;
   bottom: 0;
-  padding: 14px 18px;
+  padding: 10px 12px;
   text-align: left;
   z-index: 20;
 
   .fm-title {
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 700;
     line-height: 1.3;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.2px;
     color: #ffffff;
     text-shadow: 0 1px 4px rgba(0,0,0,.35);
     transition: color .35s ease;
@@ -549,7 +566,7 @@ export default {
   }
 
   .fm-artist {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 400;
     line-height: 1.4;
     color: rgba(255,255,255,.78);
@@ -566,9 +583,9 @@ export default {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 306px;
-  height: 306px;
-  margin: -153px 0 0 -153px; /* 306x306 居中，90% of 340px */
+  width: var(--fm-c);
+  height: var(--fm-c);
+  margin: calc(var(--fm-c) / -2) 0 0 calc(var(--fm-c) / -2);
   cursor: pointer;
   transform-style: preserve-3d;
   transition: transform .9s cubic-bezier(.16, 1, .3, 1), opacity .6s ease;
@@ -580,7 +597,7 @@ export default {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  border-radius: 28px;
+  border-radius: calc(var(--fm-c) * .09);
   overflow: hidden;
 
   .fm-cover {
@@ -588,7 +605,7 @@ export default {
     height: 100%;
     object-fit: cover;
     display: block;
-    border-radius: 28px;
+    border-radius: calc(var(--fm-c) * .09);
   }
 
   // Cover 底部渐变遮罩: 保证文字可读, 不覆盖整个图片
@@ -599,7 +616,7 @@ export default {
     right: 0;
     bottom: 0;
     height: 55%;
-    border-radius: 0 0 28px 28px;
+    border-radius: 0 0 calc(var(--fm-c) * .09) calc(var(--fm-c) * .09);
     pointer-events: none;
     background: linear-gradient(to top,
         rgba(0,0,0,.62) 0%,
@@ -619,7 +636,7 @@ export default {
 // current: 中心 Z 轴浮起, 强悬浮阴影
 .fm-current {
   z-index: 10;
-  transform: translateX(0) translateZ(108px) scale(1.03);
+  transform: translateX(0) translateZ(calc(var(--fm-c) * .353)) scale(1.03);
 
   .fm-card {
     opacity: 1;
@@ -634,10 +651,10 @@ export default {
 // previous: 左侧 rotateY 侧向
 .fm-previous {
   z-index: 5;
-  width: 261px;
-  height: 261px;
-  margin: -130.5px 0 0 -130.5px;
-  transform: translateX(-285px) translateZ(-81px) rotateY(48deg) scale(1);
+  width: calc(var(--fm-c) * .80);
+  height: calc(var(--fm-c) * .80);
+  margin: calc(var(--fm-c) * -.40) 0 0 calc(var(--fm-c) * -.40);
+  transform: translateX(calc(var(--fm-c) * -.95)) translateZ(calc(var(--fm-c) * -.265)) rotateY(48deg) scale(1);
 
   .fm-card {
     opacity: .7;
@@ -646,7 +663,7 @@ export default {
   }
 
   &:hover {
-    transform: translateX(-285px) translateZ(-40.5px) rotateY(38deg) scale(1.03);
+    transform: translateX(calc(var(--fm-c) * -.95)) translateZ(calc(var(--fm-c) * -.132)) rotateY(38deg) scale(1.03);
 
     .fm-reflection {
       opacity: .21;
@@ -658,10 +675,10 @@ export default {
 // next: 右侧 rotateY 侧向
 .fm-next {
   z-index: 5;
-  width: 261px;
-  height: 261px;
-  margin: -130.5px 0 0 -130.5px;
-  transform: translateX(285px) translateZ(-81px) rotateY(-48deg) scale(1);
+  width: calc(var(--fm-c) * .80);
+  height: calc(var(--fm-c) * .80);
+  margin: calc(var(--fm-c) * -.40) 0 0 calc(var(--fm-c) * -.40);
+  transform: translateX(calc(var(--fm-c) * .95)) translateZ(calc(var(--fm-c) * -.265)) rotateY(-48deg) scale(1);
 
   .fm-card {
     opacity: .7;
@@ -670,7 +687,7 @@ export default {
   }
 
   &:hover {
-    transform: translateX(285px) translateZ(-40.5px) rotateY(-38deg) scale(1.03);
+    transform: translateX(calc(var(--fm-c) * .95)) translateZ(calc(var(--fm-c) * -.132)) rotateY(-38deg) scale(1.03);
 
     .fm-reflection {
       opacity: .21;
@@ -690,13 +707,13 @@ export default {
   left: 0;
   top: 100%;
   width: 100%;
-  height: 369px;
+  height: calc(var(--fm-c) * 1.206);
   overflow: hidden;
   pointer-events: none;
   z-index: 2;
-  border-radius: 28px;
-  clip-path: inset(0 0 270px 0);
-  -webkit-clip-path: inset(0 0 270px 0);
+  border-radius: calc(var(--fm-c) * .09);
+  clip-path: inset(0 0 calc(var(--fm-c) * .88) 0);
+  -webkit-clip-path: inset(0 0 calc(var(--fm-c) * .88) 0);
 }
 
 // 侧卡 3D 投影补偿
@@ -708,9 +725,9 @@ export default {
 .fm-reflection {
   position: absolute;
   left: 0;
-  top: 306px;
+  top: var(--fm-c);
   width: 100%;
-  height: 306px;
+  height: var(--fm-c);
   overflow: hidden;
   opacity: .25;
   filter: blur(3px);
@@ -736,7 +753,7 @@ export default {
 
 .fm-reflection img {
   width: 100%;
-  height: 306px;
+  height: var(--fm-c);
   object-fit: cover;
   display: block;
 }

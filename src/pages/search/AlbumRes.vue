@@ -1,12 +1,19 @@
 <template>
   <div class="albumRes">
     <h2>专辑</h2>
+    <EmptyState
+        v-if="!searchLoading && !list.length"
+        :title="searchError ? '搜索暂时不可用' : '没有找到相关结果'"
+        :desc="searchError ? '请检查网络后重新加载' : '试试其他关键词，或切换搜索分类'"
+        :action-text="searchError ? '重新加载' : ''"
+        @action="initLoad"
+    />
     <el-row class="albumContainer">
       <GridSkeleton v-if="searchLoading" :count="8"/>
-      <AlbumLayout v-if="!searchLoading" :list="list"/>
+      <AlbumLayout v-if="!searchLoading && list.length" :list="list"/>
     </el-row>
     <el-row>
-      <LoadMore :load="load" :loading="loading" :noMore="noMore"/>
+      <LoadMore :error="searchPageError" v-if="!searchLoading && list.length" :load="load" :loading="loading" :noMore="noMore"/>
     </el-row>
   </div>
 </template>

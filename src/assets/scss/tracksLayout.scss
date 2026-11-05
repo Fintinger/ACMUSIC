@@ -1,36 +1,46 @@
 @import "base/variables";
 
-.tracksContainer{
+/**
+ * 歌曲列表（TracksLayout）
+ *
+ * 2026-11 重排：el-col 栅格 + margin-top 模拟垂直对齐 → flex 行 + 垂直居中。
+ * 原实现的两个硬伤：① 字号一变基线就错位；② span 总和可到 28 列（>24）导致换行。
+ * 现结构：序号（当前播放高亮）/ 封面 / 歌名+歌手 / 专辑 / 附加列 / 时长。
+ */
+
+.tracksContainer {
   margin: 0 auto;
-  border-radius: 3px;
-  //border: 2px solid $color-theme-sec;
-  //border-left:1px solid $color-theme-sec;
-  //border-right:1px solid $color-theme-sec;
-  .btns{
-    margin: 1rem 0 1rem 1rem;
+
+  // 播放全部按钮组
+  .btns {
+    margin: $sp-3 0;
     padding-top: .5rem;
-    .btn-container{
+    .btn-container {
       color: $font-black-1;
       width: max-content;
       border-radius: 8px;
       background: $color-theme-sec;
 
-
       &>i,
       &>.btn-item{
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        &:disabled { opacity: .5; cursor: default; }
         display:inline-block;
-        padding: .5rem;
+        padding: .5rem .75rem;
         cursor: pointer;
         box-sizing: border-box;
         transition: all .2s;
         &:hover{
-          color: $color-main;
+          color: $color-main-text;
         }
       }
       &>.btn-item{
         .ac-icon{ vertical-align: middle; }
         span{ margin-left: 4px; }
-        &:last-child{ margin-left: 0; border-left: 1px solid $font-white-1; }
+        &:last-child{ margin-left: 0; border-left: 1px solid var(--c-border-strong); }
       }
       .ac-play1{
         font: {
@@ -48,76 +58,167 @@
     }
   }
 
+  // 列头：与行共用同一套 padding / gap / 列宽，天然对齐
+  .tracks-head {
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    padding: 0 $sp-3 $sp-2;
+    margin-bottom: $sp-1;
+    border-bottom: 1px solid var(--c-border);
+    font-size: $fs-aux;
+    color: $font-black-2;
+    user-select: none;
 
-  .tracks{
-    margin-bottom: 1rem;
-    border-radius: 5px;
-    transition: all .3s;
-    cursor: pointer;
-    font-family: Barlow,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Helvetica Neue,PingFang SC,Microsoft YaHei,Source Han Sans SC,Noto Sans CJK SC,WenQuanYi Micro Hei,sans-serif,microsoft uighur;
+    // 这里的 .col-cover 只是占位（用来对齐行的封面列），必须清掉封面样式，
+    // 否则会渲染成一个 40×40 的灰色方块
+    .col-cover {
+      background: transparent;
+      border-radius: 0;
+    }
+  }
 
-    &:hover{
+  &.has-actions .tracks-head { padding-right: 9.5rem; }
+
+  .tracks {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: .4rem $sp-3;
+    border-radius: 8px;
+    transition: background-color .15s ease;
+
+    &:hover {
       background: $color-theme-sec;
     }
 
-    padding: 1rem 1rem;
-    .coverImg{
-      width: 3rem;
-      height: 3rem;
-      margin-right: 1rem;
-      border-radius: 8px;
-      background: $font-white-1;
-      overflow: hidden;
-
-      img{
-        width: 100%;
-      }
-    }
-    .name-artist{
-      display: flex;
-      flex-direction: column;
-      text-align: left;
-      font-size: .8rem;
-
-      .name{
-        padding: .2rem;
-        font: {
-          size: 1.2rem;
-          weight: bold;
-        };
-        margin-bottom: .5rem;
-      }
-      .artist{
-        color: $font-black-1;
-        line-height: 1.1rem;
-        &:hover{
-          text-decoration: underline;
-          color: $font-black;
-        }
-      }
+    // 管理模式下给悬浮操作条留位：不让它盖住时长列
+    &.has-actions {
+      padding-right: 9.5rem;
     }
 
-    .album{
-      text-align: center;
-      margin-top: 1rem;
-      font: {
-        size: .9rem;
-      };
-      color: $font-black-1;
-      &:hover{
-        text-decoration: underline;
+    // 当前播放行
+    &.is-current {
+      .name { color: $color-main-text; }
+      .col-index { color: $color-main; }
+    }
+  }
+
+  .tracks-wrap {
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* ---------- 列 ---------- */
+  .col-index {
+    flex: 0 0 30px;
+    width: 30px;
+    text-align: right;
+    font-size: $fs-aux;
+    color: $font-black-2;
+    font-variant-numeric: tabular-nums;
+    .index-play { color: $color-main; }
+  }
+
+  .col-cover {
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: $font-white-1;
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+  }
+
+  .col-title {
+    // 歌名列自适应吃掉剩余宽度：专辑列若参与伸缩，宽容器（1400）下会被拉到
+    // 500px+，而专辑文字通常很短，右侧留出大片空白
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+  }
+
+  // 列表内一律省略号（原 scoText 跑马灯在列表里多行同滚，是持续噪音源）
+  .name {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: $font-black;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .artist {
+    font-size: $fs-aux;
+    line-height: 1.3;
+    color: $font-black-2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    .artist-link {
+      cursor: pointer;
+      &:hover {
         color: $font-black;
+        text-decoration: underline;
       }
     }
-    .duration{
-      margin-top: 1rem;
-      padding: .3rem;
-      font:{
-        size: .8rem;
-        weight: bold;
-      };
-      color: $font-black-1;
-      text-align: right;
-    }
+    i { font-style: normal; }
+  }
+
+  .col-album {
+    // 固定 22%（1352 内容宽下约 298px，1200 下约 254px），不参与伸缩
+    flex: 0 0 22%;
+    min-width: 0;
+    font-size: 13px;
+    color: $font-black-2;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &:hover { color: $font-black-1; }
+  }
+
+  .col-extra {
+    flex: 0 0 90px;
+    font-size: $fs-aux;
+    color: $font-black-2;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .col-duration {
+    flex: 0 0 52px;
+    font-size: $fs-aux;
+    color: $font-black-2;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 窄屏：专辑列让位（音乐列表在小屏的通行做法）
+  @media (max-width: 768px) {
+    .col-album { display: none; }
+    .col-extra { flex-basis: 72px; }
+    .col-index { flex-basis: 24px; width: 24px; }
   }
 }

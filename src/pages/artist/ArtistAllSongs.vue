@@ -19,11 +19,12 @@
 
     <TracksLayout v-if="songs.length" :list="songs"/>
 
-    <div v-if="firstLoading" class="asp-state"><i class="el-icon-loading"/> 加载中…</div>
-    <div v-else-if="error && !songs.length" class="asp-state">
-      加载失败
+    <div v-if="firstLoading || (loading && !songs.length)" class="asp-state"><BaseIcon class="is-spinning" name="loader"/> 加载中…</div>
+    <div v-else-if="error" class="asp-state">
+      {{ songs.length ? '更多歌曲加载失败，已加载内容仍可查看' : '歌曲加载失败，请检查网络' }}
       <button class="asp-retry" @click="load">重试</button>
     </div>
+    <EmptyState v-else-if="!songs.length" compact title="暂无歌曲"/>
     <LoadMore v-else :load="load" :loading="loading" :noMore="noMore" noMoreText="已加载全部歌曲"/>
   </div>
 </template>
@@ -36,6 +37,7 @@
  *   热门歌曲最多只有 50 首（/artist/top/song 上限），全量歌曲只能靠这个接口 offset 翻页
  * - 翻页：LoadMore 触底自动续拉（IntersectionObserver），每页 50 首
  */
+import EmptyState from '@/components/common/EmptyState';
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
 import CoverImage from "@/components/common/CoverImage";
@@ -45,7 +47,7 @@ const PAGE_SIZE = 50;
 
 export default {
   name: "ArtistAllSongs",
-  components: {LoadMore, TracksLayout, CoverImage},
+  components: {EmptyState, LoadMore, TracksLayout, CoverImage},
   props: ["id"],
   data() {
     return {
@@ -73,10 +75,11 @@ export default {
       if (this.loading || this.noMore) return
       this.loading = true
       this.error = false
-      artistApi.songs(this.id, PAGE_SIZE, this.offset)
+      return artistApi.songs(this.id, PAGE_SIZE, this.offset)
         .then(res => {
           const data = res.data || {}
-          const list = data.songs || []
+          if (!Array.isArray(data.songs)) throw new Error('Invalid songs response')
+          const list = data.songs
           if (data.total) this.total = data.total
           const seen = new Set(this.songs.map(s => s.id))
           this.songs = this.songs.concat(list.filter(s => !seen.has(s.id)))
@@ -114,5 +117,6 @@ export default {
 <style lang="scss" scoped>
 @import "src/assets/scss/artistSubPage";
 
-.artistAllSongs { max-width: 1200px; margin: 0 auto; padding-bottom: 80px; }
+// 容器由外层 el-main 统一（max-width 1400 + 24 padding）
+.artistAllSongs { padding-bottom: 80px; }
 </style>

@@ -26,8 +26,8 @@
           </div>
         </div>
         <div class="info">
-          <!--歌单名-->
-          <scoText v-if="playlist.name" class="listName">{{ playlist.name }}</scoText>
+          <!--歌单名：列表内用省略号（hover 出 title），不再用跑马灯——多卡同滚是噪音-->
+          <div v-if="playlist.name" class="listName" :title="playlist.name">{{ playlist.name }}</div>
           <!--其他信息-->
           <div class="moreInfo">
             <!--更新时间-->
@@ -36,7 +36,7 @@
               <!--              <p v-if="playlist.createTime" class="createTime">创建于 {{ playlist.updateTime | formatMs}}</p>-->
             </template>
             <p v-if="playlist.copywriter" class="copywriter">{{ playlist.copywriter }}</p>
-            <p v-if="playlist.updateFrequency" class="updateFrequency">{{ playlist.upateFrequency }}</p>
+            <p v-if="playlist.updateFrequency" class="updateFrequency">{{ playlist.updateFrequency }}</p>
             <!--          <p v-if="playlist.description" class="copywriter">{{ playlist.description }}</p>-->
           </div>
         </div>
@@ -46,12 +46,11 @@
 </template>
 
 <script>
-import scoText from "@/components/scoText";
 import playTracksBtn from "@/components/playTracksBtn";
 
 export default {
   name: "PlaylistLayout",
-  components: {scoText, playTracksBtn},
+  components: {playTracksBtn},
   props: {
     list: {
       type: Array,

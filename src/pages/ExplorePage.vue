@@ -5,11 +5,13 @@
       <p class="explore-subtitle">探索音乐、发现热门歌单、MV 和排行榜</p>
     </div>
     <div class="explore-content">
-      <div class="explore-tabs">
+      <div class="explore-tabs ac-tabs">
         <button
           v-for="(c, index) in sort"
           :key="index"
           :class="{ active: $route.name === c.linkName }"
+          :aria-pressed="$route.name === c.linkName"
+          type="button"
           @click="handleClick(c.linkName)"
         >{{ c.title }}</button>
       </div>

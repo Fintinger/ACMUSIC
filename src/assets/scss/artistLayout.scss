@@ -1,38 +1,46 @@
 @import "base/variables";
 @import "base/motion";
 
+/**
+ * 歌手卡片（首页「热门歌手」/ 搜索「歌手」共用）
+ * 2026-11：圆角与动效走 token（原图片缩放 1.5s 拖沓）；名字回到 14px（原 19.2px）。
+ */
 ul {
   li.artist {
     .el-card {
       border: none;
-      border-radius: 14px;
+      border-radius: $radius-card;
       overflow: hidden;
+      background: var(--c-bg-elevated);
       transition: transform $motion-fast $ease-standard, box-shadow $motion-fast $ease-standard;
 
       .imgContainer{
         cursor: pointer;
         overflow: hidden;
-        padding: 1rem 0 .5rem;
+        padding: $sp-4 0 $sp-2;
         text-align: center;
 
         img{
           border-radius: 50%;
           display: inline-block;
           width: 85%;
-          transition: transform 1.5s ease;
+          aspect-ratio: 1;
+          object-fit: cover;
+          transition: transform .4s $ease-standard;
         }
       }
       .name{
         text-align: center;
         color: $font-black;
         font: {
-          size: 1.2rem;
-          weight: bold;
+          size: $fs-card-title;
+          weight: 600;
         };
-        padding: 0 0 1.2rem;
+        padding: $sp-1 0 $sp-4;
+        line-height: 1.4;
         .accountId{
           cursor: pointer;
-          font-size: 1rem;
+          font-size: $fs-aux;
           font-weight: normal;
           color: $font-black-2;
         }
@@ -41,10 +49,11 @@ ul {
       &:hover {
         transform: translateY($card-hover-y);
         box-shadow: $card-shadow-hover;
+        .imgContainer img { transform: scale($card-cover-scale); }
       }
 
       &:active {
-        transform: scale(.98);
+        transform: translateY($card-hover-y) scale(.99);
       }
     }
   }

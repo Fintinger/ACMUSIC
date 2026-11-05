@@ -1,7 +1,7 @@
 <template>
   <div class="mvPlay">
-    <VideoPlayerLayout :id="id" :detail="detail" :simi-click-evt="mvClk" :simi-video="simiMvs"
-                       :simi-loading="simiLoading" :url-failed="urlFailed" :url="url"/>
+    <VideoPlayerLayout :id="id || ''" :detail="detail" :simi-click-evt="mvClk" :simi-video="simiMvs"
+                       :detail-failed="detailFailed" @retry-detail="loadMedia" @retry-url="loadUrl" :simi-loading="simiLoading" :url-failed="urlFailed" :url="url"/>
   </div>
 </template>
 
@@ -21,17 +21,46 @@ export default {
       simiMvs: [],
       simiLoading: false,
       urlFailed: false,
-      loading: true
+      loading: true,
+      detailFailed: false,
+      requestVersion: 0
     }
   },
   methods: {
+    async loadUrl() {
+      const version = this.requestVersion
+      this.url = ''; this.urlFailed = false
+      try {
+        const res = await this.getUrl(this.id)
+        if (version !== this.requestVersion) return
+        this.url = (res.data && res.data.data && res.data.data.url) || ''
+        this.urlFailed = !this.url
+      } catch (_) { if (version === this.requestVersion) this.urlFailed = true }
+    },
+    async loadMedia() {
+      const version = ++this.requestVersion
+      this.detail = {}; this.url = ''; this.simiMvs = []; this.simiLoading = false
+      this.detailFailed = false; this.urlFailed = false; this.loading = true
+      if (!/^[1-9]\d*$/.test(String(this.id || ''))) { this.detailFailed = true; this.loading = false; return }
+      const source = this.loadUrl()
+      try {
+        const res = await this.getDetail(this.id)
+        if (version !== this.requestVersion) return
+        const data = res.data && res.data.data
+        if (!data || !data.name) throw new Error('Invalid MV detail')
+        this.detail = data
+        this.getSimiMv(this.id, version).then(list => { if (version === this.requestVersion) this.simiMvs = list }).catch(() => {})
+      } catch (_) { if (version === this.requestVersion) this.detailFailed = true }
+      finally { if (version === this.requestVersion) this.loading = false }
+      await source
+    },
     getDetail(id) {
       return mvApi.detail(id)
     },
     getUrl(id, r = 1080) {
       return mvApi.url(id, r)
     },
-    getSimiMv(id) {
+    getSimiMv(id, version = this.requestVersion) {
       // /simi/mv 上游已忽略 mvid，任何 id 都返回同一份固定列表，改按名称搜索（见 utils/relatedVideos.js）
       const d = this.detail || {}
       const fallback = (d.artists && d.artists[0] && d.artists[0].name) || d.artistName || ""
@@ -49,32 +78,14 @@ export default {
         name: v.title,
         artistName: (v.creator || []).map(c => c.userName).join(" / "),
         playCount: v.playTime
-      }))).finally(() => { this.simiLoading = false })
+      }))).finally(() => { if (version === this.requestVersion) this.simiLoading = false })
     },
     mvClk(id) {
       this.$bus.$emit('mvClk', id)
     }
   },
-  activated() {
-    this.loading = true
-    this.getDetail(this.id).then(detail => {
-      this.detail = detail.data.data
-      // 相关推荐依赖 detail.name，等详情落地再拉
-      return this.getSimiMv(this.id)
-    }).then(simiMvs => {
-      this.simiMvs = simiMvs
-    })
-    // ⚠️ /mv/url 对部分 MV 恒返回 { data: { url: null } }（如 id=10961972，各分辨率皆为空），
-    //    直接把 null 传给必填 String prop 会告警并卡在骨架屏，这里转成空串 + 失败态
-    this.getUrl(this.id).then(url => {
-      const d = (url.data && url.data.data) || {}
-      this.url = d.url || ""
-      this.urlFailed = !this.url
-    }).catch(() => {
-      this.url = ""
-      this.urlFailed = true
-    }).finally(() => { this.loading = false })
-  },
+  beforeDestroy() { this.requestVersion++ },
+  activated() { this.loadMedia() },
 }
 </script>
 

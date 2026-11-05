@@ -56,6 +56,10 @@
  * 各拉一次封面 = 11 个额外请求 + 图色不可控（和首页浅色基调冲突）。
  * 改用每张卡自己的渐变色 + 名字首字水印，零请求、观感统一。
  *
+ * 配色规则（2026-11）：色板统一为低饱和莫兰迪（饱和度 35-45%、明度 50-62%），
+ * 色相保留区分度但不再高饱和——首屏曾同时出现 11 种亮色（橙红/亮蓝/青绿/金），
+ * 与主题紫无关联、整体像拼布。新增场景时按同一规则取值，不要再写高饱和渐变。
+ *
  * 本组件只负责选，不负责拉播放：写入 store 后广播 'fm-roam'，
  * 由 PersonalFM 用已有的批次/预取/应用机制执行。
  */
@@ -80,47 +84,47 @@ export default {
       cards: [
         {
           key: 'DEFAULT', mode: 'DEFAULT', name: '私人漫游', sub: '默认推荐',
-          caption: '从你最近的喜好继续', grad: 'linear-gradient(135deg, #6b7cff 0%, #a68bff 100%)'
+          caption: '从你最近的喜好继续', grad: 'linear-gradient(135deg, var(--theme-accent) 0%, var(--theme-ink-light) 100%)'
         },
         {
           key: 'FAMILIAR', mode: 'FAMILIAR', name: '熟悉', sub: '听过的',
-          caption: '听回那些熟的', grad: 'linear-gradient(135deg, #ff8f6b 0%, #ffc46b 100%)'
+          caption: '听回那些熟的', grad: 'linear-gradient(135deg, #bc7c50 0%, #9a5f36 100%)'
         },
         {
           key: 'EXPLORE', mode: 'EXPLORE', name: '探索', sub: '陌生的',
-          caption: '换点没听过的', grad: 'linear-gradient(135deg, #38b6ff 0%, #5f7cff 100%)'
+          caption: '换点没听过的', grad: 'linear-gradient(135deg, #6f96c7 0%, #4f78ab 100%)'
         },
         {
           key: 'SCENE:EXERCISE', mode: 'SCENE_RCMD', submode: 'EXERCISE', name: '运动', sub: '跟节拍',
-          caption: '让心跳和鼓点对齐', grad: 'linear-gradient(135deg, #ff5f6d 0%, #ff9966 100%)'
+          caption: '让心跳和鼓点对齐', grad: 'linear-gradient(135deg, #c47171 0%, #a34f4f 100%)'
         },
         {
           key: 'SCENE:FOCUS', mode: 'SCENE_RCMD', submode: 'FOCUS', name: '专注', sub: '屏蔽噪音',
-          caption: '只留旋律陪你想事', grad: 'linear-gradient(135deg, #3a8dde 0%, #63d3d0 100%)'
+          caption: '只留旋律陪你想事', grad: 'linear-gradient(135deg, #63969f 0%, #457881 100%)'
         },
         {
           key: 'SCENE:SLEEP_HELP', mode: 'SCENE_RCMD', submode: 'SLEEP_HELP', name: '助眠', sub: '慢下来',
-          caption: '轻一点，准备入睡', grad: 'linear-gradient(135deg, #4b4f9e 0%, #7b6cc4 100%)'
+          caption: '轻一点，准备入睡', grad: 'linear-gradient(135deg, #767aab 0%, #575b8f 100%)'
         },
         {
           key: 'SCENE:COMMUTE', mode: 'SCENE_RCMD', submode: 'COMMUTE', name: '通勤', sub: '路上',
-          caption: '适合车窗外的背景音', grad: 'linear-gradient(135deg, #5b8c85 0%, #8fbfae 100%)'
+          caption: '适合车窗外的背景音', grad: 'linear-gradient(135deg, #729689 0%, #527568 100%)'
         },
         {
           key: 'SCENE:COFFEE_SHOP', mode: 'SCENE_RCMD', submode: 'COFFEE_SHOP', name: '咖啡馆', sub: '午后',
-          caption: '一杯咖啡的时间', grad: 'linear-gradient(135deg, #a47148 0%, #d8a86a 100%)'
+          caption: '一杯咖啡的时间', grad: 'linear-gradient(135deg, #9c7d62 0%, #7d5f46 100%)'
         },
         {
           key: 'SCENE:GUOFENG', mode: 'SCENE_RCMD', submode: 'GUOFENG', name: '国风', sub: '山河',
-          caption: '一曲山河入梦', grad: 'linear-gradient(135deg, #8a6d3b 0%, #c9a227 100%)'
+          caption: '一曲山河入梦', grad: 'linear-gradient(135deg, #9e8760 0%, #7c6739 100%)'
         },
         {
           key: 'SCENE:YUEYU', mode: 'SCENE_RCMD', submode: 'YUEYU', name: '粤语', sub: '港味',
-          caption: '港味情歌与旧时光', grad: 'linear-gradient(135deg, #7d5fff 0%, #c56cf0 100%)'
+          caption: '港味情歌与旧时光', grad: 'linear-gradient(135deg, #8f6cba 0%, #6f4d9b 100%)'
         },
         {
           key: 'SCENE:NIGHT_EMO', mode: 'SCENE_RCMD', submode: 'NIGHT_EMO', name: '伤感', sub: '夜里',
-          caption: '适合夜里 emo 一会', grad: 'linear-gradient(135deg, #3f4c6b 0%, #606c88 100%)'
+          caption: '适合夜里 emo 一会', grad: 'linear-gradient(135deg, #626c86 0%, #464f68 100%)'
         }
       ]
     }
@@ -322,7 +326,7 @@ export default {
   line-height: 1.3;
   letter-spacing: 0.5px;
   text-align: left;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--c-text-primary);
 }
 
 // 箭头要对齐"卡片行"的垂直中线，而不是整块（含标题）的中线，
@@ -363,12 +367,12 @@ export default {
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  color: rgba(0, 0, 0, 0.55);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  color: var(--c-text-secondary);
+  background: var(--c-bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--c-border-strong), 0 2px 10px var(--c-shadow-mid);
   transition: background 160ms ease, color 160ms ease, transform 160ms ease;
 
-  &:hover { background: #fff; color: rgba(0, 0, 0, 0.8); }
+  &:hover { background: var(--c-bg-sunken-hover); color: var(--c-text-primary); }
   &:active { transform: translateY(-50%) scale(0.94); }
 }
 
@@ -386,20 +390,20 @@ export default {
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  background: var(--c-bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--c-border), 0 4px 14px var(--c-shadow-low);
   transition: transform 200ms ease, box-shadow 200ms ease;
 
   &:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 8px 22px var(--c-shadow-mid);
   }
 
   // 选中态改用主题色描边：卡片下半部分是白底，白色描边会看不见
   &.active {
-    outline: 2px solid $color-main;
+    outline: 2px solid var(--c-accent);
     outline-offset: -2px;
-    box-shadow: 0 6px 20px rgba(134, 133, 239, 0.35);
+    box-shadow: 0 6px 20px var(--c-shadow-mid);
   }
 }
 
@@ -471,8 +475,8 @@ export default {
   box-sizing: border-box;
   font-size: 11px;
   line-height: 1.4;
-  color: rgba(0, 0, 0, 0.55);
-  background: #fff;
+  color: var(--c-text-secondary);
+  background: var(--c-bg-elevated);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;

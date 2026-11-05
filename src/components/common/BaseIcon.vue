@@ -12,13 +12,14 @@
   <i
       v-else-if="icon && icon.type === 'svg' && icon.path"
       class="ac-icon ac-icon-svg"
-      :class="customClass"
+      :class="[icon.class, customClass]"
       :style="svgStyle"
       v-bind="$attrs"
       v-on="$listeners"
   >
-    <svg :width="svgSize" :height="svgSize" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path :d="icon.path" :fill="icon.fill || 'currentColor'" :stroke="icon.stroke || 'currentColor'" :stroke-width="icon.strokeWidth || 0" stroke-linecap="round" stroke-linejoin="round"/>
+    <svg :width="svgSize" :height="svgSize" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+      <!-- 常规图标为圆角描边，播放/暂停/激活喜欢等状态显式指定填充。 -->
+      <path :d="icon.path" :fill="icon.fill || 'none'" :stroke="icon.stroke || 'currentColor'" :stroke-width="icon.stroke === 'none' ? 0 : 1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </i>
   <!-- 占位 -->
@@ -103,6 +104,7 @@ export default {
   width: 100%;
   height: 100%;
 }
+.ac-icon-svg::before { content: none !important; }
 
 .icon-fallback {
   color: transparent;

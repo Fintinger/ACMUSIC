@@ -15,6 +15,9 @@
         </p>
       </div>
       <span v-if="metaText(t)" class="rankVal">{{ metaText(t) }}</span>
+      <button v-if="downloadable" class="rankDownload" type="button" :aria-label="'下载 ' + (t.name || '歌曲')" :disabled="!!downloading[t.id]" @click.stop="download(t)" @dblclick.stop>
+        <BaseIcon v-if="downloading[t.id]" class="is-spinning" name="loader"/><BaseIcon v-else name="download"/>
+      </button>
     </li>
   </ul>
 </template>
@@ -30,6 +33,8 @@
  * 交互与全站保持一致：双击播放；封面 hover 出现播放按钮（单击即播）；点歌手跳详情。
  */
 import CoverImage from "@/components/common/CoverImage";
+import {downloadUrlV1} from '@/api/Tracks';
+import config from '@/config';
 
 export default {
   name: "RankList",
@@ -40,8 +45,25 @@ export default {
     showRank: { type: Boolean, default: true },
     // 右侧数字：count = 播放次数 / size = 文件大小 / none = 不显示
     meta: { type: String, default: 'count' },
+    downloadable: { type: Boolean, default: false },
   },
+  data() { return {downloading: {}} },
   methods: {
+    async download(t) {
+      if (!t.id || this.downloading[t.id]) return
+      this.$set(this.downloading, t.id, true)
+      try {
+        const res = await downloadUrlV1(t.id, config.player.level || 'standard')
+        const data = (res.data && res.data.data) || {}
+        if (!data.url) { this.$toast.warning('该歌曲暂不可下载，请检查登录状态或下载权限'); return }
+        const link = document.createElement('a')
+        link.href = data.url; link.download = (t.name || '歌曲') + '.' + (data.type || 'mp3')
+        link.target = '_blank'; link.rel = 'noopener'
+        document.body.appendChild(link); link.click(); link.remove()
+        this.$toast.info('已打开下载链接')
+      } catch (_) { this.$toast.error('下载链接获取失败，请稍后重试') }
+      finally { this.$set(this.downloading, t.id, false) }
+    },
     coverOf(t) {
       const al = t.al || t.album || {}
       return al.picUrl || ''
@@ -72,6 +94,12 @@ export default {
   padding: 0;
   list-style: none;
 }
+.rankDownload {
+  flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--c-border-strong); border-radius: 50%; background: var(--c-bg-elevated); color: var(--c-text-secondary); cursor: pointer;
+  &:hover { color: var(--c-accent-text); border-color: var(--c-accent); }
+  &:disabled { opacity: .5; cursor: wait; }
+}
 
 .rankRow {
   display: flex;
@@ -94,7 +122,7 @@ export default {
   text-align: right;
   color: $font-black-2;
 
-  .is-top & { color: $color-main; font-weight: 600; }
+  .is-top & { color: $color-main-text; font-weight: 600; }
 }
 
 .rankCover {
@@ -146,7 +174,7 @@ export default {
   text-overflow: ellipsis;
 
   span { cursor: pointer; transition: color .18s; }
-  span:hover { color: $color-main; text-decoration: underline; }
+  span:hover { color: $color-main-text; text-decoration: underline; }
 }
 
 // 数字列：右对齐 + 等宽，多行时数字纵向成一条线

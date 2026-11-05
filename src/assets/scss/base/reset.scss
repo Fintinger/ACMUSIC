@@ -1,6 +1,9 @@
 /**
 reset css
  */
+
+@import "variables";
+
 html, body, div, span, applet, object, iframe,
 h1, h2, h3, h4, h5, h6, p, blockquote, pre,
 a, abbr, acronym, address, big, cite, code,
@@ -24,21 +27,25 @@ time, mark, audio, video {
 
 html, body {
   font: {
-    family: Barlow, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Helvetica Neue, PingFang SC, Microsoft YaHei, Source Han Sans SC, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif, microsoft uighur;
+    // 原栈首的 Barlow 从未真正加载（全项目无 @font-face / webfont 引入），属于死字体，
+    // 已删除。若后续要品牌字体：在 tokens 层面加 @font-face 后再放回栈首。
+    family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
     size: 16px;
   }
+  // 数字等宽：列表时长、播放计数、统计数字不再随内容宽度跳动
+  font-variant-numeric: tabular-nums;
 
   &::-webkit-scrollbar {
     width: 5px
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.04)
+    background: var(--c-bg-hover)
   }
 
   &::-webkit-scrollbar-thumb {
     border-radius: 5px;
-    background: rgba(0, 0, 0, .3);
+    background: var(--c-scroll-thumb);
   }
 }
 
@@ -48,7 +55,14 @@ footer, header, hgroup, menu, nav, section {
 }
 
 body {
+  color: var(--c-text-primary);
+  background: var(--c-bg-base);
   line-height: 1;
+}
+
+button:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 2px solid var(--c-accent-text);
+  outline-offset: 3px;
 }
 
 ol, ul {
@@ -79,13 +93,19 @@ input{
   outline: none;
 }
 
+// 全站网格：5 列等宽 + 16px gap
+// 原实现用 li{padding:15px} 撑间距（grid 时代前的写法），导致发现页必须写
+// "fix grid li padding from reset.scss" 覆盖补丁——统一 gap 后那个补丁删除
 .gridLayout {
   display: grid;
-  grid-template-columns: repeat(5, 20%);
+  grid-template-columns: repeat(5, 1fr);
+  gap: $sp-4;
   width: 100%;
 
   li{
-    padding: 15px;
+    padding: 0;
+    min-width: 0;
+    box-sizing: border-box;
     .imgContainer {
       width: 100%;
       max-height: 340px;
@@ -128,7 +148,19 @@ img {
   width: 100%;
   word-wrap: break-word;
 }
-h2 {
+// ---- 标题基准（全站统一，组件可局部覆盖）----
+// 原先只有 `h2 { font-size: 1.5rem }`（24px），而各页面又各自写 18~32px，
+// 导致同类标题在不同页差 2~4 倍。这里定两个级别：页面标题 h1 = 28px，模块标题 h2 = 20px。
+h1 {
+  font-size: $fs-page;
+  font-weight: 700;
+  line-height: 1.3;
   text-align: left;
-  font-size: 1.5rem
+}
+
+h2 {
+  font-size: $fs-module;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: left;
 }

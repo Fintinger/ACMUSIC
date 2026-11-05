@@ -6,17 +6,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: inherit;
+  font-style: normal;
   line-height: 1;
   vertical-align: middle;
   flex-shrink: 0;
-  transition: color .2s ease, opacity .2s ease, transform .2s ease;
-
-  &:hover {
-    transform: scale(1.1);
-  }
-
-  &:active {
-    transform: scale(.95);
-  }
+  transition: color .2s ease, opacity .2s ease;
 }
+.ac-icon.is-spinning { animation: ac-icon-spin 1s linear infinite; }
+@keyframes ac-icon-spin { to { transform: rotate(360deg); } }

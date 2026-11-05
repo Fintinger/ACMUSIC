@@ -12,9 +12,13 @@
       border-bottom: 1px solid rgba(0, 0, 0, 0.06);
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 
+      // 与内容区同一容器规范：max-width 1400 + 左右 24px（见 app.scss）
+      // 原 `width: 80%` 在 1280 视口下只有 1024px，比发现页的 1200px 窄 → 断层
       .el-row {
         height: 100%;
-        width: 80%;
+        width: 100%;
+        max-width: 1400px;
+        padding: 0 $sp-5;
         margin: 0 auto;
         box-sizing: border-box;
 
@@ -25,16 +29,25 @@
         .logo {
           display: flex;
           align-items: center;
+          height: 100%;
+          overflow: hidden;
 
+          // 固定高度（原 height:100% 在百分比链解析失败时回退到图片固有尺寸，
+          // 会把 logo 撑到 ~140px 高、溢出导航压住页面标题）
           img {
             width: auto;
-            height: 100%;
+            height: 60px;
+            max-width: 100%;
+            object-fit: contain;
+            display: block;
           }
         }
 
 
         .nav-link {
           .el-row {
+            height: 100%;
+            align-items: center;
             padding: 0 28px;
             justify-content: center;
             flex-wrap: nowrap;
@@ -88,7 +101,8 @@
                 }
 
                 &.router-link-exact-active {
-                  color: $color-main;
+                  // 文字用加深档主色（对比度 4.5:1+）；线用标准主色
+                  color: $color-main-text;
 
                   &::after {
                     transform: scaleX(1);
@@ -130,8 +144,8 @@
                 display: block;
                 width: 100%;
                 max-width: 280px;
-                min-width: 160px;
-                .ac-Search{
+                min-width: 0;
+                .ac-icon{
                   color: $font-black-2;
                   position: absolute;
                   right: 8px;
@@ -188,7 +202,7 @@
 
 /* 头像下拉菜单（teleport 到 body，非 scoped 全局样式） */
 .user-dropdown {
-  background: #fff;
+  background: var(--c-bg-elevated);
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 14px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
@@ -265,8 +279,8 @@
 
     &:not(.is-disabled):hover,
     &:not(.is-disabled):focus {
-      background: rgba(134, 133, 239, 0.08);
-      color: $color-main;
+      background: rgba(var(--theme-accent-rgb), 0.08);
+      color: $color-main-text;
     }
 
     &.logout-item {

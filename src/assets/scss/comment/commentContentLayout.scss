@@ -1,13 +1,14 @@
 @import "../base/variables";
+@import "../base/motion";
 
 .comment-content {
   .comment-item {
     display: flex; gap: 16px; padding: 22px;
-    border-radius: 18px; background: rgba(255,255,255,.03);
+    border-radius: 18px; background: var(--comment-bg);
     margin-bottom: 18px;
-    transition: transform .25s ease, background .25s ease;
+    transition: transform $motion-normal $ease-standard, background $motion-normal $ease-standard;
     &:last-child { margin-bottom: 0; }
-    &:hover { transform: translateY(-2px); background: rgba(255,255,255,.06); }
+    &:hover { transform: translateY(-2px); background: var(--comment-hover); }
   }
 
   .avatar {
@@ -20,20 +21,20 @@
     flex: 1; min-width: 0;
     .name {
       display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
-      .nickname { font-size: 17px; font-weight: 600; color: rgba(255,255,255,.85); cursor: pointer; transition: color .2s; &:hover { color: $color-main; } }
+      .nickname { font-size: 17px; font-weight: 600; color: var(--comment-text); cursor: pointer; transition: color .2s; &:hover { color: var(--comment-accent); } }
       .identityIcon img { height: 18px; width: auto; }
-      .time-tag { font-size: 13px; color: rgba(255,255,255,.35); }
+      .time-tag { font-size: 13px; color: var(--comment-muted); }
     }
-    .content { font-size: 15px; line-height: 1.9; color: rgba(255,255,255,.7); margin-bottom: 14px; word-break: break-word; }
+    .content { font-size: 15px; line-height: 1.9; color: var(--comment-secondary); margin-bottom: 14px; word-break: break-word; }
     .time-ribbon .ribbon {
       display: flex; align-items: center; gap: 22px;
-      > span { display: flex; align-items: center; gap: 5px; font-size: 14px; color: rgba(255,255,255,.4); cursor: pointer; transition: color .2s; i { font-size: 16px; } &:hover { color: $color-main; } }
-      .comment-like .like i.ac-likefill { color: #ef4444; }
+      > span { display: flex; align-items: center; gap: 5px; font-size: 14px; color: var(--comment-muted); cursor: pointer; transition: color .2s; i { font-size: 16px; } &:hover { color: var(--comment-accent); } }
+      .comment-like .like i.ac-likefill { color: var(--c-danger); }
       // 点赞请求中：视觉降权，避免重复点击
       .comment-like .like.pending { opacity: 0.5; cursor: wait; }
-      .comment-delete .el-button { color: rgba(255,255,255,.35); font-size: 13px; padding: 0; transition: color .2s; &:hover { color: #ef4444; } }
+      .comment-delete .el-button { color: var(--comment-muted); font-size: 13px; padding: 0; transition: color .2s; &:hover { color: var(--c-danger); } }
       // 楼层展开态：文案与箭头一起高亮，提示"再点会收起"
-      .comment-reply.open { color: $color-main; }
+      .comment-reply.open { color: var(--comment-accent); }
       // BaseIcon 渲染的 <i> 自身就带 floor-arrow 类；这里必须比 "> span i" 更具体才盖得住
       // 注意：已经嵌在 .ribbon 里，别再写 .ribbon >，否则会编译成 .ribbon .ribbon > 永不匹配
       > .comment-reply .floor-arrow { font-size: 12px; }
@@ -44,13 +45,13 @@
     .floor-wrap {
       margin-top: 14px; padding: 12px 16px;
       border-radius: 14px;
-      background: rgba(255,255,255,.03);
-      box-shadow: inset 2px 0 0 rgba(255,255,255,.08);
+      background: var(--comment-bg);
+      box-shadow: inset 2px 0 0 var(--comment-border);
     }
 
     .floor-item {
       display: flex; gap: 12px; padding: 10px 0;
-      & + .floor-item { border-top: 1px solid rgba(255,255,255,.05); }
+      & + .floor-item { border-top: 1px solid var(--comment-bg); }
     }
 
     .floor-avatar {
@@ -63,30 +64,30 @@
       flex: 1; min-width: 0;
       .floor-name {
         display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;
-        .nickname { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.72); cursor: pointer; transition: color .2s; &:hover { color: $color-main; } }
-        .reply-to { font-size: 13px; color: rgba(255,255,255,.35); }
-        .time-tag { font-size: 12px; color: rgba(255,255,255,.28); }
+        .nickname { font-size: 14px; font-weight: 600; color: var(--comment-text); cursor: pointer; transition: color .2s; &:hover { color: var(--comment-accent); } }
+        .reply-to { font-size: 13px; color: var(--comment-muted); }
+        .time-tag { font-size: 12px; color: var(--comment-muted); }
       }
-      .floor-content { font-size: 14px; line-height: 1.7; color: rgba(255,255,255,.62); word-break: break-word; margin-bottom: 6px; }
+      .floor-content { font-size: 14px; line-height: 1.7; color: var(--comment-secondary); word-break: break-word; margin-bottom: 6px; }
       .floor-ribbon {
         display: flex; align-items: center; gap: 16px;
-        > span { display: flex; align-items: center; gap: 4px; font-size: 13px; color: rgba(255,255,255,.35); cursor: pointer; transition: color .2s; i { font-size: 14px; } &:hover { color: $color-main; } }
-        .comment-like .like i.ac-likefill { color: #ef4444; }
+        > span { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--comment-muted); cursor: pointer; transition: color .2s; i { font-size: 14px; } &:hover { color: var(--comment-accent); } }
+        .comment-like .like i.ac-likefill { color: var(--c-danger); }
         .comment-like .like.pending { opacity: 0.5; cursor: wait; }
-        .comment-delete .el-button { color: rgba(255,255,255,.35); font-size: 12px; padding: 0; transition: color .2s; &:hover { color: #ef4444; } }
+        .comment-delete .el-button { color: var(--comment-muted); font-size: 12px; padding: 0; transition: color .2s; &:hover { color: var(--c-danger); } }
       }
     }
 
-    .floor-tip { font-size: 13px; color: rgba(255,255,255,.35); padding: 6px 0; }
+    .floor-tip { font-size: 13px; color: var(--comment-muted); padding: 6px 0; }
 
     .floor-more {
       margin-top: 10px; width: 100%; padding: 9px 0;
-      background: rgba(255,255,255,.04);
-      border: 1px solid rgba(255,255,255,.07);
+      background: var(--comment-bg);
+      border: 1px solid var(--comment-border);
       border-radius: 10px;
-      color: rgba(255,255,255,.6); font-size: 13px; cursor: pointer;
+      color: var(--comment-secondary); font-size: 13px; cursor: pointer;
       transition: background .2s, color .2s;
-      &:hover:not(:disabled) { background: rgba(255,255,255,.09); color: #fff; }
+      &:hover:not(:disabled) { background: var(--comment-hover); color: var(--comment-text); }
       &:disabled { opacity: .5; cursor: wait; }
     }
   }
@@ -100,22 +101,22 @@
   .comment-dialog {
     position: relative; z-index: $z-overlay + 101;
     width: 520px; max-width: 90vw; max-height: 85vh;
-    background: rgba(20,22,32,.72); backdrop-filter: blur(28px);
-    border: 1px solid rgba(255,255,255,.08); border-radius: 24px;
+    background: var(--comment-dialog); backdrop-filter: blur(28px);
+    border: 1px solid var(--comment-border); border-radius: 24px;
     box-shadow: 0 24px 80px rgba(0,0,0,.45); overflow: hidden; padding: 32px;
   }
 
   .dialog-header {
     display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px;
-    h3 { font-size: 22px; font-weight: 700; color: rgba(255,255,255,.9); margin: 0 0 8px; }
-    .dialog-subtitle { font-size: 14px; color: rgba(255,255,255,.45); margin: 0; line-height: 1.4; }
+    h3 { font-size: 22px; font-weight: 700; color: var(--comment-text); margin: 0 0 8px; }
+    .dialog-subtitle { font-size: 14px; color: var(--comment-muted); margin: 0; line-height: 1.4; }
     .dialog-close {
       width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.06);
-      color: rgba(255,255,255,.65); font-size: 16px; cursor: pointer;
+      background: var(--comment-bg); border: 1px solid var(--comment-border);
+      color: var(--comment-secondary); font-size: 16px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      transition: all 220ms cubic-bezier(.22,.61,.36,1);
-      &:hover { background: rgba(255,255,255,.12); color: #fff; }
+      transition: all $motion-normal $ease-standard;
+      &:hover { background: var(--comment-hover); color: var(--comment-text); }
     }
   }
 

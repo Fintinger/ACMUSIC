@@ -10,12 +10,14 @@
         <p class="login-subtitle">登录网易云音乐，同步你的歌单与收藏</p>
       </div>
       <div class="login-card glass-panel">
-        <div class="login-tabs">
+        <div class="login-tabs ac-tabs">
           <button
               v-for="tab in tabs"
               :key="tab.name"
               class="login-tab"
               :class="{ active: activeName === tab.name }"
+              :aria-pressed="activeName === tab.name"
+              type="button"
               @click="activeName = tab.name"
           >{{ tab.label }}</button>
         </div>
@@ -150,9 +152,8 @@ export default {
 @import "src/assets/scss/base/variables";
 
 .user-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 24px 80px;
+  // 容器由外层 el-main 统一（max-width 1200 + 24 padding）
+  padding-bottom: 80px;
 }
 
 /* ---------- 登录页 ---------- */
@@ -167,7 +168,7 @@ export default {
   .login-hero {
     text-align: center;
     margin-bottom: 32px;
-    .login-title { font-size: 32px; font-weight: 700; color: $font-black; margin: 0 0 8px; }
+    .login-title { font-size: $fs-page; font-weight: 700; line-height: 1.3; color: $font-black; margin: 0 0 $sp-2; }
     .login-subtitle { font-size: 15px; color: $font-black-2; margin: 0; }
   }
 
@@ -178,35 +179,15 @@ export default {
     padding: 32px 40px 40px;
   }
 
-  .login-tabs {
-    display: flex;
-    gap: 0;
-    margin-bottom: 28px;
-    border-bottom: 1px solid rgba(0,0,0,.06);
-
-    .login-tab {
-      padding: 10px 24px;
-      border: none;
-      background: transparent;
-      color: $font-black-2;
-      font-size: 15px;
-      font-weight: 500;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      transition: color .2s, border-color .2s;
-      &:hover { color: $font-black-1; }
-      &.active { color: $color-main; font-weight: 600; border-bottom-color: $color-main; }
-    }
-  }
+  .login-tabs { margin-bottom: 28px; }
 }
 
 .glass-panel {
-  background: rgba(255,255,255,.55);
+    background: var(--c-bg-elevated);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
   border-radius: 24px;
-  border: 1px solid rgba(255,255,255,.45);
+  border: 1px solid var(--c-border-strong);
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
 }
 </style>

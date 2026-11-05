@@ -1,25 +1,29 @@
 <template>
   <transition name="quality-menu">
-    <div v-if="visible" class="quality-menu" @click.stop>
+    <div v-if="visible" class="quality-menu" role="group" aria-label="音质选择" @click.stop
+         @keydown.space.stop @keydown.left.stop @keydown.right.stop>
       <div class="qm-header">音质选择</div>
-      <div
+      <button
         v-for="opt in options"
         :key="opt.key"
         class="qm-item"
+        type="button"
+        :aria-pressed="opt.key === selected"
+        :aria-label="opt.label + (isLocked(opt) ? '，需要VIP' : '')"
         :class="{ active: opt.key === selected, locked: isLocked(opt) }"
         @click="select(opt)"
       >
-        <div class="qm-left">
+        <span class="qm-left">
           <span class="qm-short">{{ opt.short }}</span>
-          <div class="qm-info">
+          <span class="qm-info">
             <span class="qm-label">{{ opt.label }}<span v-if="isLocked(opt)" class="qm-vip">VIP</span></span>
             <span v-if="opt.desc" class="qm-desc">{{ opt.desc }} · {{ opt.bitrate }}</span>
-          </div>
-        </div>
+          </span>
+        </span>
         <span v-if="opt.key === selected" class="qm-check">
           <BaseIcon name="loop" :size="16"/>
         </span>
-      </div>
+      </button>
     </div>
   </transition>
 </template>
@@ -69,26 +73,31 @@ export default {
   bottom: calc(100% + 10px);
   right: 0;
   width: 220px;
-  background: rgba(20, 22, 32, 0.94);
+  background: var(--player-menu-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--player-menu-border);
   border-radius: 14px;
   padding: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 32px var(--player-menu-shadow);
   z-index: 110;
 }
 
 .qm-header {
   font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--player-menu-muted);
   text-transform: uppercase;
   letter-spacing: .8px;
   padding: 6px 12px 8px;
 }
 
 .qm-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -98,10 +107,11 @@ export default {
   transition: background 180ms $ease-standard;
 
   &:hover { background: rgba(255, 255, 255, 0.06); }
-  &.active { background: rgba(134, 133, 239, 0.12); }
+  &:focus-visible { outline: 2px solid var(--player-menu-accent); outline-offset: -2px; }
+  &.active { background: var(--player-menu-soft); }
   &.locked {
-    .qm-label { color: rgba(255, 255, 255, 0.5); }
-    .qm-short { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.45); }
+    .qm-label { color: var(--player-menu-muted); }
+    .qm-short { background: rgba(255, 255, 255, 0.08); color: var(--player-menu-muted); }
   }
 
   .qm-vip {
@@ -131,8 +141,8 @@ export default {
     width: 28px;
     height: 22px;
     border-radius: 5px;
-    background: rgba(134, 133, 239, 0.2);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--player-menu-soft);
+    color: var(--player-menu-text);
     font-size: 11px;
     font-weight: 700;
     display: flex;
@@ -146,11 +156,11 @@ export default {
     flex-direction: column;
     min-width: 0;
 
-    .qm-label { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.85); line-height: 1.3; }
-    .qm-desc { font-size: 11px; color: rgba(255, 255, 255, 0.35); margin-top: 1px; }
+    .qm-label { font-size: 13px; font-weight: 600; color: var(--player-menu-text); line-height: 1.3; }
+    .qm-desc { font-size: 11px; color: var(--player-menu-muted); margin-top: 1px; }
   }
 
-  .qm-check { color: #8685EF; font-size: 16px; flex-shrink: 0; }
+  .qm-check { color: var(--player-menu-accent); font-size: 16px; flex-shrink: 0; }
 }
 
 // Menu transition (reuse motion tokens)

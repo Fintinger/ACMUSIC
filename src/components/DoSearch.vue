@@ -1,5 +1,6 @@
 <template>
   <div class="search" @click.self="toggleSearch(false)">
+    <button class="search-close" type="button" aria-label="关闭搜索" @click="toggleSearch(false)"><BaseIcon name="close"/></button>
     <div class="search-wrapper">
       <el-container class="search-container">
         <el-header class="title"><h2>搜 索</h2></el-header>
@@ -70,15 +71,15 @@
                 <div class="wrapper">
                   <el-col :order="ind + 1" :span="2" class="serial-number">{{ ind + 1 }}</el-col>
                   <el-col :span="18" class="info">
-                    <scoText class="name-score-icon">
+                    <div class="name-score-icon">
                       <el-col :span="24" class="name">
                         <span class="name">{{ item.searchWord }}</span>
                         <span v-if="item.iconUrl" class="icon"> <img :src="item.iconUrl | https" alt=""
                                                                      style="width: auto;height: 1rem"></span>
                         <span class="score">{{ item.score }}</span>
                       </el-col>
-                    </scoText>
-                    <scoText v-if="item.content" class="content"> {{ item.content }}</scoText>
+                    </div>
+                    <div v-if="item.content" class="content"> {{ item.content }}</div>
                   </el-col>
                 </div>
               </el-row>
@@ -92,13 +93,12 @@
 
 <script>
 import {toggleScrollY} from "@/utils/tools";
-import scoText from "@/components/scoText";
 import * as searchApi from "@/api/Search";
 import * as tracksApi from "@/api/Tracks";
 
 export default {
   name: "DoSearch",
-  components: {scoText},
+  components: {},
   data() {
     return {
       keyword: "",

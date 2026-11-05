@@ -19,11 +19,12 @@
 
     <AlbumLayout v-if="albums.length" :list="albums"/>
 
-    <div v-if="firstLoading" class="asp-state"><i class="el-icon-loading"/> 加载中…</div>
-    <div v-else-if="error && !albums.length" class="asp-state">
-      加载失败
+    <div v-if="firstLoading || (loading && !albums.length)" class="asp-state"><BaseIcon class="is-spinning" name="loader"/> 加载中…</div>
+    <div v-else-if="error" class="asp-state">
+      {{ albums.length ? '更多专辑加载失败，已加载内容仍可查看' : '专辑加载失败，请检查网络' }}
       <button class="asp-retry" @click="load">重试</button>
     </div>
+    <EmptyState v-else-if="!albums.length" compact title="暂无专辑"/>
     <LoadMore v-else :load="load" :loading="loading" :noMore="noMore" noMoreText="已加载全部专辑"/>
   </div>
 </template>
@@ -36,6 +37,7 @@
  *   接口没有 total，总数用 artist.albumSize（实测周杰伦 47、陈奕迅 142，与实际条数一致）
  * - 翻页：offset 分页，LoadMore 触底续拉，每页 40 张
  */
+import EmptyState from '@/components/common/EmptyState';
 import LoadMore from "@/components/LoadMore";
 import AlbumLayout from "@/components/layout/AlbumLayout";
 import CoverImage from "@/components/common/CoverImage";
@@ -45,7 +47,7 @@ const PAGE_SIZE = 40;
 
 export default {
   name: "ArtistAllAlbums",
-  components: {LoadMore, AlbumLayout, CoverImage},
+  components: {EmptyState, LoadMore, AlbumLayout, CoverImage},
   props: ["id"],
   data() {
     return {
@@ -70,10 +72,11 @@ export default {
       if (this.loading || this.noMore) return
       this.loading = true
       this.error = false
-      artistApi.albums(this.id, PAGE_SIZE, this.offset)
+      return artistApi.albums(this.id, PAGE_SIZE, this.offset)
         .then(res => {
           const data = res.data || {}
-          const list = data.hotAlbums || []
+          if (!Array.isArray(data.hotAlbums)) throw new Error('Invalid albums response')
+          const list = data.hotAlbums
           const artist = data.artist || {}
           if (artist.albumSize) this.total = artist.albumSize
           const seen = new Set(this.albums.map(a => a.id))
@@ -111,9 +114,8 @@ export default {
 <style lang="scss" scoped>
 @import "src/assets/scss/artistSubPage";
 
+// 容器由外层 el-main 统一（max-width 1400 + 24 padding）
 .artistAllAlbums {
-  max-width: 1200px;
-  margin: 0 auto;
   padding-bottom: 80px;
 }
 

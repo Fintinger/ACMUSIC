@@ -10,8 +10,8 @@
         <div class="info">
           <p class="name" :title="userName(r)">
             {{ userNick(r) }}
-            <i v-if="userGender(r)===1" class="el-icon-male"></i>
-            <i v-if="userGender(r)===2" class="el-icon-female"></i>
+            <BaseIcon v-if="userGender(r)===1" class="el-icon-male" name="male"/>
+            <BaseIcon v-if="userGender(r)===2" class="el-icon-female" name="female"/>
           </p>
           <p class="sign" v-if="userSign(r)" :title="userSign(r)">{{ userSign(r) }}</p>
           <p class="meta">
@@ -135,14 +135,14 @@ export default {
   min-width: 0;
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(255,255,255,.72);
-  border: 1px solid rgba(0,0,0,.05);
+  background: var(--c-bg-elevated);
+  border: 1px solid var(--c-border);
   transition: transform .25s, box-shadow .25s, border-color .25s;
 
   &:hover {
     transform: translateY(-3px);
-    border-color: rgba($color-main, .35);
-    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    border-color: var(--c-accent);
+    box-shadow: 0 8px 24px var(--c-shadow-low);
   }
 }
 
@@ -195,8 +195,8 @@ export default {
   font-weight: 400;
   line-height: 15px;
   border-radius: 4px;
-  color: $color-main;
-  background: rgba($color-main, .12);
+  color: $color-main-text;
+  background: var(--c-accent-soft);
 }
 
 .sign {
@@ -217,6 +217,6 @@ export default {
   color: $font-black-2;
 }
 
-.since { color: $color-main; white-space: nowrap; }
+.since { color: $color-main-text; white-space: nowrap; }
 .mutual { color: $font-black-2; white-space: nowrap; }
 </style>

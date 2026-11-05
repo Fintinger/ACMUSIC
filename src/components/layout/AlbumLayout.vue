@@ -7,18 +7,19 @@
                        :alt="album.name + '的封面'" custom-class="image"/>
         </div>
         <div class="info">
-          <scoText class="albumName">{{ album.name }}</scoText>
+          <div class="albumName" :title="album.name">{{ album.name }}</div>
           <template>
-            <scoText v-if="Array.isArray(album.artists)" class="albumArtist">
+            <div v-if="Array.isArray(album.artists)" class="albumArtist">
               <span v-for="ar in album.artists" :key="ar.id" class="artist"
                     @click.stop="arClk(ar.id)">{{ ar.name }} </span>
-            </scoText>
-            <scoText v-else class="albumArtist">{{ album.artist.name }}</scoText>
+            </div>
+            <div v-else class="albumArtist">{{ album.artist ? album.artist.name : '未知歌手' }}</div>
           </template>
-          <scoText :title="album.publishTime|formatMs('YYYY.MM.DD HH:mm:ss')" class="albumCompany">{{ album.company }} |
+          <!-- title 用方法拼：Vue 2 的过滤器只能出现在表达式顶层，
+               写成 `(a | fmt())` 会被当成位或运算 → 运行时报 _vm.fmt is not a function -->
+          <div :title="albumTitle(album)" class="albumCompany">{{ album.company }} |
             {{ album.publishTime| fromNow }}
-          </scoText>
-          <scoText class="pub-time"></scoText>
+          </div>
         </div>
 
         <div class="play-btn">
@@ -30,13 +31,13 @@
 </template>
 
 <script>
-import scoText from "@/components/scoText";
 import playTracksBtn from "@/components/playTracksBtn";
 import CoverImage from "@/components/common/CoverImage";
+import {formatMs} from "@/utils/filters";
 
 export default {
   name: "AlbumLayout",
-  components: {scoText,playTracksBtn, CoverImage},
+  components: {playTracksBtn, CoverImage},
   props: {
     list: {
       type: Array,
@@ -44,6 +45,11 @@ export default {
     },
   },
   methods: {
+    /** 悬浮提示：公司 + 精确发布时间（替代原来写在 v-bind 里的过滤器） */
+    albumTitle(album) {
+      const t = album && album.publishTime ? formatMs(album.publishTime, 'YYYY.MM.DD HH:mm:ss') : ''
+      return [album && album.company, t].filter(Boolean).join(' | ')
+    },
     alClk(id) {
       this.$bus.$emit('alClk', id)
     },

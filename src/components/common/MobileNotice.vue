@@ -150,7 +150,7 @@ export default {
   right: -80px;
   width: 320px;
   height: 320px;
-  background: rgba($color-main, .38);
+  background: rgba(var(--theme-accent-rgb), .38);
 }
 
 .mn-glow-b {
@@ -169,7 +169,7 @@ export default {
   border: 1px solid rgba($color-theme, .9);
   border-radius: 22px;
   background: rgba($color-theme, .88);
-  box-shadow: 0 24px 60px rgba($color-main-1, .16);
+  box-shadow: 0 24px 60px rgba(var(--theme-accent-rgb), .16);
   text-align: center;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
@@ -190,7 +190,7 @@ export default {
   margin: 0 auto 16px;
   border-radius: 18px;
   background: linear-gradient(135deg, $color-main, $color-main-1);
-  box-shadow: 0 10px 24px rgba($color-main, .34);
+  box-shadow: 0 10px 24px rgba(var(--theme-accent-rgb), .34);
   color: $font-white;
 }
 
@@ -222,7 +222,7 @@ export default {
 .mn-url {
   margin: 18px 0 12px;
   padding: 11px 12px;
-  border: 1px dashed rgba($color-main, .38);
+  border: 1px dashed rgba(var(--theme-accent-rgb), .38);
   border-radius: 12px;
   background: $color-theme-sec;
 
@@ -252,7 +252,7 @@ export default {
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, $color-main, $color-main-1);
-  box-shadow: 0 8px 20px rgba($color-main, .32);
+  box-shadow: 0 8px 20px rgba(var(--theme-accent-rgb), .32);
   color: $font-white;
   font-family: inherit;
   font-size: 13.5px;
@@ -265,7 +265,7 @@ export default {
 
   &:active {
     transform: scale(.985);
-    box-shadow: 0 4px 12px rgba($color-main, .28);
+    box-shadow: 0 4px 12px rgba(var(--theme-accent-rgb), .28);
   }
 
   /* 复制成功：换成成功色，配合按钮文案一起给出结果反馈 */

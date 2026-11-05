@@ -35,6 +35,8 @@ export function playCountOf(item) {
     if (item.playCount !== undefined && item.playCount !== null) return item.playCount
     if (item.playTime !== undefined && item.playTime !== null) return item.playTime
     if (item.playCountStr !== undefined && item.playCountStr !== null) return item.playCountStr
+    const ext = item.resource && item.resource.mlogExtVO
+    if (ext && ext.playCount != null) return ext.playCount
     return 0
 }
 

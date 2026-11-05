@@ -29,12 +29,13 @@
           <p class="hero-alias" v-if="arBasicInfo.alias">{{ arBasicInfo.alias.join(' / ') }}</p>
           <p class="hero-stats">{{ arBasicInfo.musicSize }} 首歌 · {{ arBasicInfo.albumSize }} 张专辑 · {{ arBasicInfo.mvSize }} 个 MV</p>
           <p class="hero-desc" v-if="arBasicInfo.briefDesc" :title="arBasicInfo.briefDesc">{{ arBasicInfo.briefDesc }}</p>
+          <p v-else class="hero-desc">暂无歌手简介</p>
         </div>
         <!-- 关注歌手：/artists?id= 返回的 artist.followed 即初始状态 -->
         <div class="hero-actions" v-if="isLogin">
           <button class="followBtn" :class="{ 'is-followed': followed }" :disabled="followPending"
                   :title="followed ? '点击取消收藏' : '收藏该歌手'" @click="toggleFollow">
-            <i v-if="followPending" class="el-icon-loading"></i>
+            <BaseIcon v-if="followPending" class="is-spinning" name="loader"/>
             <template v-else-if="followed">已关注</template>
             <template v-else>关注</template>
           </button>
@@ -42,7 +43,9 @@
       </div>
     </div>
 
-    <template v-if="!loading">
+    <EmptyState v-if="!loading && loadError" title="歌手详情加载失败" desc="请检查链接或网络后重试" action-text="重新加载" @action="loadArtist"/>
+    <EmptyState v-if="!loading && !loadError && partialError" compact title="部分歌手内容加载失败" desc="已加载的内容仍可查看" action-text="重试" @action="loadArtist"/>
+    <template v-if="!loading && !loadError">
     <section class="ar-section">
       <div class="section-head">
         <h2>热门歌曲</h2>
@@ -52,6 +55,7 @@
         </span>
       </div>
       <TracksLayout v-if="top50songs.length" :list="top50songs.slice(0, SONG_PREVIEW)"/>
+      <EmptyState v-else compact :title="sectionErrors.songs ? '热门歌曲加载失败' : '暂无热门歌曲'"/>
     </section>
 
     <section class="ar-section">
@@ -63,6 +67,7 @@
         </span>
       </div>
       <AlbumLayout v-if="hotAlbums.length" :list="hotAlbums.slice(0, CARD_PREVIEW)"/>
+      <EmptyState v-else compact :title="sectionErrors.albums ? '专辑加载失败' : '暂无专辑'"/>
     </section>
 
     <section class="ar-section ar-mv-section">
@@ -70,20 +75,22 @@
         <h2>MV<em v-if="arBasicInfo.mvSize" class="section-count">{{ arBasicInfo.mvSize }} 个</em></h2>
         <span v-if="mvToggleable" class="section-more" :class="{ 'is-loading': mvPaging.loading }"
               @click="toggleMvs">
-          <template v-if="mvPaging.loading"><i class="el-icon-loading"/> 加载中…</template>
+          <template v-if="mvPaging.loading"><BaseIcon class="is-spinning" name="loader"/> 加载中…</template>
           <template v-else>{{ expanded.mvs ? '收起' : '更多' }} <BaseIcon :name="expanded.mvs ? 'arrowUp' : 'arrowRight'"/></template>
         </span>
       </div>
       <MvLayout v-if="mvs.length" :list="expanded.mvs ? mvs : mvs.slice(0, CARD_PREVIEW)" pic-name="imgurl16v9"/>
+      <EmptyState v-else compact :title="sectionErrors.mvs ? 'MV 加载失败' : '暂无 MV'"/>
     </section>
 
     <section class="ar-section ar-video-section">
       <div class="section-head">
         <h2>视频</h2>
         <!-- /artist/video 是 cursor 分页、一次一批，所以这里只能"换一批"而不是累计展开 -->
-        <el-button size="small" :loading="vidLoading" @click="loadMoreVid" style="margin-right:8px">换一批</el-button>
+        <el-button v-if="videos.length" size="small" :loading="vidLoading" @click="loadMoreVid" style="margin-right:8px">换一批</el-button>
       </div>
       <VideoLayout v-if="videos.length" :list="videos" :is-mlog="true"/>
+      <EmptyState v-else compact :title="vidLoading ? '视频加载中…' : (sectionErrors.videos ? '视频加载失败' : '暂无视频')"/>
     </section>
 
     <section class="ar-section ar-simi-section">
@@ -95,12 +102,14 @@
         </span>
       </div>
       <ArtistLayout v-if="simiArtists.length" :list="expanded.simi ? simiArtists : simiArtists.slice(0, CARD_PREVIEW)"/>
+      <EmptyState v-else compact :title="sectionErrors.similar ? '相似歌手加载失败' : '暂无相似歌手'"/>
     </section>
     </template>
   </div>
 </template>
 
 <script>
+import EmptyState from '@/components/common/EmptyState';
 import TracksLayout from "@/components/layout/TracksLayout";
 import AlbumLayout from "@/components/layout/AlbumLayout";
 import ArtistLayout from "@/components/layout/ArtistLayout";
@@ -117,7 +126,7 @@ const MV_PAGE = 50;
 export default {
   name: "ArtistDetail",
   props: ["id"],
-  components: {TracksLayout, AlbumLayout, ArtistLayout, MvLayout, VideoLayout, CoverImage},
+  components: {EmptyState, TracksLayout, AlbumLayout, ArtistLayout, MvLayout, VideoLayout, CoverImage},
   data() {
     return {
       arBasicInfo: {},
@@ -125,6 +134,8 @@ export default {
       vidParams: { id: this.id, cursor: 0, order: 1 },
       vidLoading: false,
       loading: true,
+      loadError: false, partialError: false, requestVersion: 0,
+      sectionErrors: { songs: false, albums: false, mvs: false, similar: false, videos: false },
       // 展示数量常量（模板里要用，必须挂在实例上）
       SONG_PREVIEW: 5,
       CARD_PREVIEW: 8,
@@ -159,6 +170,31 @@ export default {
     }
   },
   methods: {
+    async loadArtist() {
+      const version = ++this.requestVersion
+      this.loading = true; this.loadError = false; this.partialError = false
+      this.expanded = { mvs: false, simi: false }
+      if (!/^[1-9]\d*$/.test(String(this.id || ''))) { this.loadError = true; this.loading = false; return }
+      const jobs = [this.getAtDetail(), this.getTop50(), this.getAlbum(), this.getMVs(), this.getSimiAt(), this.getVid()]
+      const results = await Promise.allSettled(jobs)
+      if (version !== this.requestVersion) return
+      const data = results.map(r => r.status === 'fulfilled' ? (r.value.data || {}) : {})
+      if (!data[0].artist || !data[0].artist.name) { this.loadError = true; this.loading = false; return }
+      this.arBasicInfo = data[0].artist; this.followed = !!this.arBasicInfo.followed
+      this.top50songs = Array.isArray(data[1].songs) ? data[1].songs : []
+      this.hotAlbums = Array.isArray(data[2].hotAlbums) ? data[2].hotAlbums : []; this.albumMore = !!data[2].more
+      this.mvs = Array.isArray(data[3].mvs) ? data[3].mvs : []; this.mvPaging.offset = this.mvs.length; this.mvPaging.more = !!data[3].hasMore
+      this.simiArtists = Array.isArray(data[4].artists) ? data[4].artists : []
+      const video = data[5].data || {}; this.videos = Array.isArray(video.records) ? video.records : []
+      this.sectionErrors = {
+        songs: !Array.isArray(data[1].songs), albums: !Array.isArray(data[2].hotAlbums),
+        mvs: !Array.isArray(data[3].mvs), similar: !Array.isArray(data[4].artists),
+        videos: !Array.isArray(video.records),
+      }
+      this.vidParams.cursor = video.page ? video.page.cursor : 0
+      this.partialError = results.some(r => r.status === 'rejected') || !Array.isArray(data[1].songs) || !Array.isArray(data[2].hotAlbums) || !Array.isArray(data[3].mvs) || !Array.isArray(data[4].artists) || !Array.isArray(video.records)
+      this.loading = false
+    },
     alClk(id) { this.$bus.$emit('alClk', id) },
     arClk(id) { this.$bus.$emit('arClk', id) },
     /** 跳到「该歌手全部歌曲」页（App.vue 里监听 arAsClk 做路由跳转） */
@@ -243,7 +279,9 @@ export default {
         .then(res => {
           const data = (res.data && res.data.data) || {}
           const page = data.page || {}
-          const records = data.records || []
+          if (!Array.isArray(data.records)) throw new Error('Invalid videos response')
+          const records = data.records
+          this.sectionErrors.videos = false
           if (records.length) this.videos = records
           if (page.more) {
             this.vidParams.cursor = page.cursor
@@ -252,44 +290,20 @@ export default {
             this.$toast.info('已经是最后一批了')
           }
         })
-        .catch(() => this.$toast.error('视频加载失败，请稍后重试'))
+        .catch(() => { this.sectionErrors.videos = true; this.$toast.error('视频加载失败，请稍后重试') })
         .finally(() => { this.vidLoading = false })
     }
   },
-  activated() {
-    this.loading = true
-    // 重新进入页面时列表会重拉，MV 的展开态一并复位，避免"展开着但只剩 16 个"的错位
-    this.expanded = { mvs: false, simi: false }
-    this.$nextTick(() => {
-    this.$axios.all([this.getAtDetail(), this.getTop50(), this.getAlbum(), this.getMVs(), this.getSimiAt(), this.getVid()])
-        .then(this.$axios.spread((AtDetail, Top50, Album, MVs, SimiAt, video) => {
-          this.arBasicInfo = AtDetail.data.artist
-          this.followed = !!this.arBasicInfo.followed
-          this.top50songs = Top50.data.songs
-
-          const albumData = Album.data || {}
-          this.hotAlbums = albumData.hotAlbums || []
-          this.albumMore = !!albumData.more
-
-          const mvData = MVs.data || {}
-          this.mvs = mvData.mvs || []
-          this.mvPaging.offset = this.mvs.length
-          this.mvPaging.more = !!mvData.hasMore
-
-          this.simiArtists = SimiAt.data.artists
-          this.videos = video.data.data.records
-          this.vidParams.cursor = video.data.data.page.cursor
-        }))
-        .finally(() => { this.loading = false })
-    })
-  }
+  beforeDestroy() { this.requestVersion++ },
+  activated() { this.loadArtist() }
 }
 </script>
 
 <style lang="scss" scoped>
 @import "src/assets/scss/base/variables";
 
-.artistDetail { max-width: 1200px; margin: 0 auto; padding-bottom: 80px; }
+// 容器由外层 el-main 统一（max-width 1400 + 24 padding）
+.artistDetail { padding-bottom: 80px; }
 
 .artist-hero {
   position: relative; border-radius: 20px; overflow: hidden; margin-bottom: 40px;
@@ -348,12 +362,12 @@ export default {
       display: flex; align-items: baseline; gap: 10px;
     }
     // 标题旁的统计（如「47 张」），弱化处理，不抢标题
-    .section-count { font-size: 13px; font-weight: 400; font-style: normal; color: #aaa; }
+    .section-count { font-size: 13px; font-weight: 400; font-style: normal; color: $font-black-2; }
     .section-more {
       font-size: 14px; color: $font-black-2; cursor: pointer; display: flex; align-items: center; gap: 4px;
-      &:hover { color: $color-main; }
+      &:hover { color: $color-main-text; }
       // 续拉期间不可再点，防止连点叠请求
-      &.is-loading { color: #aaa; cursor: default; pointer-events: none; }
+      &.is-loading { color: $font-black-2; cursor: default; pointer-events: none; }
     }
     .el-button { border-radius: 20px; }
   }
@@ -363,7 +377,7 @@ export default {
 ::v-deep .gridLayout li { padding: 0 !important; }
 ::v-deep .mvList.gridLayout { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important; }
 
-.skel-hero { border-radius: 20px; overflow: hidden; margin-bottom: 40px; background: rgba(0,0,0,.06); }
+.skel-hero { border-radius: 20px; overflow: hidden; margin-bottom: 40px; background: var(--c-bg-sunken); }
 .skel-avatar { width: 180px; height: 180px; border-radius: 50%; flex-shrink: 0; }
 .skel-line { height: 14px; border-radius: 6px; margin-bottom: 12px; }
 .skel-line--lg { width: 240px; height: 28px; }
@@ -373,14 +387,14 @@ export default {
 .skel-sections { margin-top: 12px; }
 .skel-sec { margin-bottom: 44px; }
 .skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.skel-card { border-radius: 12px; overflow: hidden; background: #fff; border: 1px solid rgba(0,0,0,.04); }
+.skel-card { border-radius: 12px; overflow: hidden; background: var(--c-bg-elevated); border: 1px solid var(--c-border); }
 .skel-card-img { aspect-ratio: 1; }
 .skel-card-line { height: 12px; border-radius: 6px; margin: 10px 8px; width: 70%; }
 
 .ar-mv-section ::v-deep .playCount,
 .ar-mv-section ::v-deep .duration,
 .ar-video-section ::v-deep .playCount,
-.ar-video-section ::v-deep .duration { display: inline-flex !important; align-items: center; gap: 3px; font-size: 12px; color: #999; margin-top: 8px; }
+.ar-video-section ::v-deep .duration { display: inline-flex !important; align-items: center; gap: 3px; font-size: 12px; color: $font-black-2; margin-top: 8px; }
 .ar-mv-section ::v-deep .playCount::before,
 .ar-video-section ::v-deep .playCount::before { content: "▶ "; font-size: 11px; opacity: .7; }
 .ar-mv-section ::v-deep .duration::before,
@@ -395,7 +409,7 @@ export default {
 .ar-mv-section ::v-deep .moreInfo,
 .ar-video-section ::v-deep .moreInfo { padding: 10px 14px 12px; }
 .ar-mv-section ::v-deep .pb-time,
-.ar-video-section ::v-deep .pb-time { font-size: 12px; color: #999; margin-top: 4px; }
+.ar-video-section ::v-deep .pb-time { font-size: 12px; color: $font-black-2; margin-top: 4px; }
 
 .ar-section { animation: fadeUp .4s ease both; }
 @for $i from 1 through 6 { .ar-section:nth-child(#{$i}) { animation-delay: #{$i*.06}s; } }

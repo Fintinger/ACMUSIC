@@ -1,0 +1,56 @@
+// 必须在 theme-chalk 与公共覆盖之后加载；只影响深色外观。
+html[data-theme="dark"] {
+  .el-card, .el-dialog, .el-message-box, .el-dropdown-menu,
+  .el-popover, .el-select-dropdown, .el-autocomplete-suggestion,
+  .el-message, .el-message.el-message--success, .el-message.el-message--warning,
+  .el-message.el-message--error, .el-message.el-message--info {
+    background: var(--c-bg-elevated);
+    border-color: var(--c-border-strong);
+    color: var(--c-text-primary);
+    box-shadow: 0 12px 30px var(--c-shadow-mid);
+  }
+
+  .el-dialog__title, .el-message-box__title, .el-form-item__label,
+  .el-dialog__body, .el-message-box__content, .el-radio,
+  .el-checkbox, .el-dropdown-menu__item, .el-select-dropdown__item {
+    color: var(--c-text-secondary);
+  }
+
+  .el-input__inner, .el-textarea__inner, .el-input-number,
+  .el-radio-button__inner, .el-checkbox__inner {
+    background: var(--c-bg-sunken);
+    border-color: var(--c-border-strong);
+    color: var(--c-text-primary);
+  }
+  .el-input__inner::placeholder, .el-textarea__inner::placeholder {
+    color: var(--c-text-tertiary);
+  }
+  .el-input__inner:focus, .el-textarea__inner:focus { border-color: var(--c-accent); }
+
+  .el-button {
+    background: var(--c-bg-elevated);
+    border-color: var(--c-border-strong);
+    color: var(--c-text-primary);
+    &:hover, &:focus { background: var(--c-bg-sunken-hover); color: var(--c-accent-text); }
+    &.is-disabled { opacity: .5; }
+  }
+  .el-button--primary, .el-radio-button__orig-radio:checked + .el-radio-button__inner {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+    color: var(--c-text-on-accent);
+    &:hover, &:focus { background: var(--c-accent-hover); color: var(--c-text-on-accent); }
+  }
+  .el-button--text { background: transparent; border-color: transparent; color: var(--c-accent-text); }
+  .el-dropdown-menu__item:not(.is-disabled):hover,
+  .el-select-dropdown__item.hover, .el-select-dropdown__item:hover {
+    background: var(--c-bg-sunken-hover);
+    color: var(--c-accent-text);
+  }
+  .el-dropdown-menu__item--divided { border-color: var(--c-border); }
+  .el-dropdown-menu__item--divided::before { background: var(--c-bg-elevated); }
+  .el-divider { background: var(--c-border); }
+  .el-divider__text { background: var(--c-bg-base); color: var(--c-text-secondary); }
+  .el-loading-mask { background: var(--c-bg-base); }
+  .el-popper .popper__arrow { border-bottom-color: var(--c-border-strong); border-top-color: var(--c-border-strong); }
+  .el-popper .popper__arrow::after { border-bottom-color: var(--c-bg-elevated); border-top-color: var(--c-bg-elevated); }
+}

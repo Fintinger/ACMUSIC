@@ -1,5 +1,6 @@
 <template>
   <div class="video-page">
+    <EmptyState v-if="detailFailed" title="视频详情加载失败" desc="请检查链接或网络后重试" action-text="重新加载详情" @action="$emit('retry-detail')"/>
     <div v-if="dt_name" class="video-body">
       <div class="video-main">
         <!-- 标题与基础信息置于播放器上方 -->
@@ -17,15 +18,16 @@
         </section>
 
         <div v-if="urlFailed" class="video-error">
-          <i class="el-icon-warning-outline"></i>
-          <p>该视频暂无可用播放源</p>
-          <span>接口未返回播放地址（可能是付费内容或已下架），你仍然可以浏览下方评论与相关推荐</span>
+          <BaseIcon class="el-icon-warning-outline" name="warning"/>
+          <p>暂时无法播放此视频</p>
+          <span>播放地址暂不可用，请重试；你仍然可以浏览下方评论与相关推荐</span>
+          <button type="button" class="source-retry" @click="$emit('retry-url')">重试播放源</button>
         </div>
-        <template v-else-if="url && dt_cover">
+        <template v-else-if="url">
           <section class="video-player-section" ref="playerSection" :style="playerBgStyle">
-            <vidPlayer :poster="dt_cover" :url="url"/>
+            <vidPlayer :poster="dt_cover || ''" :url="url"/>
             <!-- 隐藏 img：触发封面主色提取，@load 在封面加载完时触发 onCoverLoad -->
-            <img :src="dt_cover | https" alt="" crossorigin="anonymous" @load="onCoverLoad" class="cover-color-source">
+            <img v-if="dt_cover" :src="dt_cover | https" alt="" crossorigin="anonymous" @load="onCoverLoad" class="cover-color-source">
           </section>
 
         </template>
@@ -36,7 +38,7 @@
           <div class="video-stats">
             <span v-for="s in videoStats" :key="s.label" class="stat"
                   :class="{ 'stat--clickable': s.clickable }" @click="onStatClick(s)">
-              <i :class="s.icon"></i>
+              <BaseIcon :name="s.icon"/>
               <b>{{ s.value | Div1w(s.value) }}</b>
               <em>{{ s.label }}</em>
             </span>
@@ -79,7 +81,7 @@
       <CommentLayout :key="commentKey" :id="id" :type="commentType" :hide-load-more-when-empty="true"/>
     </section>
 
-    <div v-if="!dt_name" class="video-loading">
+    <div v-if="!dt_name && !detailFailed" class="video-loading">
       <div class="skel-player skeleton-item"></div>
       <div class="skel-line skel-line--long skeleton-item"></div>
       <div class="skel-line skel-line--short skeleton-item"></div>
@@ -96,6 +98,7 @@
 </template>
 
 <script>
+import EmptyState from '@/components/common/EmptyState';
 import vidPlayer from "@/components/vidPlayer";
 import CommentLayout from "@/components/layout/CommentLayout";
 import SendComment from "@/components/SendComment";
@@ -104,7 +107,7 @@ import { extractColors } from "@/utils/colorExtractor";
 
 export default {
   name: "VideoPlayerLayout",
-  components: {vidPlayer, CommentLayout, SendComment, CoverImage},
+  components: {EmptyState, vidPlayer, CommentLayout, SendComment, CoverImage},
   props: {
     url: { type: String, required: true },
     detail: { type: Object, required: true },
@@ -116,6 +119,7 @@ export default {
     simiFallback: { type: Boolean, default: false },
     // 播放地址取不到（上游返回 null/取流失败）：不再卡在骨架屏，给出明确提示
     urlFailed: { type: Boolean, default: false },
+    detailFailed: { type: Boolean, default: false },
     id: { required: true },
     nameConfig: {
       type: Object,
@@ -176,11 +180,11 @@ export default {
     videoStats() {
       const d = this.detail || {}
       return [
-        { icon: "el-icon-video-play", label: "播放", value: this.dt_playCt },
-        { icon: "el-icon-thumb", label: "点赞", value: d.praisedCount },
-        { icon: "el-icon-star-off", label: "收藏", value: d.subCount },
-        { icon: "el-icon-chat-dot-square", label: "评论", value: d.commentCount, clickable: true },
-        { icon: "el-icon-share", label: "分享", value: d.shareCount }
+        { icon: "play", label: "播放", value: this.dt_playCt },
+        { icon: "thumb", label: "点赞", value: d.praisedCount },
+        { icon: "star", label: "收藏", value: d.subCount },
+        { icon: "comment", label: "评论", value: d.commentCount, clickable: true },
+        { icon: "share", label: "分享", value: d.shareCount }
       ].filter(s => s.value != null)
     },
     /** 侧栏与播放器顶部对齐（下移标题区高度）+ 与播放窗口等高 */
@@ -307,7 +311,7 @@ export default {
   display: inline-flex; align-items: center; gap: 8px;
   cursor: pointer; padding: 4px 10px 4px 4px; border-radius: 20px;
   transition: background .2s;
-  &:hover { background: $color-theme-sec; .author-name { color: $color-main; } }
+  &:hover { background: $color-theme-sec; .author-name { color: $color-main-text; } }
   .author-avatar {
     width: 26px; height: 26px; border-radius: 50%; object-fit: cover; display: block;
   }
@@ -339,7 +343,7 @@ export default {
 
 .video-error {
   width: 100%; aspect-ratio: 16 / 9; max-height: 420px;
-  border-radius: 16px; background: #f7f7fa; border: 1px dashed rgba(0,0,0,.12);
+  border-radius: 16px; background: var(--c-bg-sunken); border: 1px dashed var(--c-border-strong);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; padding: 24px; gap: 6px;
   i { font-size: 36px; color: #c0c4cc; }
@@ -371,9 +375,9 @@ export default {
   display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px;
   .video-tag {
     padding: 4px 12px; border-radius: 20px; cursor: pointer;
-    border: 1px solid rgba(0,0,0,.08); background: #fff;
+    border: 1px solid var(--c-border-strong); background: var(--c-bg-elevated);
     font-size: 12px; color: $font-black-2; transition: all .2s;
-    &:hover { color: $color-main; border-color: $color-main; }
+    &:hover { color: $color-main-text; border-color: $color-main; }
   }
 }
 
@@ -383,7 +387,7 @@ export default {
   margin-top: var(--simi-top, 0);
   max-height: var(--simi-max-h, 560px);
   display: flex; flex-direction: column;
-  background: #fff; border-radius: 16px;
+  background: var(--c-bg-elevated); border-radius: 16px;
   padding: 18px 0 6px; box-shadow: 0 4px 16px rgba(0,0,0,.06);
 
   .simi-title {
@@ -446,47 +450,8 @@ export default {
 
   ::v-deep .comment-container {
     .comment-header-bar h2 { display: none; }
-    .hot-comments-section h3, .new-comments-section h3 { color: $font-black-1 !important; }
-    .section-divider { background: linear-gradient(to right, rgba(0,0,0,.06), transparent) !important; }
   }
-  ::v-deep .comment-content {
-    .comment-item { background: $color-theme-sec !important; &:hover { background: darken($color-theme-sec,3%) !important; } }
-    .main {
-      .name .nickname { color: $font-black-1 !important; &:hover { color: $color-main !important; } }
-      .name .time-tag { color: $font-black-2 !important; }
-      .content { color: $font-black-1 !important; }
-      .time-ribbon .ribbon > span { color: $font-black-2 !important; }
-      .comment-delete .el-button { color: $font-black-2 !important; }
-      // 楼层（楼中楼）：公用样式是按深色底写的白色系文字，浅色评论区里必须逐项换色
-      .floor-wrap {
-        background: rgba(0,0,0,.03) !important;
-        box-shadow: inset 2px 0 0 rgba(0,0,0,.08) !important;
-      }
-      .floor-item + .floor-item { border-top-color: rgba(0,0,0,.06) !important; }
-      .floor-name {
-        .nickname { color: $font-black-1 !important; &:hover { color: $color-main !important; } }
-        .reply-to, .time-tag { color: $font-black-2 !important; }
-      }
-      .floor-content { color: $font-black-1 !important; }
-      .floor-ribbon > span {
-        color: $font-black-2 !important;
-        &:hover { color: $font-black-1 !important; }
-      }
-      .floor-ribbon .comment-delete .el-button {
-        color: $font-black-2 !important;
-        &:hover { color: #ef4444 !important; }
-      }
-      .floor-tip { color: $font-black-2 !important; }
-      .floor-more {
-        background: #fff !important;
-        border-color: rgba(0,0,0,.08) !important;
-        color: $font-black-2 !important;
-        &:hover:not(:disabled) { background: #f7f7f9 !important; color: $font-black-1 !important; }
-      }
-      // 展开态高亮：必须比上面的 "> span" 更具体，否则同带 !important 时会被它压掉
-      .ribbon > .comment-reply.open { color: $color-main !important; }
-    }
-  }
+
 }
 
 /* 窄屏：侧栏退回下方，限高滚动 */
@@ -510,6 +475,7 @@ export default {
     &--short { width: 30%; height: 12px; }
   }
 }
+.source-retry { margin-top: 16px; border: 1px solid var(--c-border-strong); border-radius: 999px; padding: 8px 20px; background: var(--c-bg-sunken); color: var(--c-accent-text); cursor: pointer; font: inherit; }
 </style>
 
 <!--
@@ -526,7 +492,7 @@ export default {
 .vp-comment-dialog {
   border-radius: 14px;
 
-  .el-dialog__title { font-size: 16px; font-weight: 600; color: #303133; }
+  .el-dialog__title { font-size: 16px; font-weight: 600; color: var(--c-text-primary); }
   .el-dialog__body { padding: 10px 24px 24px; }
 
   // —— 以下覆盖 SendComment 的公用样式（scoped 特异性为 类+attr，这里统一多挂一层类稳赢）——
@@ -549,26 +515,26 @@ export default {
     .comment .input-box .el-textarea .el-textarea__inner {
       height: 160px;
       resize: none;
-      background: #f7f8fc;
-      border: 1px solid rgba(0, 0, 0, .10);
+      background: var(--c-bg-sunken);
+      border: 1px solid var(--c-border-strong);
       border-radius: 12px;
       padding: 14px 16px 30px;
-      color: #303133;
+      color: var(--c-text-primary);
       font-size: 14px;
       line-height: 1.7;
       transition: border-color .2s ease, box-shadow .2s ease;
 
-      &::placeholder { color: rgba(0, 0, 0, .32); }
+      &::placeholder { color: var(--c-text-tertiary); }
       &:focus {
         border-color: $color-main;
-        box-shadow: 0 0 0 3px rgba($color-main, .14);
+        box-shadow: 0 0 0 3px rgba(var(--theme-accent-rgb), .14);
         outline: none;
       }
     }
 
     // 字数统计保持 textarea 内右下角，改成深色才看得清
     .comment .input-box .el-input__count {
-      color: rgba(0, 0, 0, .38);
+      color: var(--c-text-tertiary);
       font-size: 12px;
       background: transparent;
 
@@ -587,10 +553,10 @@ export default {
         height: 38px;
         padding: 0 22px;
         min-width: 76px;
-        background: #fff;
-        border: 1px solid rgba(0, 0, 0, .14);
+        background: var(--c-bg-elevated);
+        border: 1px solid var(--c-border-strong);
         border-radius: 999px;
-        color: #606266;
+        color: var(--c-text-secondary);
         font-size: 13px;
         cursor: pointer;
         white-space: nowrap;
@@ -601,18 +567,18 @@ export default {
         transition: all .2s ease;
 
         &:hover {
-          border-color: rgba(0, 0, 0, .26);
-          color: #303133;
-          background: #fafafa;
+          border-color: var(--c-border-strong);
+          color: var(--c-text-primary);
+          background: var(--c-bg-sunken-hover);
         }
       }
 
-      > span {
+      .btn-submit {
         min-width: 96px;
         height: 38px;
         padding: 0 22px;
-        background: linear-gradient(135deg, $color-main, lighten($color-main, 8%));
-        color: #fff;
+        background: var(--comment-button);
+        color: var(--comment-on-button);
         border: none;
         border-radius: 999px;
         font-size: 13px;
@@ -623,12 +589,12 @@ export default {
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 6px 18px rgba($color-main, .3);
+        box-shadow: 0 6px 18px rgba(var(--theme-accent-rgb), .3);
         transition: transform .2s ease, box-shadow .2s ease;
 
         &:hover {
           transform: translateY(-1px);
-          box-shadow: 0 10px 24px rgba($color-main, .36);
+          box-shadow: 0 10px 24px rgba(var(--theme-accent-rgb), .36);
         }
         &:active { transform: translateY(0); }
       }

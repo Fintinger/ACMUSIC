@@ -215,6 +215,10 @@ const router = new VueRouter({
      */
     scrollBehavior(to, from, savedPosition) {
         if (savedPosition) return savedPosition
+        const sameSearch = to.matched.some(record => record.name === 'search') &&
+            from.matched.some(record => record.name === 'search') &&
+            to.query.keyword === from.query.keyword
+        if (sameSearch) return false
         if (to.path === from.path) return false
         return {x: 0, y: 0}
     }

@@ -183,9 +183,10 @@ export default {
   height: 44px;
   border-radius: 22px;
   font-size: 15px;
-  background: $color-main;
-  border-color: $color-main;
+  background: var(--c-button-primary);
+  border-color: var(--c-button-primary);
+  color: var(--c-text-on-accent);
   transition: all .2s;
-  &:hover { background: $color-main-1; border-color: $color-main-1; }
+  &:hover { background: var(--c-button-primary-hover); border-color: var(--c-button-primary-hover); }
 }
 </style>

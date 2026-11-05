@@ -1,75 +1,116 @@
 /**
-歌单布局样式
+ * 歌单卡片样式（首页 / 发现页 / 搜索页 / 用户页共用）
+ *
+ * 2026-11 统一：
+ * - 圆角 / 动效 / hover 全部走 token（原首页 1.5s 图片缩放 + 无上浮，发现页又覆盖
+ *   字号与边框，同一组件两处长相不同）；
+ * - 卡片标题回到 14px（原 1.1rem=17.6px，比页面副标题还大）；
+ * - 列表内文字一律省略号。
  */
 @import "base/variables";
+@import "base/motion";
 
 ul {
   li.playlist {
-    display: inline-block;
+    display: flex;
+    min-width: 0;
     box-sizing: border-box;
     color: $font-black;
 
     .el-card {
+      width: 100%;
+      height: 100%;
       overflow: hidden;
       border: none;
       position: relative;
+      border-radius: $radius-card;
+      background: var(--c-bg-elevated);
+      transition: transform $motion-normal $ease-standard;
+
+      &:active {
+        transform: scale(.99);
+      }
 
       .imgContainer {
-        border-radius: 15px;
+        border-radius: $radius-img;
         position: relative;
         cursor: pointer;
         overflow: hidden;
+        background: var(--c-bg-sunken);
 
         img {
           display: block;
           width: 100%;
-          transition: transform 1.5s ease;
+          aspect-ratio: 1;
+          object-fit: cover;
+          transition: transform $playlist-cover-duration $ease-smooth;
         }
 
         .playCount {
           position: absolute;
-          top: 3px;
-          right: 5px;
-          border-radius: 15px;
-          padding: 3px 8px;
-          background: rgba(0, 0, 0, .3);
-          color: #dddddd;
-          font-weight: bold;
-          font-size: .8rem;
+          top: 8px;
+          right: 8px;
+          border-radius: $radius-pill;
+          padding: 2px 8px;
+          background: rgba(0, 0, 0, .42);
+          color: #fff;
+          font-weight: 500;
+          font-size: $fs-aux;
+          font-variant-numeric: tabular-nums;
           z-index: 3;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
 
           i {
-            font-size: .6rem;
+            font-size: .65rem;
           }
         }
 
         .bookCount {
           @extend .playCount;
           top: unset;
-          bottom: 5px;
+          bottom: 8px;
+          right: unset;
+          left: 8px;
 
           i {
-            font-size: .9rem;
+            font-size: .8rem;
           }
         }
       }
 
+      &:hover .imgContainer img {
+        transform: scale($media-cover-scale);
+      }
+
       .info {
-        padding: 8px 14px 14px;
+        padding: $sp-2 $sp-3 $sp-3;
         box-sizing: border-box;
 
         .listName {
-          padding: 6px 0px;
-          font-size: 1.1rem;
-          font-weight: bold;
+          padding: 4px 0 2px;
+          font-size: $fs-card-title;
+          font-weight: 600;
+          line-height: 1.4;
+          color: $font-black;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .moreInfo {
+          height: 1.4em;
+          overflow: hidden;
           color: $font-black-2;
-          font-size: .8rem;
+          font-size: $fs-aux;
+          line-height: 1.4;
 
           p {
-            margin-top: .3rem;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
         }
       }
@@ -85,10 +126,6 @@ ul {
 
       &:hover .play-btn {
         display: inline-block;
-      }
-
-      &:hover img {
-        transform: scale(1.15);
       }
     }
   }

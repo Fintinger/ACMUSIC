@@ -1,18 +1,28 @@
 /**
-全局变量
+ * 全局变量
+ *
+ * 分两层：
+ * 1. 语义别名 —— 指向 tokens.scss 的 CSS 变量，具体色值只在那里出现。
+ *    （深色模式靠覆写 CSS 变量实现，本文件无需再动）
+ * 2. 排版 / 间距 / 圆角 token —— 不随主题变化，直接是 SCSS 字面量。
+ *
+ * 主色统一使用 CSS 变量；透明色使用 rgba(var(--theme-accent-rgb), alpha)，
+ * 不再对主色调用 Sass 编译期颜色运算。
  */
 
-//THEME-COLOR
-$color-theme: #FFFFFF;
-$color-theme-sec: #f2f2f4;
-$color-main: #8685EF;
-$color-main-1: #6c6bee;
+//THEME-COLOR（语义别名 → tokens.scss）
+$color-theme: var(--c-bg-base);
+$color-theme-sec: var(--c-bg-sunken);
+$color-main: var(--c-accent);
+$color-main-1: var(--c-accent);
+$color-main-text: var(--c-accent-text);   // 文字专用主色（加深）
+$color-main-light: var(--c-accent-hover);
 $color-ornament: #7FD1AE;
 
 //FONT-COLOR
-$font-black: #000000;
-$font-black-1: #555555;
-$font-black-2: #888888;
+$font-black: var(--c-text-primary);
+$font-black-1: var(--c-text-secondary);
+$font-black-2: var(--c-text-tertiary);
 $font-white: #FFFFFF;
 $font-white-1: #dddddd;
 $font-white-2: #a5a0a0;
@@ -22,6 +32,27 @@ $feedback-success: #12a87a;
 $feedback-warning: #d98b0a;
 $feedback-error: #e5484d;
 $feedback-info: $color-main;
+
+//TYPOGRAPHY SCALE（页面级字号，组件内仍可按需微调）
+$fs-hero: 32px;        // 详情页 hero 标题（歌单 / 专辑 / 用户）
+$fs-page: 28px;        // 页面主标题 h1
+$fs-module: 20px;      // 模块标题 h2
+$fs-card-title: 14px;  // 卡片主文字
+$fs-body: 14px;        // 正文
+$fs-aux: 12px;         // 辅助信息（时间戳 / 计数 / 页脚）
+
+//SPACING SCALE（4px 基准）
+$sp-1: 4px;
+$sp-2: 8px;
+$sp-3: 12px;
+$sp-4: 16px;
+$sp-5: 24px;
+$sp-6: 40px;           // 模块纵向间距
+
+//RADIUS
+$radius-card: 14px;
+$radius-img: 12px;
+$radius-pill: 999px;
 
 //Z-INDEX LAYER TOKENS
 //分层约定：内容 0-99 / 悬浮控件 100-199 / 下拉面板 900-999 / Element 默认弹层 2000+
@@ -34,7 +65,7 @@ $z-overlay: 3000;
 $z-toast: 4000;
 $z-modal: 4100;
 
-//PLAYER DESIGN TOKENS
+//PLAYER DESIGN TOKENS（播放器恒深色体系，与主题正交）
 $player-bg-start: #1a1a2e;
 $player-bg-mid: #16213e;
 $player-bg-end: #0f0f23;
@@ -44,8 +75,8 @@ $player-border: rgba(255,255,255,0.08);
 $player-text-primary: rgba(255,255,255,0.92);
 $player-text-secondary: rgba(255,255,255,0.55);
 $player-text-tertiary: rgba(255,255,255,0.32);
-$player-accent: #8685EF;
-$player-accent-hover: #9d9cf5;
+$player-accent: var(--c-accent);
+$player-accent-hover: var(--c-accent);
 $player-danger: #ef4444;
 $player-radius-sm: 8px;
 $player-radius-md: 12px;
@@ -55,7 +86,7 @@ $player-radius-full: 999px;
 $player-shadow-sm: 0 2px 8px rgba(0,0,0,0.15);
 $player-shadow-md: 0 8px 32px rgba(0,0,0,0.25);
 $player-shadow-lg: 0 16px 48px rgba(0,0,0,0.35);
-$player-shadow-glow: 0 0 60px rgba(134,133,239,0.15);
+$player-shadow-glow: 0 0 60px rgba(var(--theme-accent-rgb), 0.15);
 $player-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 $player-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 $player-duration-fast: 180ms;

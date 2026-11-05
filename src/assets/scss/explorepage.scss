@@ -1,13 +1,19 @@
 @import "base/variables";
+@import "base/motion";
 
+/**
+ * 发现页（全部歌单 / 精品歌单 / MV / 视频 / 榜单）
+ *
+ * 2026-11：容器交给 el-main 统一（原页面自带 max-width 1200 + padding 24，
+ * 在 1280 视口下比导航行还宽）；卡片视觉覆盖全部删除，统一由
+ * playlistLayout.scss 接管；网格间距走 gap。
+ */
 .categoryPage {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 24px 80px;
+  padding: 0 0 80px;
 
   .explore-hero {
-    padding: 48px 0 36px;
-    .explore-title { font-size: 32px; font-weight: 700; color: $font-black; margin: 0 0 8px; }
+    padding: $sp-6 0 $sp-5;
+    .explore-title { font-size: $fs-page; font-weight: 700; line-height: 1.3; color: $font-black; margin: 0 0 $sp-2; }
     .explore-subtitle { font-size: 15px; color: $font-black-2; margin: 0; }
   }
 
@@ -16,70 +22,43 @@
   .fade-up-enter { opacity: 0; transform: translateY(12px); }
   .fade-up-leave-to { opacity: 0; transform: translateY(-8px); }
 
-  .explore-tabs {
-    display: flex; gap: 0; margin-bottom: 32px;
-    border-bottom: 1px solid rgba(0,0,0,.06);
-    overflow-x: auto;
-    scrollbar-width: none;
-    &::-webkit-scrollbar { display: none; }
-    button {
-      padding: 12px 24px; border: none; background: transparent;
-      color: $font-black-2; font-size: 15px; font-weight: 500; cursor: pointer;
-      border-bottom: 2px solid transparent; margin-bottom: -1px;
-      white-space: nowrap;
-      transition: color .2s, border-color .2s;
-      &:hover { color: $font-black-1; }
-      &.active { color: $color-main; font-weight: 600; border-bottom-color: $color-main; }
-    }
-  }
 
-  /* ---------- fix grid li padding from reset.scss ---------- */
-  .gridLayout > li,
-  .mvList.gridLayout > li {
-    padding: 0;
-    min-width: 0;
-    box-sizing: border-box;
-    width: 100%;
-  }
 
   /* ---------- pill tag buttons (shared) ---------- */
   .boutiquePlaylist .playlist-tag-btn,
   .video-list .video-tag-btn {
-    padding: 6px 16px; border-radius: 20px; font-size: 13px;
-    background: #f5f5f7; border: 1px solid transparent; color: $font-black-2;
+    padding: 6px 16px; border-radius: $radius-pill; font-size: 13px;
+    background: var(--c-bg-sunken); border: 1px solid transparent; color: $font-black-2;
     transition: all .2s;
-    &:hover { background: rgba($color-main,.08); color: $color-main; }
+    &:hover { background: var(--c-accent-soft); color: $color-main-text; }
   }
 
-  /* ---------- AllList 全部歌单 ---------- */
+  /* ---------- 网格：4 列 / 24px 间距（容器约 1152 内容宽） ---------- */
   .all-list {
-    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: $sp-5; }
     .load-more { text-align: center; padding: 28px 0; }
   }
 
-  /* ---------- BoutiqueList 精品歌单 ---------- */
   .boutiquePlaylist {
-    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: $sp-5; }
     .playlist-load-more { text-align: center; padding: 28px 0; }
   }
 
-  /* ---------- MvList MV ---------- */
   .recommendPlaylist {
     .mvList.gridLayout {
       grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-      gap: 24px;
+      gap: $sp-5;
     }
     .mv-load-more { text-align: center; padding: 28px 0; }
   }
 
-  /* ---------- VideoList 视频 ---------- */
   .video-list {
-    .video-result .mvList.gridLayout { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 24px; }
+    .video-result .mvList.gridLayout { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: $sp-5; }
   }
 
-  /* ---------- LeaderBoard 榜单 ---------- */
+  /* ---------- 榜单：首卡跨两列 ---------- */
   .topList {
-    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .gridLayout { grid-template-columns: repeat(4, 1fr); gap: $sp-5; }
     .gridLayout > li { cursor: pointer; }
     .gridLayout > li:first-child {
       grid-column: span 2;
@@ -89,41 +68,9 @@
       }
       .moreInfo {
         padding: 12px 16px;
-        .listName { font-size: 14px; font-weight: 600; color: $font-black; }
-        p { font-size: 12px; color: $font-black-2; }
+        .listName { font-size: $fs-card-title; font-weight: 600; color: $font-black; }
+        p { font-size: $fs-aux; color: $font-black-2; }
       }
-    }
-  }
-
-  /* ---------- playlist card overrides ---------- */
-  .gridLayout li.playlist .el-card {
-    border-radius: 14px;
-    overflow: hidden;
-    border: 1px solid rgba(0,0,0,.06);
-    background: #fff;
-  }
-
-  .gridLayout li.playlist .imgContainer {
-    border-radius: 12px 12px 0 0;
-    overflow: hidden;
-    img {
-      display: block; width: 100%;
-      aspect-ratio: 1;
-      object-fit: cover;
-    }
-  }
-
-  .gridLayout li.playlist .info {
-    padding: 12px 14px 14px;
-
-    .listName .marquee-content {
-      font-size: 14px; font-weight: 600; color: $font-black;
-      line-height: 1.4;
-    }
-
-    .moreInfo p {
-      font-size: 12px; color: $font-black-2;
-      line-height: 1.4; margin-top: 4px;
     }
   }
 
@@ -131,10 +78,10 @@
   .mv-load-more,
   .playlist-load-more {
     button {
-      padding: 8px 32px; border-radius: 20px; font-size: 14px;
-      background: #f5f5f7; border: 1px solid rgba(0,0,0,.06); color: $font-black-2; cursor: pointer;
+      padding: 8px 32px; border-radius: $radius-pill; font-size: 14px;
+      background: var(--c-bg-sunken); border: 1px solid var(--c-border); color: $font-black-2; cursor: pointer;
       transition: all .2s;
-      &:hover { background: rgba($color-main,.08); color: $color-main; }
+      &:hover { background: var(--c-accent-soft); color: $color-main-text; }
     }
     p { color: $font-black-2; font-size: 13px; }
   }
@@ -149,16 +96,16 @@
   }
 
   @media (max-width: 768px) {
-    padding: 0 16px 60px;
-    .explore-hero { padding: 32px 0 24px; }
-    .explore-title { font-size: 26px; }
+    padding: 0 0 60px;
+    .explore-hero { padding: $sp-5 0 $sp-4; }
+    .explore-title { font-size: 24px; }
     .explore-tabs button { padding: 10px 14px; font-size: 14px; }
 
     .all-list .gridLayout,
     .boutiquePlaylist .gridLayout,
     .recommendPlaylist .mvList.gridLayout,
     .video-list .video-result .mvList.gridLayout,
-    .topList .gridLayout { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .topList .gridLayout { grid-template-columns: repeat(2, 1fr); gap: $sp-3; }
   }
 
   @media (max-width: 480px) {

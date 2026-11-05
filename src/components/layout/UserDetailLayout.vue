@@ -5,12 +5,14 @@
         <div class="skel-hero-row"><div class="skel-avatar"></div><div class="skel-lines"><div class="skel-line skel-line--lg"></div><div class="skel-line skel-line--md"></div></div></div>
         <div v-for="n in 3" :key="n" class="skel-section"><div class="skel-sec-title"></div><div class="skel-grid"><div v-for="m in 4" :key="m" class="skel-card"><div class="skel-card-img"></div><div class="skel-card-line"></div></div></div></div>
       </div>
+      <EmptyState v-else-if="pageError" key="error" title="用户主页加载失败" desc="请检查用户链接或网络后重试" action-text="重新加载" @action="loadPage"/>
       <div v-else key="content" class="ud-content">
+        <EmptyState v-if="partialLoadError" compact title="部分主页内容暂时不可用" desc="可能受网络或可见性限制，已加载内容仍可查看" action-text="重试" @action="loadPage"/>
         <div class="user-hero" v-if="profile" :class="{ 'dark-bg': profile.avatarUrl && !isLightCover(profile.avatarUrl) }">
           <div class="hero-blur-bg" v-if="profile.avatarUrl" :style="{ backgroundImage: 'url(' + profile.avatarUrl + ')' }"></div>
           <div class="hero-avatar"><cover-image :src="profile.avatarUrl" :alt="profile.nickname + '的头像'"/></div>
           <div class="hero-info">
-            <h1 class="hero-name">{{ profile.nickname }}<i v-if="profile.gender===1" class="el-icon-male"></i><i v-if="profile.gender===2" class="el-icon-female"></i><VipBadge :uid="uid" :is-self="isSelf"/></h1>
+            <h1 class="hero-name">{{ profile.nickname }}<BaseIcon v-if="profile.gender===1" class="el-icon-male" name="male"/><BaseIcon v-if="profile.gender===2" class="el-icon-female" name="female"/><VipBadge :uid="uid" :is-self="isSelf"/></h1>
             <p class="hero-sig" v-if="profile.signature" :title="profile.signature">{{ profile.signature }}</p>
             <!-- 统计分两档：关注/粉丝是主（数字突出、点了进列表），
                  位置与歌单数是从属信息，压成小字，别和数据抢分量 -->
@@ -23,7 +25,7 @@
               </span>
               <span class="hero-meta-sep"
                     v-if="locationName || (isSelf && (subcount.createdPlaylistCount != null || subcount.subPlaylistCount != null))"></span>
-              <span v-if="locationName" class="hero-meta-item">📍 {{ locationName }}</span>
+              <span v-if="locationName" class="hero-meta-item"><BaseIcon name="location" :size="12"/> {{ locationName }}</span>
               <span v-if="isSelf && subcount.createdPlaylistCount != null" class="hero-meta-item">{{ subcount.createdPlaylistCount }} 创建歌单</span>
               <span v-if="isSelf && subcount.subPlaylistCount != null" class="hero-meta-item">{{ subcount.subPlaylistCount }} 收藏歌单</span>
             </p>
@@ -42,7 +44,7 @@
                     :disabled="followPending"
                     :title="followed ? '点击取消关注' : (followState === 'followBack' ? 'TA 也关注了你，点击回关' : '关注 TA')"
                     @click="toggleFollow">
-              <i v-if="followPending" class="el-icon-loading"></i>
+              <BaseIcon v-if="followPending" class="is-spinning" name="loader"/>
               <template v-else>{{ followBtnText }}</template>
             </button>
           </div>
@@ -54,23 +56,23 @@
             <el-tabs v-if="weekTracksData.length||allTracksData.length" v-model="listenedAcName">
               <el-tab-pane label="最近一周" name="week">
                 <RankList v-if="weekTracksData.length" :list="weekTracksData"/>
-                <p v-else class="empty-text">最近一周还没有听歌记录（只有在本站播放超过 30 秒的歌才会被统计）</p>
+                <EmptyState v-else  compact title="最近一周还没有听歌记录（只有在本站播放超过 30 秒的歌才会被统计）"/>
               </el-tab-pane>
               <el-tab-pane label="所有时间" name="all">
                 <RankList v-if="allTracksData.length" :list="allTracksData"/>
-                <p v-else class="empty-text">还没有听歌记录</p>
+                <EmptyState v-else  compact title="还没有听歌记录"/>
               </el-tab-pane>
             </el-tabs>
-            <p v-else-if="recordErr" class="empty-text">听歌排行获取失败，稍后再试</p>
-            <p v-else class="empty-text">未公开</p>
+            <EmptyState v-else-if="recordErr"  compact title="听歌排行获取失败，稍后再试"/>
+            <EmptyState v-else  compact title="未公开"/>
           </section>
           <section v-if="isSelf" ref="secFavors" class="ud-section ud-card ud-sec">
             <h2>云盘与收藏</h2>
             <el-tabs v-model="favorsAcName">
               <el-tab-pane label="云盘" name="cloud">
                 <p v-if="cloudTracks.length" class="cloudCount">共 {{ cloudTracks.length }} 个文件</p>
-                <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size"/>
-                <p v-else class="empty-text">云盘还是空的</p>
+                <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size" downloadable/>
+                <EmptyState v-else  compact title="云盘还是空的"/>
               </el-tab-pane>
               <!-- 专辑/歌手改成小图标行：卡片很窄，大封面网格放不下两张 -->
               <el-tab-pane label="专辑" name="album">
@@ -83,7 +85,7 @@
                     </div>
                   </li>
                 </ul>
-                <p v-else class="empty-text">还没有收藏专辑</p>
+                <EmptyState v-else  compact title="还没有收藏专辑"/>
               </el-tab-pane>
               <el-tab-pane label="歌手" name="artists">
                 <ul v-if="(favors.artists||[]).length" class="miniRows">
@@ -96,7 +98,7 @@
                     </div>
                   </li>
                 </ul>
-                <p v-else class="empty-text">还没有关注歌手</p>
+                <EmptyState v-else  compact title="还没有关注歌手"/>
               </el-tab-pane>
               <el-tab-pane label="视频" name="videos"><VideoLayout :list="favors.vids"/></el-tab-pane>
             </el-tabs>
@@ -145,12 +147,12 @@
               </li>
             </ul>
           </div>
-          <p v-else-if="allPlaylists.length" class="empty-text">这个分类下还没有歌单</p>
-          <p v-else class="empty-text">未公开</p>
+          <EmptyState v-else-if="allPlaylists.length"  compact title="这个分类下还没有歌单"/>
+          <EmptyState v-else  compact title="未公开"/>
         </section>
         <section ref="secSocial" class="ud-section ud-card ud-sec">
           <h2>关注与粉丝</h2>
-          <el-tabs v-model="socialAcName" @tab-click="onSocialTabClick">
+          <el-tabs class="social-tabs" v-model="socialAcName" @tab-click="onSocialTabClick">
             <el-tab-pane :label="socialLabels.follows" name="follows" lazy>
               <!-- 本人：分类条 + 混排（用户/歌手）；他人拿不到歌手关注，按约定不显示分类条 -->
               <template v-if="useMixedFollow">
@@ -180,7 +182,7 @@
                     </button>
                   </div>
                 </template>
-                <p v-else class="empty-text">{{ mixedEmptyText }}</p>
+                <EmptyState v-else  compact :title="mixedEmptyText"/>
               </template>
               <template v-else>
                 <template v-if="social.follows.list.length">
@@ -203,7 +205,7 @@
                     </button>
                   </div>
                 </template>
-                <p v-else class="empty-text">{{ socialEmptyText('follows') }}</p>
+                <EmptyState v-else  compact :title="socialEmptyText('follows')"/>
               </template>
             </el-tab-pane>
             <el-tab-pane :label="socialLabels.followeds" name="followeds" lazy>
@@ -229,7 +231,7 @@
                   </button>
                 </div>
               </template>
-              <p v-else class="empty-text">{{ socialEmptyText('followeds') }}</p>
+              <EmptyState v-else  compact :title="socialEmptyText('followeds')"/>
             </el-tab-pane>
           </el-tabs>
         </section>
@@ -252,6 +254,7 @@ import VipBadge from "@/components/userPage/VipBadge";
 import RankList from "@/components/userPage/RankList";
 import LoadMore from "@/components/LoadMore";
 import CoverImage from "@/components/common/CoverImage";
+import EmptyState from "@/components/common/EmptyState";
 import PlaylistImportDialog from "@/components/common/PlaylistImportDialog";
 import * as User from "@/api/User";
 import * as userDetailApi from "@/api/UserDetail";
@@ -281,7 +284,7 @@ function createMixedState() {
 export default {
   name: "UserDetailLayout",
   mixins: [coverLight],
-  components: {VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog, RankList},
+  components: {EmptyState, VideoLayout, UserListLayout, FollowMixedLayout, LoadMore, CoverImage, VipBadge, PlaylistImportDialog, RankList},
   props: { uid: { required: true } },
   data() {
     return {
@@ -292,7 +295,7 @@ export default {
       // 听歌排行拉取失败标记：与「未公开」区分开，否则接口挂了也提示"未公开"（误导）
       recordErr: false,
       cloudTracks: [], favors: { vids: [], artists: [], albums: [] },
-      locationName: '', pageLoading: true,
+      locationName: '', pageLoading: true, pageError: false, partialLoadError: false,
       lastLoginInfo: { time: "", IP: "", location: "" },
       // 当前登录用户的收藏计数（/user/subcount，仅本人可见）
       subcount: {},
@@ -521,7 +524,7 @@ export default {
         const span = followSpanText(t)
         if (span) {
           rows.push(h('p', { style: 'margin:10px 0 0;color:#555' },
-            ['已关注：', h('b', { style: 'color:#8685EF;font-weight:600' }, span)]))
+            ['已关注：', h('b', { style: 'color:var(--c-accent);font-weight:600' }, span)]))
         }
       }
       const message = h('div', { style: 'line-height:1.7' }, [
@@ -650,6 +653,7 @@ export default {
       const st = this.social[kind]
       if (st.loading) return '加载中…'
       if (st.err) return '列表不可见（对方可能设置了隐私）'
+      if (!this.isSelf && Number(this.profile[kind]) > 0) return kind === 'follows' ? '关注列表未公开' : '粉丝列表未公开'
       return kind === 'follows' ? '暂无关注' : '暂无粉丝'
     },
     // 点 hero 上的「关注 / 粉丝」数字 → 切到对应 tab 并滚到该区块
@@ -704,7 +708,9 @@ export default {
       })
     },
     async loadPage() {
-      this.pageLoading = true
+      this.pageLoading = true; this.pageError = false; this.partialLoadError = false
+      this.createList = []; this.subList = []; this.favorTracks = []; this.cloudTracks = []
+      this.favors = { vids: [], artists: [], albums: [] }; this.userInfo = {}
       const uid = this.uid
       // 关注/粉丝状态复位（loadPage 可能因复用组件被二次触发）
       this.socialAcName = 'follows'
@@ -714,8 +720,9 @@ export default {
       this.mixedSeq++
       this.expand = { follows: false, followeds: false }
       const p1 = this.getPlaylist(uid).then(res => {
+        if (!res.data || !Array.isArray(res.data.playlist)) throw new Error('Invalid playlists')
         res.data.playlist.forEach((pl) => {
-          if (pl.creator.userId*1 === uid*1) this.createList.push(pl)
+          if (pl.creator && pl.creator.userId*1 === uid*1) this.createList.push(pl)
           else this.subList.push(pl)
         })
         if (res.data.playlist[0]) this.favorTracks.push(res.data.playlist[0])
@@ -754,14 +761,14 @@ export default {
       const p3 = isSelf
         ? User.getCloud().then(res => {
             res.data.data.forEach(val => { val.simpleSong.fileSize = val.fileSize; this.cloudTracks.push(val.simpleSong) })
-          }).catch(() => { this.cloudTracks = [] })
+          }).catch(() => { this.cloudTracks = []; this.partialLoadError = true })
         : Promise.resolve()
       const p4 = isSelf
         ? Promise.all([User.subArtistList(), User.subAlbumList(), User.subMvList()])
             .then(([artists, albums, mvs]) => {
               this.favors.artists = artists.data.data; this.favors.albums = albums.data.data; this.favors.vids = mvs.data.data
             })
-            .catch(() => { this.favors = { vids: [], artists: [], albums: [] } })
+            .catch(() => { this.favors = { vids: [], artists: [], albums: [] }; this.partialLoadError = true })
         : Promise.resolve()
       // 收藏计数只有本人能取（接口不带 uid，取的是当前登录态）
       const p6 = isSelf
@@ -769,7 +776,9 @@ export default {
         : Promise.resolve()
       // 关注列表先取第一页（默认 tab）：本人走混排接口（带分类），他人走 /user/follows
       const p7 = this.useMixedFollow ? this.loadMixed() : this.loadSocial('follows')
-      await Promise.all([this.getUserInfo(uid), p1, p2, p3, p4, p5, p6, p7])
+      const results = await Promise.allSettled([this.getUserInfo(uid), p1, p2, p3, p4, p5, p6, p7])
+      this.pageError = results[0].status === 'rejected' || !this.userInfo.profile
+      this.partialLoadError = this.partialLoadError || results.slice(1).some(result => result.status === 'rejected')
       this.pageLoading = false
     }
   },
@@ -777,8 +786,9 @@ export default {
     // 登录态在这里取一次：cookie 是同步可读的，且这个组件每次进详情页都会重新挂载
     this.loggedIn = isLoggedIn()
     // 先把登录用户资料补齐，再加载页面 —— 否则 isSelf 会误判（见 ensureLoginProfile）
-    this.ensureLoginProfile().finally(() => {
+    this.ensureLoginProfile().catch(() => {}).then(() => {
       if (this.uid) this.loadPage()
+      else { this.pageError = true; this.pageLoading = false }
     })
     // 歌单详情页删歌单后广播：本页被 keep-alive 缓存，返回时不会重新 mounted，只能靠事件刷新
     this.$bus.$on('playlistDeleted', this.onPlaylistDeleted)
@@ -794,7 +804,8 @@ export default {
 
 // 底部不再留 padding：页面下方就是 AppFooter，它自带 margin-top:48px 和
 // 底部 80px 的播放器留白，这里再补 80px 会让内容与 footer 之间空出 156px
-.userDetail { max-width: 1200px; margin: 0 auto; padding-bottom: 0; }
+// 容器由外层 el-main 统一（max-width 1400 + 24 padding）
+.userDetail { padding-bottom: 0; }
 
 /* ---------- Hero 毛玻璃卡片 ---------- */
 .user-hero {
@@ -803,16 +814,16 @@ export default {
   padding: 36px 32px;
   margin-bottom: 28px;
   border-radius: 24px;
-  background: rgba(255,255,255,.55);
+  background: var(--c-glass);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
-  border: 1px solid rgba(255,255,255,.45);
+  border: 1px solid var(--c-border-strong);
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
   overflow: hidden;
 
   // 深头像背景: 模糊层压暗会导致毛玻璃面板发灰、深字看不清 → 提亮面板+减弱模糊层
   &.dark-bg {
-    background: rgba(255,255,255,.86);
+    background: var(--c-bg-elevated);
     border-color: rgba(255,255,255,.7);
     box-shadow: 0 12px 40px rgba(0,0,0,.10);
   }
@@ -834,7 +845,7 @@ export default {
   .hero-avatar {
     flex-shrink: 0; width: 132px; height: 132px;
     border-radius: 50%; overflow: hidden;
-    border: 3px solid rgba(134,133,239,.4);
+    border: 3px solid rgba(var(--theme-accent-rgb), .4);
     box-shadow: 0 8px 28px rgba(0,0,0,.15);
     img { width: 100%; height: 100%; object-fit: cover; }
   }
@@ -864,13 +875,19 @@ export default {
     }
     em { font-style: normal; font-size: 12px; color: $font-black-2; transition: color .2s; }
 
-    &:hover b, &:hover em { color: $color-main; }
+    &:hover b, &:hover em { color: $color-main-text; }
   }
 
   // 主信息与从属信息之间的短竖线
   .hero-meta-sep { width: 1px; height: 12px; background: rgba(0,0,0,.12); }
 
-  .hero-meta-item { color: $font-black-2; white-space: nowrap; }
+  .hero-meta-item {
+    color: $font-black-2;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
   .hero-login { margin: 0; font-size: 11px; color: $font-black-2; white-space: nowrap; }
   // 年度听歌报告入口（仅本人）
   // 用实心主色：hero 背景是头像模糊渐变（深浅不定），半透明底会糊掉
@@ -881,13 +898,13 @@ export default {
     padding: 7px 16px;
     border-radius: 999px;
     background: $color-main-1;
-    color: #fff;
+    color: var(--theme-on-accent);
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
-    box-shadow: 0 4px 14px rgba($color-main-1, .3);
+    box-shadow: 0 4px 14px rgba(var(--theme-accent-rgb), .3);
     transition: background .2s, transform .2s, box-shadow .2s;
-    &:hover { background: darken($color-main-1, 6%); transform: translateY(-1px); box-shadow: 0 6px 18px rgba($color-main-1, .38); }
+    &:hover { background: var(--c-accent-hover); transform: translateY(-1px); box-shadow: 0 6px 18px rgba(var(--theme-accent-rgb), .38); }
     .hero-annual-arrow { font-size: 12px; opacity: .85; }
   }
 
@@ -910,7 +927,7 @@ export default {
     cursor: pointer;
     border: 1px solid $color-main;
     background: $color-main;
-    color: #fff;
+    color: var(--theme-on-accent);
     transition: all .2s;
 
     &:hover { background: $color-main-1; border-color: $color-main-1; }
@@ -926,8 +943,8 @@ export default {
 
     // 互相关注：加一个小圆点区分「已关注」与「互关」，语义更强
     &.is-mutual {
-      border-color: rgba($color-main, .45);
-      color: $color-main;
+      border-color: rgba(var(--theme-accent-rgb), .45);
+      color: $color-main-text;
 
       &::before {
         content: '';
@@ -961,7 +978,6 @@ export default {
     border-radius: 2px; background: $color-main; margin-right: 12px; flex-shrink: 0;
   }
   h3 { font-size: 16px; font-weight: 600; color: $font-black-1; margin: 20px 0 14px; }
-  .empty-text { color: $font-black-2; font-size: 14px; padding: 20px 0; }
   // 上游分页失效时的提示（见 loadSocial 注释）
   .cap-hint { color: $font-black-2; font-size: 12px; margin: 14px 0 0; }
   // 关注列表的「全部/用户/歌手」分类（间距与 el-tabs 的 header 保持一致）
@@ -980,8 +996,8 @@ $tag-h: 28px;          // 统一高度
 $tag-pad: 12px;        // 左右内边距
 $tag-gap: 6px;         // 标签间距
 $tag-fs: 12px;         // 字号
-$tag-bd: rgba(0, 0, 0, .08);
-$tag-bg: rgba(255, 255, 255, .65);
+$tag-bd: var(--c-border-strong);
+$tag-bg: var(--c-bg-elevated);
 // 「云盘与收藏」在窄列里要放 4 个标签（云盘/专辑/歌手/视频），
 // 单卡内容宽最窄时只有 230px 左右，所以上面这套尺寸是按「4 个一行」倒推的：
 // 单个约 24(文字) + 24(内边距) + 2(边框) = 50px，4 个 + 3×6 间距 = 218px。
@@ -1001,12 +1017,9 @@ $tag-bg: rgba(255, 255, 255, .65);
   // 关键：Element 给每个 item 加了 margin-right:16px，和这里的 gap 叠加后间距变 24px，
   // 4 个标签就会超出窄列宽度而折行。间距统一交给 gap，外边距清零。
   margin: 0 !important;
-  // 全局 element-variables.scss 把 .el-tabs__item 写死成 width:5rem（80px），
-  // 不放开的话改 padding 也不会变窄，四个标签在窄列里永远折行
-  width: auto !important;
   flex: 0 0 auto;
   white-space: nowrap;
-  border: 1px solid $tag-bd;
+  border: 1px solid $tag-bd !important;
   border-radius: 999px;
   background: $tag-bg;
   font-size: $tag-fs;
@@ -1014,11 +1027,12 @@ $tag-bg: rgba(255, 255, 255, .65);
   color: $font-black-1;
   transition: background .2s, border-color .2s, color .2s;
 
-  &:hover { color: $color-main; border-color: rgba($color-main, .45); }
-  &.is-active {
+  &:hover { color: $color-main-text; border-color: rgba(var(--theme-accent-rgb), .45) !important; }
+  &.is-active,
+  &.is-active:hover {
     background: $color-main-1;
-    border-color: $color-main-1;
-    color: #fff;
+    border-color: $color-main-1 !important;
+    color: var(--theme-on-accent);
   }
   .el-icon-close { color: inherit; }
 }
@@ -1040,7 +1054,7 @@ $tag-bg: rgba(255, 255, 255, .65);
   box-shadow: none !important;
   transition: background .2s, border-color .2s, color .2s;
 
-  &:hover { color: $color-main; border-color: rgba($color-main, .45) !important; }
+  &:hover { color: $color-main-text; border-color: rgba(var(--theme-accent-rgb), .45) !important; }
 }
 
 .ud-section ::v-deep .el-radio-button:not(:first-child) .el-radio-button__inner { margin-left: 0; }
@@ -1048,7 +1062,7 @@ $tag-bg: rgba(255, 255, 255, .65);
 .ud-section ::v-deep .el-radio-button__orig-radio:checked + .el-radio-button__inner {
   background: $color-main-1 !important;
   border-color: $color-main-1 !important;
-  color: #fff;
+  color: var(--theme-on-accent);
   box-shadow: none !important;
 }
 
@@ -1066,22 +1080,22 @@ $tag-bg: rgba(255, 255, 255, .65);
   line-height: 24px;
   padding: 0 10px;
   border-color: transparent !important;
-  background: rgba(0, 0, 0, .045);
+  background: var(--c-bg-sunken);
   font-size: 12px;
   font-weight: 400;
   color: $font-black-2;
 
   &:hover {
-    color: $color-main;
+    color: $color-main-text;
     border-color: transparent !important;
-    background: rgba($color-main, .08);
+    background: var(--c-accent-soft);
   }
 }
 
 .ud-section ::v-deep .sceneTabs .el-radio-button__orig-radio:checked + .el-radio-button__inner {
-  background: rgba($color-main, .12) !important;
+  background: var(--c-accent-soft) !important;
   border-color: transparent !important;
-  color: $color-main;
+  color: $color-main-text;
   box-shadow: none !important;
 }
 
@@ -1091,7 +1105,7 @@ $tag-bg: rgba(255, 255, 255, .65);
   display: grid;
   // 必须写 minmax(0, …)：纯 fr 的最小值是 auto，列宽会被内容（比如云盘超长列表、
   // 专辑网格）撑开 —— 表现就是「切到专辑 tab 时卡片宽度变化」
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
   gap: 20px;
   align-items: start;
 
@@ -1159,15 +1173,15 @@ $tag-bg: rgba(255, 255, 255, .65);
 
 .expandBtn {
   padding: 7px 18px;
-  border: 1px solid rgba(0,0,0,.08);
+  border: 1px solid var(--c-border-strong);
   border-radius: 999px;
-  background: rgba(255,255,255,.7);
+  background: var(--c-glass);
   font-size: 13px;
   color: $font-black-1;
   cursor: pointer;
   transition: background .2s, border-color .2s, color .2s;
 
-  &:hover { border-color: rgba($color-main, .5); color: $color-main; }
+  &:hover { border-color: var(--c-accent); color: $color-main-text; }
   .caret { font-size: 11px; opacity: .7; }
 }
 
@@ -1196,12 +1210,12 @@ $tag-bg: rgba(255, 255, 255, .65);
   cursor: pointer;
   transition: background .2s, border-color .2s, color .2s;
 
-  &:hover { border-color: rgba($color-main, .45); color: $color-main; }
+  &:hover { border-color: rgba(var(--theme-accent-rgb), .45); color: $color-main-text; }
 
   &.is-active {
     background: $color-main-1;
     border-color: $color-main-1;
-    color: #fff;
+    color: var(--theme-on-accent);
   }
 
   // 未选中的标签里数字弱化处理，避免抢标题
@@ -1293,14 +1307,14 @@ $tag-bg: rgba(255, 255, 255, .65);
   min-width: 0;
   padding: 8px 12px;
   border-radius: 14px;
-  background: rgba(255,255,255,.6);
+  background: var(--c-glass);
   border: 1px solid rgba(0,0,0,.05);
   cursor: pointer;
   transition: transform .2s, border-color .2s, box-shadow .2s;
 
   &:hover {
     transform: translateY(-2px);
-    border-color: rgba($color-main, .35);
+    border-color: rgba(var(--theme-accent-rgb), .35);
     box-shadow: 0 6px 18px rgba(0,0,0,.06);
   }
 
@@ -1328,7 +1342,7 @@ $tag-bg: rgba(255, 255, 255, .65);
     text-overflow: ellipsis;
   }
   // 「喜欢」标记：合并成一张列表后用它在喜欢歌单上打标
-  .plFavorMark { flex-shrink: 0; color: $color-main; font-size: 12px; }
+  .plFavorMark { flex-shrink: 0; color: $color-main-text; font-size: 12px; }
 
   .plMeta {
     margin: 4px 0 0;
@@ -1349,7 +1363,7 @@ $tag-bg: rgba(255, 255, 255, .65);
   border: 1px dashed rgba(0,0,0,.16);
   color: $font-black-2;
 
-  &:hover { background: rgba($color-main, .04); border-color: rgba($color-main, .55); color: $color-main; transform: none; box-shadow: none; }
+  &:hover { background: rgba(var(--theme-accent-rgb), .04); border-color: rgba(var(--theme-accent-rgb), .55); color: $color-main-text; transform: none; box-shadow: none; }
   .plNewPlus { margin-left: 7px; font-size: 20px; line-height: 1; }
   .plNewText { font-size: 13px; }
 }
@@ -1378,14 +1392,14 @@ $tag-bg: rgba(255, 255, 255, .65);
   cursor: pointer;
   transition: background .18s;
 
-  &:hover { background: rgba(255,255,255,.8); }
+  &:hover { background: var(--c-bg-hover); }
 
   img {
     width: 44px; height: 44px;
     border-radius: 50%;
     object-fit: cover;
     display: block;
-    background: rgba(0,0,0,.05);
+    background: var(--c-bg-sunken);
   }
 
   .wallName {
@@ -1397,8 +1411,8 @@ $tag-bg: rgba(255, 255, 255, .65);
   // 歌手小标（混排列表里区分用户/歌手）
   .wallTag {
     font-size: 10px; font-style: normal;
-    color: $color-main;
-    border: 1px solid rgba($color-main, .4);
+    color: $color-main-text;
+    border: 1px solid rgba(var(--theme-accent-rgb), .4);
     border-radius: 4px;
     padding: 0 3px;
     flex-shrink: 0;
@@ -1411,10 +1425,10 @@ $tag-bg: rgba(255, 255, 255, .65);
 .ud-card {
   padding: 28px 32px;
   border-radius: 24px;
-  background: rgba(255,255,255,.55);
+  background: var(--c-glass);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
-  border: 1px solid rgba(255,255,255,.45);
+  border: 1px solid var(--c-border-strong);
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
 }
 
@@ -1422,19 +1436,28 @@ $tag-bg: rgba(255, 255, 255, .65);
 /* skeleton */
 .ud-full-skel { padding-top: 40px; }
 .skel-hero-row { display: flex; align-items: center; gap: 28px; margin-bottom: 40px; }
-.skel-avatar { width: 120px; height: 120px; border-radius: 50%; background: #e8e8e8; flex-shrink: 0; }
+.skel-avatar { width: 120px; height: 120px; border-radius: 50%; background: var(--c-bg-sunken); flex-shrink: 0; }
 .skel-lines { flex: 1; }
-.skel-line { height: 16px; border-radius: 8px; margin-bottom: 12px; background: #e8e8e8; }
+.skel-line { height: 16px; border-radius: 8px; margin-bottom: 12px; background: var(--c-bg-sunken); }
 .skel-line--lg { width: 200px; }
 .skel-line--md { width: 130px; }
 .skel-section { margin-bottom: 40px; }
-.skel-sec-title { width: 80px; height: 16px; border-radius: 8px; margin-bottom: 16px; background: #e8e8e8; }
+.skel-sec-title { width: 80px; height: 16px; border-radius: 8px; margin-bottom: 16px; background: var(--c-bg-sunken); }
 .skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .skel-card { border-radius: 12px; overflow: hidden; }
-.skel-card-img { aspect-ratio: 1; background: #e8e8e8; }
-.skel-card-line { height: 12px; border-radius: 6px; margin: 10px 8px; width: 70%; background: #e8e8e8; }
+.skel-card-img { aspect-ratio: 1; background: var(--c-bg-sunken); }
+.skel-card-line { height: 12px; border-radius: 6px; margin: 10px 8px; width: 70%; background: var(--c-bg-sunken); }
 
 /* transitions */
 .detail-fade-enter-active, .detail-fade-leave-active { transition: opacity .35s ease, transform .35s ease; }
 .detail-fade-enter, .detail-fade-leave-to { opacity: 0; transform: translateY(16px); }
+/* 社交主 Tab 与下方内容分层，避免两排细小胶囊挤在左角。 */
+.ud-sec ::v-deep .social-tabs > .el-tabs__header {
+  padding-bottom: $sp-3; margin-bottom: $sp-4; border-bottom: 1px solid var(--c-border);
+  .el-tabs__nav { gap: $sp-3; }
+  .el-tabs__item { min-width: 104px; height: 38px; line-height: 36px; text-align: center; font-size: $fs-body; }
+}
+.ud-sec ::v-deep .social-tabs > .el-tabs__content { padding: $sp-1; }
+.ud-sec .sceneTabs { margin-bottom: $sp-5; }
+.ud-duo.is-solo { width: 100%; }
 </style>

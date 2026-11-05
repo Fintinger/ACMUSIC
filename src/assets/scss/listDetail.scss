@@ -6,11 +6,10 @@
   .listInfo {
     //margin-bottom: 3rem;
     .imgContainer {
-      padding: 2rem;
-      padding-left: 0;
+      padding: $sp-4 $sp-5 $sp-4 0;
 
       img {
-        border-radius: 10px;
+        border-radius: $radius-img;
       }
     }
 
@@ -21,7 +20,7 @@
 
       .info-wrap {
         & > .el-row {
-          line-height: 1.2rem;
+          line-height: 1.5;
           color: $font-black-1;
           font: {
             size: .9rem;
@@ -29,18 +28,19 @@
         }
 
         .listName {
-          margin-top: 2rem;
+          margin-top: $sp-3;
           color: $font-black;
-          padding: .8rem 0;
+          padding: .4rem 0;
           font: {
-            size: 2.5rem;
+            size: $fs-hero;
             weight: bold;
           };
+          line-height: 1.25;
         }
 
         .creator {
-          margin-top: 2rem;
-          margin-bottom: 1rem;
+          margin-top: $sp-4;
+          margin-bottom: $sp-2;
 
           .name {
             font-size: 1.1rem;
@@ -62,15 +62,16 @@
 
         .listDescription {
           width: 100%;
-          margin-top: 1.5rem;
+          margin-top: $sp-4;
           color: $font-black-1;
           max-height: 10rem;
-          overflow: scroll;
+          // 原 overflow: scroll 会让描述区永远挂着滚动条（哪怕内容只有两行）
+          overflow: auto;
           overflow-x: hidden;
-          padding: 1rem;
+          padding: $sp-3 $sp-4;
           box-sizing: border-box;
-          background: rgba(0, 0, 0, .05);
-          border-radius: 10px;
+          background: var(--c-bg-sunken);
+          border-radius: $radius-img;
 
           pre {
             text-align: justify;
@@ -96,96 +97,15 @@
     }
   }
 
-  .songs-comment {
-    .el-tabs__header {
-      background: #000;
-      .el-tabs__item {
-        font-size: 5rem;
-      }
-    }
-  }
+  /* 原 `.songs-comment .el-tabs__header { background:#000; font-size:5rem }`
+     是旧版深色 tab 的调试残留（scoped 下恰好未生效），已删除。
+     tab 视觉统一由 base/element-variables.scss 的下划线方案接管。 */
 
   /* comment light theme overrides for ListDetail */
   ::v-deep .comment-container {
-    .comment-header-bar h2 {
-      display: none;
-    }
-    .hot-comments-section h3,
-    .new-comments-section h3 {
-      color: $font-black-1 !important;
-    }
-    .empty-state p {
-      color: $font-black-2 !important;
-    }
-    .section-divider {
-      background: linear-gradient(to right, rgba(0,0,0,.06), transparent) !important;
-    }
-    .load-more button {
-      background: $color-theme-sec !important;
-      border-color: rgba(0,0,0,.06) !important;
-      color: $font-black-2 !important;
-      &:hover { background: darken($color-theme-sec, 3%) !important; color: $font-black-1 !important; }
-    }
-    .load-more p {
-      color: $font-black-2 !important;
-    }
-    .floating-comment-btn {
-      bottom: 60px !important;
-    }
+    .comment-header-bar h2 { display: none; }
+    .floating-comment-btn { bottom: 92px; }
   }
 
-  ::v-deep .comment-content {
-    .comment-item {
-      background: $color-theme-sec !important;
-      &:hover { background: darken($color-theme-sec, 3%) !important; transform: none !important; }
-    }
-    .main {
-      .name .nickname {
-        color: $font-black-1 !important;
-        &:hover { color: $color-main !important; }
-      }
-      .name .time-tag {
-        color: $font-black-2 !important;
-      }
-      .content {
-        color: $font-black-1 !important;
-      }
-      .time-ribbon .ribbon > span {
-        color: $font-black-2 !important;
-        &:hover { color: $font-black-1 !important; }
-      }
-      .comment-delete .el-button {
-        color: $font-black-2 !important;
-        &:hover { color: #ef4444 !important; }
-      }
-      // 楼层（楼中楼）：公用样式是按深色底写的白色系文字，浅色评论区里必须逐项换色
-      .floor-wrap {
-        background: rgba(0,0,0,.03) !important;
-        box-shadow: inset 2px 0 0 rgba(0,0,0,.08) !important;
-      }
-      .floor-item + .floor-item { border-top-color: rgba(0,0,0,.06) !important; }
-      .floor-name {
-        .nickname { color: $font-black-1 !important; &:hover { color: $color-main !important; } }
-        .reply-to, .time-tag { color: $font-black-2 !important; }
-      }
-      .floor-content { color: $font-black-1 !important; }
-      .floor-ribbon > span {
-        color: $font-black-2 !important;
-        &:hover { color: $font-black-1 !important; }
-      }
-      .floor-ribbon .comment-delete .el-button {
-        color: $font-black-2 !important;
-        &:hover { color: #ef4444 !important; }
-      }
-      .floor-tip { color: $font-black-2 !important; }
-      .floor-more {
-        background: #fff !important;
-        border-color: rgba(0,0,0,.08) !important;
-        color: $font-black-2 !important;
-        &:hover:not(:disabled) { background: #f7f7f9 !important; color: $font-black-1 !important; }
-      }
-      // 展开态高亮：必须比上面的 "> span" 更具体，否则同带 !important 时会被它压掉
-      .ribbon > .comment-reply.open { color: $color-main !important; }
-    }
-  }
+
 }
