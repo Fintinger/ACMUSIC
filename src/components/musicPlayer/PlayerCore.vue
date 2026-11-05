@@ -7,12 +7,22 @@
     @mouseleave="onMouseLeave"
     @mousemove="onMouseMove"
   >
-    <transition name="hint-pop">
-      <div v-if="hintText" class="playerHint">
-        <BaseIcon v-if="hintIcon" :name="hintIcon" :size="14" class="hintIcon" />
-        <span class="hintText">{{ hintText }}</span>
-      </div>
-    </transition>
+    <!-- 播放条上方的浮动播报区：整体水平居中，吊在播放按钮正上方。
+         内联提示在上、音源状态在下（更贴近播放条），两者同时出现时自动堆叠，不互相盖住 -->
+    <div class="floatStack" :class="{ 'is-collapsed': !showBar }">
+      <transition name="hint-pop">
+        <div v-if="hintText" class="playerHint">
+          <BaseIcon v-if="hintIcon" :name="hintIcon" :size="14" class="hintIcon" />
+          <span class="hintText">{{ hintText }}</span>
+        </div>
+      </transition>
+      <transition name="source-pop">
+        <div v-if="sourceStatus.text" class="sourceHint" :class="'is-' + sourceStatus.tone" :title="sourceStatus.text" role="status">
+          <i class="statusDot"></i>
+          <span class="hintText">{{ sourceStatus.text }}</span>
+        </div>
+      </transition>
+    </div>
     <div class="miniBar" @click="onProgressClick">
       <div class="miniTrack" ref="miniTrack">
         <div class="miniFill" :style="{ width: progress + '%' }"></div>
@@ -133,7 +143,7 @@
           <button ref="qualityBtn" class="qualityBtn" :class="{ 'is-unblock': currentQuality.isUnblock }" :title="qualityTitle" @click.stop="showQualityMenu = !showQualityMenu">
             {{ currentQualityShort }}
           </button>
-          <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="config.player.level" :vip-type="vipType" @select="onQualitySelect" @need-vip="onNeedVip"/>
+          <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="qualityMenuSelected" :levels="songLevels" :unblock="currentQuality.isUnblock && !currentQuality.byChoice" @select="onQualitySelect"/>
         </div>
         <div class="barItem chorusWrap">
           <el-dropdown trigger="click" placement="top" @command="setTrackForm" @visible-change="onChorusDropdown">
@@ -298,6 +308,15 @@ export default {
       hintText: '',
       hintIcon: '',
       hintTimer: null,
+      /**
+       * 音源解析状态（播放按钮上方那枚浮动胶囊）。
+       * 解灰是条有等待代价的链路：官方档位逐个试完没货才轮到第三方源，中间几秒
+       * 只有一个转圈的 play 按钮，用户不知道它在干什么。这里把每一步都讲出来。
+       * tone 决定配色：pending=进行中 / unblock=解灰中 / ok=成功 / fail=失败
+       */
+      sourceStatus: { text: '', tone: '' },
+      sourceStatusTimer: null,
+      sourceStatusDelayTimer: null,
       currentSong: {},
       isPlay: false,
       sel: {},
@@ -318,6 +337,12 @@ export default {
       urlCache: new Map(),
       // 实际播放音质：requested=用户所选, actual=真正拿到（可能是降级档或 match 解灰源）
       currentQuality: { requested: '', actual: '', isUnblock: false },
+      /**
+       * 当前歌曲"真的有"哪些音质档位（顺序由高到低），空数组 = 未知 → 菜单不做限制。
+       * 来源是 /song/detail 的 hr/sq/h/m/l 字段（某档为 null 即该档不存在），
+       * 用来把音质菜单从"固定 5 档"收成"这首歌实际有的几档"。
+       */
+      songLevels: [],
       showQualityMenu: false,
       currentLevel: config.player.level,
       currentSongSource: 'unknown',
@@ -345,6 +370,8 @@ export default {
       currentPlaySourceLocked: false,
       audioRetryCount: 0,
       audioLastSrc: '',
+      // audioLastSrc 属于哪首歌：换歌瞬间 sel.src 可能还是上一首的，下载口子要靠它判断
+      audioSrcSongId: null,
       audioUseProxy: false,
       // 重试定时器句柄（集中管理，便于切档时取消）
       audioRetryTimer: null,
@@ -645,21 +672,58 @@ export default {
     },
     isVip() { return this.vipType !== 0 },
     /**
+     * 菜单里该高亮哪一档。
+     * 用户选的档位这首歌没有时（例如全局选了无损，但这首最高只有 320k），
+     * 不能让高亮停在"不存在的档位"上——标出实际在用的那一档，否则菜单看着像坏了。
+     */
+    /**
+     * 菜单里该高亮哪一档——以"实际在放的档位"为准。
+     *
+     * 旧逻辑先看 `config.player.level`，于是非会员选无损被上游压成 320k 时，
+     * 菜单高亮"高解析度无损"、播放条按钮显示"HQ"，两边各说各话（用户实测）。
+     * 现在顺序反过来：实际档位 → 用户所选（还没起播时）→ 最高可用档。
+     * 解灰源的 actual 是 'match'，没有官方档位，直接跳过这一层。
+     */
+    qualityMenuSelected() {
+      const avail = this.songLevels || []
+      const q = this.currentQuality || {}
+      const cfg = config.player.level
+      const actual = q.actual && q.actual !== 'match' ? q.actual : ''
+      if (actual && (!avail.length || avail.indexOf(actual) !== -1)) return actual
+      if (!avail.length || avail.indexOf(cfg) !== -1) return cfg
+      return avail[0]
+    },
+    /**
      * 显示"实际拿到的音质"，而不是用户选的档位。
      * 上游会把超权限的请求压级（非会员选 lossless 实际给 exhigh），
      * 解灰源则质量不可控，单独标'解灰'。
+     * 还没起播时用 qualityMenuSelected 兜底：这首歌没有所选档位的话，
+     * 别让按钮先亮一个它给不了的标（等播完再改口更奇怪）。
      */
     currentQualityShort() {
-      const actual = this.currentQuality && this.currentQuality.actual
-      if (actual === 'match') return '解灰'
+      const q = this.currentQuality || {}
+      const actual = q.actual
+      if (actual === 'match') {
+        // 用户主动要的会员档：按钮上继续标他选的那一档（琥珀色已经说明是解灰源），
+        // 只有"被迫解灰"（曲目本身没货/仅试听）才写"解灰"
+        if (q.byChoice) {
+          const f = (config.player.qualityOptions || []).find(o => o.key === config.player.level)
+          if (f) return f.short
+        }
+        return '解灰'
+      }
       const opts = config.player.qualityOptions || []
-      const key = actual || this.currentLevel
+      const key = actual || this.qualityMenuSelected || this.currentLevel
       const f = opts.find(o => o.key === key)
       return f ? f.short : '标'
     },
     qualityTitle() {
       const q = this.currentQuality || {}
-      if (q.isUnblock) return '当前为解灰源（第三方音源，音质与版本不可控）'
+      if (q.isUnblock) {
+        return q.byChoice
+          ? '当前为解灰源（按你选的档位请求的第三方音源，实际音质以文件为准）'
+          : '当前为解灰源（第三方音源，音质与版本不可控）'
+      }
       const opts = config.player.qualityOptions || []
       const f = opts.find(o => o.key === (q.actual || this.currentLevel))
       if (!f) return '音质选择'
@@ -707,6 +771,7 @@ export default {
           this.scrobbleStart = null
         }
         this._loadChorus()
+        this._loadSongLevels(val.id)
         console.log('[PlayIntent]', { songId: val.id, source: this.currentSongSource, playIntentId: this.playIntentId, playContextId: this.playContextId, requestId: this.playRequestId, action: 'start' })
         console.log('[PlayContext]', { songId: val.id, source: this.currentSongSource, contextId: this.playContextId, playlistContextId: this.playlistContextId, requestId: this.playRequestId })
         normalizeTrack(val)
@@ -723,6 +788,9 @@ export default {
           this.isPlay = false
         } else {
           this.pauseSong()
+          // 换歌即清空"上一首拿到什么音质/是不是解灰"的结论：新歌解析出来之前
+          // 这些都是未知，留着会让音质按钮先亮一个不属于这首歌的标
+          this.currentQuality = { requested: config.player.level, actual: '', isUnblock: false }
           this.playRequestId++
           this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
         }
@@ -1053,6 +1121,7 @@ export default {
           if (url) {
             self.sel.src = url
             self.audioLastSrc = url
+            self.audioSrcSongId = String(id)
             self.audioRetryCount = 0
             self.audioUseProxy = false
             self.suppressAudioError = false
@@ -1060,6 +1129,8 @@ export default {
             // 清掉标记，让 canplay 时重新定位（否则副歌模式看起来像失效）
             self.chorusSeekSongId = null
             self.sel.load()
+            // 音源到位 → 进行中的「正在获取/解灰」收掉（成功结论有自己的定时器）
+            self.settleSourceStatus()
             resolve()
             return
           }
@@ -1101,6 +1172,7 @@ export default {
             console.log('%c✅ 播放就绪 %cid=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id)
             self.sel.src = newUrl
             self.audioLastSrc = newUrl
+            self.audioSrcSongId = String(id)
             self.audioRetryCount = 0
             self.audioUseProxy = false
             self.suppressAudioError = false
@@ -1108,6 +1180,8 @@ export default {
             // 清掉标记，让 canplay 时重新定位（否则副歌模式看起来像失效）
             self.chorusSeekSongId = null
             self.sel.load()
+            // 音源到位 → 进行中的「正在获取/解灰」收掉（成功结论有自己的定时器）
+            self.settleSourceStatus()
             resolve()
             return
           }
@@ -1153,6 +1227,8 @@ export default {
       if (cachedUrl) {
         if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
         this.currentQuality = { requested: preferred, actual: preferred, isUnblock: false }
+        // 缓存命中是瞬时的，上一首残留的状态行顺手清掉
+        this.clearSourceStatusSoon()
         return Promise.resolve({ data: { data: [{ url: cachedUrl }] } })
       }
 
@@ -1162,6 +1238,8 @@ export default {
         : [preferred]
 
       console.log('%c▶ 获取音源 %c/song/url/v1?id=%s&level=%s', 'background:#059669;color:#fff;padding:2px 6px', '', id, preferred)
+      // 灰色歌没有任何前置信号，只能靠"等太久"来判断：先挂个延时播报，正常音源会把它清掉
+      this.armSourceStatus(requestId)
 
       // fallback br 根据 level 映射 (仅 /song/url 兜底时使用)
       const BR_MAP = { hires: 999000, lossless: 999000, exhigh: 320000, higher: 192000, standard: 128000 }
@@ -1169,11 +1247,15 @@ export default {
 
       const self = this
       const CACHE_TTL = 10 * 60 * 1000
+      // 本次取源是否见过"试听片段"：决定进解灰时的文案（试听 ≠ 无版权）
+      let sawTrial = false
 
       const tryLevel = (index) => {
         if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
         if (index >= levels.length) {
           // 官方音源全档位都没货 → 解灰兜底；解灰也失败再看是否启用老接口
+          self._matchByChoice = false
+          self.setSourceStatus(sawTrial ? '仅试听片段，正在解灰…' : '无版权，正在解灰…', 'unblock')
           return self.requestMatchSongUrl(id, requestId).catch(() => {
             if (!config.player.legacyBrFallback) throw new Error('NO_SOURCE')
             return self.requestFallbackUrl(id, fallbackBr, requestId)
@@ -1189,20 +1271,73 @@ export default {
           return Promise.resolve({ data: { data: [{ url: cached.url }] } })
         }
 
+        // 这首歌根本没有这一档（/song/detail 的 hr/sq/h/m/l 已写明），跳过注定空手的请求
+        if (self.songLevels.length && self.songLevels.indexOf(lv) === -1) {
+          console.log('%c↓ 跳过 %s：本曲无此档位', 'color:#64748b;padding:2px 6px', lv)
+          return tryLevel(index + 1)
+        }
+
         return self.$axios('/song/url/v1', {
           params: { id, level: lv, timestamp: Date.now() }
         }).then(res => {
           if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
           const d = res.data && res.data.data && res.data.data[0]
           const url = d && d.url
-          if (!url) {
+          /**
+           * 试听片段识别（免费/VIP 版权分层的关键）。
+           * VIP 独占曲目（fee=1）对未登录或非会员会返回 30-35 秒的片段：
+           * url 有值、也能播，但 freeTrialInfo 非空。旧逻辑只看 url，
+           * 于是把这半首歌当正常音源播了 —— 音质档位怎么选都是那 35 秒。
+           *
+           * 处理：直接判定该档位不可用，跳过剩下的档位去解灰兜底
+           * （试听是版权侧策略，换低档位依旧是试听，没必要多打三次请求）。
+           * 正常歌曲 freeTrialInfo 恒为 null，音质选择逻辑完全不受影响。
+           */
+          const trial = !!(d && d.freeTrialInfo)
+          if (!url || trial) {
+            if (trial) {
+              const span = Math.max(0, (d.freeTrialInfo.end || 0) - (d.freeTrialInfo.start || 0))
+              console.log('%c↓ 试听片段 %s（约 %ss）→ 跳过其余档位，直接解灰', 'background:#b45309;color:#fff;padding:2px 6px', lv, span || '?')
+              sawTrial = true
+              return tryLevel(levels.length)
+            }
             console.log('%c↓ 降级 %s→%s', 'background:#d97706;color:#fff;padding:2px 6px', lv, levels[index + 1] || '解灰')
+            // 下一档还存在就是降级换档，否则紧接着会进解灰（那里的文案更准确）
+            if (levels[index + 1]) self.setSourceStatusLater('官方无货，换源中…', 'pending')
             return tryLevel(index + 1)
+          }
+          const actualLevel = (d && d.level) || lv
+          const vipTier = (config.player.vipOnlyLevels || []).indexOf(lv) !== -1
+          // 这首歌真的有这一档吗（songLevels 为空=未知，按"有"处理）
+          const songHasIt = !self.songLevels.length || self.songLevels.indexOf(lv) !== -1
+          /**
+           * 非会员点"无损/臻音"：上游会如实压级（lossless → exhigh，实测）。
+           * 这里不将就 —— 先用解灰源要这一档的真文件（通常直接给 .flac），
+           * 拿不到再退回刚拿到的压级文件，保证"点了就有的听"、也不会静音。
+           *
+           * 只在"这首确实有这档"时才绕道：如果曲库本身最高只有 320k，
+           * 上游给 exhigh 就正常接受，没必要为同一个文件去喷"解灰"标签。
+           */
+          if (vipTier && actualLevel !== lv && songHasIt) {
+            console.log('%c↑ %s 被压成 %s（无此档权限）→ 试解灰', 'background:#7c3aed;color:#fff;padding:2px 6px', lv, actualLevel)
+            // 用户要的是这一档，别用"无版权"糊弄：这是账号权限，走解灰拿真文件
+            self._matchByChoice = true
+            self.setSourceStatus('会员音质，正在解灰…', 'unblock')
+            return self.requestMatchSongUrl(id, requestId).catch(() => {
+              // 解灰没戏：退回压级文件（顺手撤掉"解灰失败"的播报，避免自相矛盾）
+              self.clearSourceStatusSoon()
+              self.urlCache.set(id + '_' + actualLevel, { url, level: actualLevel, br: d && d.br, size: d && d.size, expire: Date.now() + CACHE_TTL })
+              setAudioCache(id, url, actualLevel)
+              self.currentQuality = { requested: preferred, actual: actualLevel, isUnblock: false }
+              const fallbackLabel = ((config.player.qualityOptions || []).find(o => o.key === actualLevel) || {}).label || actualLevel
+              self.$toast.warning(`解灰源不可用，已用「${fallbackLabel}」播放`)
+              return res
+            })
           }
           self.urlCache.set(ck, { url, level: lv, br: d && d.br, size: d && d.size, expire: Date.now() + CACHE_TTL })
           setAudioCache(id, url, lv)
           // d.level 是上游如实返回的实际档位（非会员请求无损会被压成 exhigh）
-          self.currentQuality = { requested: preferred, actual: (d && d.level) || lv, isUnblock: false }
+          self.currentQuality = { requested: preferred, actual: actualLevel, isUnblock: false }
           return res
         }).catch(err => {
           if (requestId !== self.playRequestId) return Promise.resolve({ cancelled: true })
@@ -1220,10 +1355,15 @@ export default {
       console.log('%c▶ 旧接口兜底 %c/song/url?id=%s&br=%s', 'background:#ea580c;color:#fff;padding:2px 6px', '', id, br)
       return tracks.songUrl(id, br).then(r => {
         if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
-        const fbUrl = r.data && r.data.data && r.data.data[0] && r.data.data[0].url
-        console.log('%c  %s %s', '', fbUrl ? '✅成功' : '❌失败', fbUrl ? '' : '→尝试match')
-        if (!fbUrl) return Promise.reject(new Error('FALLBACK_EMPTY'))
+        const fbItem = r.data && r.data.data && r.data.data[0]
+        const fbUrl = fbItem && fbItem.url
+        // 老接口同样会给 VIP 曲目发试听片段，一并拒掉
+        const fbTrial = !!(fbItem && fbItem.freeTrialInfo)
+        console.log('%c  %s %s', '', fbUrl && !fbTrial ? '✅成功' : '❌失败', fbUrl && !fbTrial ? '' : (fbTrial ? '（仅试听）' : '→尝试match'))
+        if (!fbUrl || fbTrial) return Promise.reject(new Error('FALLBACK_EMPTY'))
         this.urlCache.set(ck, { url: fbUrl, level: 'fallback', expire: Date.now() + 10 * 60 * 1000 })
+        // 老接口捞回来了：前面「解灰失败」的播报得撤掉，否则与实际播放状态矛盾
+        this.clearSourceStatusSoon()
         return r
       }).catch(err => {
         console.error('[PlayError]', { songId: id, stage: 'FALLBACK_FAIL', requestId: this.playRequestId, reason: err && err.message || String(err) })
@@ -1242,7 +1382,9 @@ export default {
       console.log('%c▶ 解灰兜底 %c/song/url/match?id=%s', 'background:#dc2626;color:#fff;padding:2px 6px', '', id)
       const cached = this.urlCache.get(ck)
       if (cached && Date.now() < cached.expire) {
-        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true }
+        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true, byChoice: !!this._matchByChoice }
+        this.setSourceStatus('解灰源（缓存）', 'ok')
+        this.clearSourceStatusSoon(4000)
         return Promise.resolve({ data: { data: [{ url: cached.url }] }, source: 'match' })
       }
       return tracks.songUrlMatch(id).then(r => {
@@ -1254,18 +1396,61 @@ export default {
         const matchUrl = toHttpsUrl(raw)
         if (!matchUrl) return Promise.reject(new Error('NO_RESOURCE'))
         this.urlCache.set(ck, { url: matchUrl, level: 'match', source: 'match', expire: Date.now() + 10 * 60 * 1000 })
-        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true }
+        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true, byChoice: !!this._matchByChoice }
         console.log('%c  ✳ 解灰成功 %c%s', 'color:#dc2626', '', matchUrl.slice(0, 70))
+        // 结论留 6 秒：够用户看清"这首是从第三方源来的"，之后让位给封面/歌名
+        this.setSourceStatus('解灰完成 · 第三方源', 'ok')
+        this.clearSourceStatusSoon(6000)
         return { data: { data: [{ url: matchUrl }] }, source: 'match' }
       }).catch(err => {
         console.error('[PlayError]', { songId: id, stage: 'MATCH_FAIL', reason: err && err.message || String(err) })
+        this.setSourceStatus('解灰失败 · 暂无音源', 'fail')
+        this.clearSourceStatusSoon(5000)
         throw err
       })
+    },
+    /**
+     * 给「下载」按钮用：这首歌手上真正有的完整文件地址。
+     *
+     * 两个场景都需要它：
+     *  1) 解灰曲目 —— VIP / 版权受限曲目走 `/song/download/url/v1` 一定拿不到链接
+     *     （-105/-110），但既然能播，靠的就是 match 解灰源，用户耳朵里放的就是完整曲目。
+     *  2) 未登录 —— 版权下载接口同样必然失败，直接存当前正在播的那个文件即可。
+     * 只返回"属于当前这首"的地址（audioSrcSongId 校验），走 /api/audio-proxy 的地址不返回
+     * （没有代理头解不开）。
+     */
+    playableDownloadSource() {
+      const id = this.currentSong && this.currentSong.id
+      if (!id) return null
+      const isUnblock = !!(this.currentQuality && this.currentQuality.isUnblock)
+      let url = ''
+      if (isUnblock) {
+        const hit = this.urlCache.get(id + '_match')
+        if (hit && hit.url) url = hit.url
+      }
+      if (!url && String(this.audioSrcSongId || '') === String(id)) {
+        const last = this.audioLastSrc || ''
+        if (last && last.indexOf('/api/audio-proxy') === -1) url = last
+      }
+      if (!url) return null
+      return {
+        id,
+        url,
+        type: this._guessAudioType(url),
+        level: isUnblock ? 'match' : ((this.currentQuality && this.currentQuality.actual) || ''),
+        unblock: isUnblock
+      }
+    },
+    /** 从 URL 后缀猜容器格式，猜不到按 mp3（只影响存盘文件名） */
+    _guessAudioType(url) {
+      const m = String(url || '').split('?')[0].match(/\.(flac|mp3|m4a|aac|ogg|wav)$/i)
+      return m ? m[1].toLowerCase() : 'mp3'
     },
     initAudioByOuterUrl(id, requestId) {
       if (requestId !== this.playRequestId) return
       this.sel.src = location.origin + "/api/song/media/outer/url?id=" + id
       this.audioLastSrc = this.sel.src
+      this.audioSrcSongId = String(id)
       this.audioRetryCount = 0
       this.suppressAudioError = false
       this.chorusSeekSongId = null
@@ -1399,6 +1584,80 @@ export default {
       if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
       this.hintText = ''
       this.hintIcon = ''
+    },
+    // ---------------- 音源状态行（歌曲信息下方） ----------------
+    /**
+     * 播报当前取源进度。
+     * @param {string} text
+     * @param {string} tone pending / unblock / ok / fail
+     */
+    setSourceStatus(text, tone = 'pending') {
+      this._clearSourceStatusTimers()
+      this.sourceStatus = { text, tone }
+    },
+    /**
+     * 延迟清除（成功/失败这类结论要留几秒给人看清）；
+     * 不传 ms 就是立即清除。
+     */
+    clearSourceStatusSoon(ms = 0) {
+      this._clearSourceStatusTimers()
+      if (!ms) { this.sourceStatus = { text: '', tone: '' }; return }
+      this.sourceStatusTimer = setTimeout(() => {
+        this.sourceStatus = { text: '', tone: '' }
+        this.sourceStatusTimer = null
+      }, ms)
+    },
+    _clearSourceStatusTimers() {
+      if (this.sourceStatusTimer) { clearTimeout(this.sourceStatusTimer); this.sourceStatusTimer = null }
+      if (this.sourceStatusDelayTimer) { clearTimeout(this.sourceStatusDelayTimer); this.sourceStatusDelayTimer = null }
+    },
+    /**
+     * 慢请求才播报：正常音源 200-500ms 就回来了，这时候闪一条「正在获取音源」
+     * 反而像出故障。超过阈值还没结果，才把状态行亮出来。
+     */
+    armSourceStatus(requestId, delay = 500) {
+      this._clearSourceStatusTimers()
+      this.sourceStatus = { text: '', tone: '' }
+      this.sourceStatusDelayTimer = setTimeout(() => {
+        this.sourceStatusDelayTimer = null
+        if (requestId !== this.playRequestId) return
+        // 已经拿到音源或已经放弃的，不要补一条过期播报
+        if (!this.isLoading) return
+        this.sourceStatus = { text: '正在获取音源…', tone: 'pending' }
+        // 兜底：极端情况下（settle 没跑到）也不该让这句话常驻，8 秒后自动收
+        this.clearSourceStatusSoon(8000)
+      }, delay)
+    },
+    /**
+     * 延迟播报：换档这种"可能几十毫秒就过去了"的中间态，先排一条，
+     * 期间拿到音源就撤掉 —— 避免状态行闪一下又消失，看着像故障。
+     * 已经有状态行在显示时立即改口，不重复延迟。
+     */
+    setSourceStatusLater(text, tone = 'pending', delay = 400) {
+      if (this.sourceStatus.text) { this.setSourceStatus(text, tone); return }
+      if (this.sourceStatusDelayTimer) { clearTimeout(this.sourceStatusDelayTimer); this.sourceStatusDelayTimer = null }
+      this.sourceStatusDelayTimer = setTimeout(() => {
+        this.sourceStatusDelayTimer = null
+        if (!this.isLoading) return
+        this.sourceStatus = { text, tone }
+      }, delay)
+    },
+    /**
+     * 音源已就位：把"进行中"的播报收掉。
+     *
+     * ⚠️ 必须连 sourceStatusDelayTimer 一起取消：音源 300ms 就回来时，文本还没显示
+     * （tone 为空），旧写法只看 tone 就直接返回，500ms 的延时播报照样触发；
+     * 那会儿 isLoading 往往还没被 canplay 置 false，于是"正在获取音源…"挂上去，
+     * 之后再没人负责清它 —— 表现就是歌都在放了，状态条还杵着不动。
+     * ok / fail 是结论，归它们自己的定时器管，别在这里提前抹掉。
+     */
+    settleSourceStatus() {
+      if (this.sourceStatusDelayTimer) {
+        clearTimeout(this.sourceStatusDelayTimer)
+        this.sourceStatusDelayTimer = null
+      }
+      const tone = this.sourceStatus.tone
+      if (tone === 'pending' || tone === 'unblock') this.clearSourceStatusSoon()
     },
     // ---------------- 心动模式（B 层：内容来源） ----------------
     toggleHeartMode() {
@@ -1595,6 +1854,38 @@ export default {
       }
       try { localStorage.setItem('acmusic_play_mode', mode) } catch (e) { /* ignore */ }
       console.log('[PlayMode]', { mode })
+    },
+    /**
+     * 拉取当前歌曲实际可用的音质档位。
+     * /song/detail 的 hr/sq/h/m/l 就是"这首歌有没有这一档"的权威答案（null = 没有），
+     * 拿它把音质菜单收窄；同时顺手让取源链路跳过这首歌根本没有的档位，省掉无效请求。
+     * 结果按 id 缓存，来回切歌不重复打接口。
+     */
+    _loadSongLevels(id) {
+      if (!id) { this.songLevels = []; return }
+      if (!this._levelCache) this._levelCache = new Map()
+      if (this._levelCache.has(id)) { this.songLevels = this._levelCache.get(id); return }
+      // 没缓存的歌先清空：宁可短暂显示全部档位，也不能拿上一首的档位去判断
+      this.songLevels = []
+      const reqId = String(id)
+      tracks.detail(id).then(r => {
+        // 竞态：响应回来时可能已经换歌了，别把上一首的档位写到当前歌上
+        if (String(this.currentSong.id) !== reqId) return
+        const s = (r.data && r.data.songs && r.data.songs[0]) || {}
+        const picked = []
+        if (s.hr) picked.push('hires')
+        if (s.sq) picked.push('lossless')
+        if (s.h) picked.push('exhigh')
+        if (s.m) picked.push('higher')
+        if (s.l) picked.push('standard')
+        this._levelCache.set(reqId, picked)
+        this.songLevels = picked
+        console.log('[SongLevels]', { songId: reqId, levels: picked })
+      }).catch(err => {
+        // 拿不到就维持"不限制"，菜单回落到完整列表，取源链路也不做跳过
+        if (String(this.currentSong.id) === reqId) this.songLevels = []
+        console.warn('[SongLevels]', { songId: reqId, error: err && err.message || String(err) })
+      })
     },
     /**
      * 拉取当前歌曲的副歌区间。
@@ -2186,18 +2477,12 @@ export default {
         console.warn('[VipInfo] 获取失败，音质门控跳过', err && err.message)
       })
     },
-    onNeedVip(opt) {
-      this.showQualityMenu = false
-      const label = (opt && opt.label) || '该音质'
-      this.$toast.warning(`「${label}」需要黑胶VIP，已保持当前音质`)
-    },
+    /**
+     * 切换音质。
+     * 会员专属档位（无损/臻音）不再拦截 —— 非会员选了就走解灰源拿这一档的真文件，
+     * 取源链路自己会在"上游压级 → 解灰 → 退回压级文件"之间兜底，不需要在入口劝退。
+     */
     onQualitySelect(key) {
-      const vipOnly = (config.player.vipOnlyLevels || []).indexOf(key) !== -1
-      // 只在"确认非会员"时拦截；vipType=-1(未知) 放行，宁可多一次降级也不要误伤真会员
-      if (vipOnly && this.vipType === 0) {
-        this.onNeedVip((config.player.qualityOptions || []).find(o => o.key === key))
-        return
-      }
       const oldLevel = this.currentLevel
       const oldSrc = this.sel.src
       console.log('[QualitySwitch]', { action: 'select', oldLevel, newLevel: key, songId: this.currentSong.id, oldSrc: oldSrc ? oldSrc.slice(0, 80) : '', playRequestId: this.playRequestId })
@@ -2546,6 +2831,8 @@ export default {
         this.audioRetryCount = 0
         this.isLoading = false
         this.showPlayerPending = false
+        // 音频真的能放了，任何"正在获取/解灰"的播报都不该再挂着（第二道保险，见 settleSourceStatus）
+        this.settleSourceStatus()
         console.log('[PlayerLoading]', { action: 'ready', songId: this.currentSong.id, requestId: this.playRequestId })
         console.log('%c[AudioReady] %cduration=%s', 'background:#7c3aed;color:#fff;padding:2px 6px', '', this.sel.duration)
         this.timeDuration = this.sel.duration
@@ -2995,6 +3282,7 @@ mounted() {
     this.$bus.$off('fm-mode', this._fmModeHandler)
     this.$bus.$off('heart-toggle', this._heartToggleHandler)
     if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
+    this._clearSourceStatusTimers()
   }
 }
 </script>
@@ -3047,12 +3335,28 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 
 .playerPanel.expanded .miniBar { display: none; }
 
-// 播放器内联状态条：A-B 选点 / 副歌 / 心动模式 / 定时停止 的持续状态播报
-.playerHint {
+/**
+ * 播放条上方的浮动播报区：整体水平居中，吊在播放按钮正上方。
+ * 以前只有 playerHint 一个，绝对定位各自为战；加了音源状态行后要能共存，
+ * 所以收进一个纵向 flex 容器——两者同时出现时自动堆叠，不会互相盖住。
+ */
+.floatStack {
   position: absolute; bottom: calc(100% + 12px); left: 50%;
   transform: translateX(-50%);
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
   max-width: min(560px, 88vw);
+  pointer-events: none;
+  z-index: 6;
+
+  // 收起态只剩 28px 的迷你进度条（高度不参与面板布局），播报要相应下移，
+  // 否则会飘到屏幕最下沿、压在页面内容上
+  &.is-collapsed { bottom: 40px; }
+}
+
+// 播放器内联状态条：A-B 选点 / 副歌 / 心动模式 / 定时停止 的持续状态播报
+.playerHint {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 100%;
   padding: 9px 18px;
   background: rgba(28, 29, 40, .94);
   border: 1px solid rgba(255, 255, 255, .10);
@@ -3061,22 +3365,70 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   backdrop-filter: blur(18px);
   color: rgba(255, 255, 255, .92);
   font-size: 13px; line-height: 1.45;
-  pointer-events: none;
-  z-index: 6;
 
   .hintIcon { flex: none; color: $accent; }
-  .hintText { min-width: 0; }
+  .hintText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+// 音源状态胶囊：解灰这类"要等一会儿"的链路才出现，比 playerHint 小一号，不抢戏
+.sourceHint {
+  display: flex; align-items: center; gap: 6px;
+  max-width: 100%;
+  padding: 7px 14px;
+  background: rgba(28, 29, 40, .94);
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 999px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .32);
+  backdrop-filter: blur(18px);
+  color: rgba(255, 255, 255, .66);
+  font-size: 12px; line-height: 1.45; letter-spacing: .1px;
+
+  .hintText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .statusDot {
+    flex: none; width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor; opacity: .8;
+  }
+
+  &.is-pending { color: rgba(255, 255, 255, .66); }
+  // 解灰＝第三方源，跟音质按钮上的「解灰」用同一支琥珀色
+  &.is-unblock {
+    color: #f0c674;
+    border-color: rgba(240, 198, 116, .30);
+    background: rgba(46, 39, 27, .94);
+  }
+  &.is-ok { color: #6ee7a8; }
+  &.is-fail { color: #f87171; }
+
+  // 进行中：转圈表达"还在等"，静态圆点看着像"卡住了"
+  &.is-pending .statusDot,
+  &.is-unblock .statusDot {
+    width: 9px; height: 9px;
+    background: transparent;
+    border: 1.5px solid currentColor;
+    border-top-color: transparent;
+    opacity: 1;
+    animation: sourceStatusSpin .7s linear infinite;
+  }
+  &.is-ok .statusDot, &.is-fail .statusDot { opacity: .9; }
 }
 
 .hint-pop-enter-active, .hint-pop-leave-active {
   transition: opacity $motion-normal $ease-standard, transform $motion-normal $ease-standard;
 }
 .hint-pop-enter, .hint-pop-leave-to {
-  opacity: 0; transform: translate(-50%, 10px);
+  opacity: 0; transform: translateY(10px);
 }
 .hint-pop-enter-to, .hint-pop-leave {
-  opacity: 1; transform: translate(-50%, 0);
+  opacity: 1; transform: translateY(0);
 }
+
+// 音源状态：从下方 8px 浮上来，跟播放按钮同一个视觉落点
+.source-pop-enter-active, .source-pop-leave-active {
+  transition: opacity 200ms $ease-standard, transform 200ms $ease-standard;
+}
+.source-pop-enter, .source-pop-leave-to { opacity: 0; transform: translateY(8px); }
+
+@keyframes sourceStatusSpin { to { transform: rotate(360deg); } }
 
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(6px); }

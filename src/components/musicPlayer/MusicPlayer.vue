@@ -114,6 +114,7 @@ import { buildBackground } from "@/utils/colorExtractor";
 import { parseLyricData, parseLrcText, findActiveIndex, findActiveWord } from "@/utils/lyric";
 import config from "@/config";
 import * as tracksApi from "@/api/Tracks";
+import { isLoggedIn } from "@/utils/auth";
 
 export default {
   name: "MusicPlayer",
@@ -143,7 +144,12 @@ export default {
   },
   computed: {
     chorusBand() { return this.coreReady ? this.$refs.pgPanel.chorusStyle : null },
-    expandedHint() { return this.coreReady ? this.$refs.pgPanel.hintText : '' },
+    // 全屏态看不到播放条，取源/解灰进度接到这里播报，否则全屏里这段是黑箱
+    expandedHint() {
+      if (!this.coreReady) return ''
+      const core = this.$refs.pgPanel
+      return core.hintText || (core.sourceStatus && core.sourceStatus.text) || ''
+    },
     coverUrl() {
       const s = this.currentSong
       return (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || ''
@@ -387,36 +393,63 @@ export default {
     },
     /**
      * 下载当前歌曲。
-     * 走 /song/download/url/v1（客户端下载接口），需要登录；无权限时 data.code = -110、url 为 null。
+     * 1) 解灰曲目 / 未登录：版权下载接口一定拿不到链接（-105/-110），直接存正在播的文件。
+     * 2) 其余歌曲走 /song/download/url/v1；它不给链接时，用当前音源兜底而不是报错。
      * 浏览器对跨域 URL 的 download 属性无效，所以只保证触发下载/新标签打开，不做二次转存。
      */
     downloadSong() {
       const song = this.currentSong || {}
       if (!song.id) return
       if (this.downloading) return
+
+      const core = this.$refs.pgPanel
+      const playing = core && core.playableDownloadSource ? core.playableDownloadSource() : null
+
+      if (playing && (playing.unblock || !isLoggedIn())) {
+        this._triggerDownload(playing.url, `${song.name || 'song'}.${playing.type}`)
+        this.$toast.success(playing.unblock ? '已开始下载（解灰源）' : '已开始下载')
+        return
+      }
+      // 未登录又没有可用音源：不要误导成"去登录"，就是还没解析出来
+      if (!isLoggedIn()) {
+        this.$toast.warning('音源还没准备好，稍后再试')
+        return
+      }
+
       this.downloading = true
       const level = config.player.level || 'standard'
       tracksApi.downloadUrlV1(song.id, level).then(res => {
         const d = (res && res.data && res.data.data) || {}
         const url = d.url
         if (!url) {
-          if (d.code === -110) this.$toast.warning('下载需要先登录，登录后重试')
-          else this.$toast.warning('该歌曲暂不提供下载，版权方未开放')
+          // -105/-110 是版权侧的"无权限"（需要 VIP / 已下架），跟登录态无关。
+          // 手上还有正在播的完整文件就存它，别拿"需要登录"糊弄人。
+          const sameSong = playing && String(playing.id) === String(song.id)
+          if (sameSong) {
+            this._triggerDownload(playing.url, `${song.name || 'song'}.${playing.type}`)
+            this.$toast.success('已开始下载（当前音源）')
+            return
+          }
+          this.$toast.warning('这首歌版权方暂未开放下载')
           return
         }
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${song.name || 'song'}${d.type ? '.' + d.type : '.mp3'}`
-        a.target = '_blank'
-        a.rel = 'noopener'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
+        this._triggerDownload(url, `${song.name || 'song'}${d.type ? '.' + d.type : '.mp3'}`)
         this.$toast.success('已开始下载')
       }).catch(err => {
         console.warn('[Download]', err && err.message)
         this.$toast.warning('下载失败，请稍后重试')
       }).then(() => { this.downloading = false })
+    },
+    /** 触发浏览器下载（跨域地址浏览器会新开标签页，无法强制另存） */
+    _triggerDownload(url, filename) {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.target = '_blank'
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
     },
     formatTime(s) { s = s * 1; if (!s || isNaN(s)) return '00:00'; const m = Math.floor(s / 60); return String(m).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0') },
     trackAlbumPic(t) { return (t.album && t.album.picUrl) || (t.al && t.al.picUrl) || '' },
@@ -623,7 +656,8 @@ export default {
     span { padding: 12px 20px; font-size: 13px; color: rgba(255,255,255,0.35); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 180ms ease; display: flex; align-items: center; gap: 5px; i { font-size: 14px; } &:hover { color: rgba(255,255,255,0.6); } &.active { color: rgba(255,255,255,0.88); font-weight: 600; border-bottom-color: var(--c-accent); } }
   }
 
-  .rightContent { flex: 1; min-height: 0; overflow: hidden; padding-top: 16px; }
+  // 详情页右栏：上留 20px 接标题、下留 70px 收尾，左右贴边（歌词/卡片自己已有内边距）
+  .rightContent { flex: 1; min-height: 0; overflow: hidden; padding: 20px 0 70px; }
   .tabPanel { height: 100%; overflow: hidden; }
 
   .lyricsScroll {
@@ -734,7 +768,7 @@ export default {
   .actionsRow .actionBtn.active svg path { fill: currentColor; }
   .heroRight { align-self: center; width: 100%; min-width: 0; height: clamp(440px, 72vh, 760px); }
   .rightTabs { justify-content: center; span { color: var(--player-menu-muted); padding: $sp-3 $sp-4; } }
-  .rightContent { padding-top: $sp-5; min-height: 0; flex: 1; }
+  .rightContent { padding: 20px 0 70px; min-height: 0; flex: 1; }
   .rightTabs { flex: 0 0 auto; }
   .tabPanel { height: 100%; }
   .tabPanel .lyricsScroll, .tabPanel .cardScroll { height: 100%; min-height: 0; max-height: none; box-sizing: border-box; }
