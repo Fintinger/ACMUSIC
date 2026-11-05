@@ -305,7 +305,7 @@ git commit -m "<type>: <description>"
 
 ### 版本号
 
-- 本项目**未使用语义化版本**（`package.json` 固定 `0.1.0`）
+- 版本号由用户指定，当前为 `1.0.0`；修改时同步 `package.json` 与 `package-lock.json` 根版本，页脚从 package.json 读取。
 - 不需要打 tag / release
 - 通过 commit 历史追踪版本演进
 
