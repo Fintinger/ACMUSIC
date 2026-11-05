@@ -158,6 +158,10 @@ export default {
 
 /* ---------- 登录页 ---------- */
 .login-wrap {
+  // 显式撑满内容区：flex 容器的 align-items 只在"容器本身够宽"时才谈得上居中，
+  // 一旦被父级收紧成 fit-content，"欢迎回来"就会贴左
+  width: 100%;
+  box-sizing: border-box;
   min-height: 60vh;
   display: flex;
   flex-direction: column;
@@ -166,10 +170,16 @@ export default {
   padding: 48px 0;
 
   .login-hero {
+    // 标题区自己再居中一次：不依赖外层是 flex 还是 block
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     text-align: center;
     margin-bottom: 32px;
-    .login-title { font-size: $fs-page; font-weight: 700; line-height: 1.3; color: $font-black; margin: 0 0 $sp-2; }
-    .login-subtitle { font-size: 15px; color: $font-black-2; margin: 0; }
+    .login-title { font-size: $fs-page; font-weight: 700; line-height: 1.3; color: $font-black; margin: 0 0 $sp-2; text-align: center; }
+    .login-subtitle { font-size: 15px; color: $font-black-2; margin: 0; text-align: center; }
   }
 
   .login-card {
