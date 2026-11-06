@@ -165,10 +165,12 @@ export default {
       markChangelogSeen()
       this.changelogUnread = false
     },
-    toggleTheme() {
+    toggleTheme(e) {
       this.themeDark = !this.themeDark
       this.themePreference = this.themeDark ? 'dark' : 'light'
-      setTheme(this.themePreference)
+      // 把点击位置传给主题模块，作为圆形扩散动画的圆心（键盘触发时没有坐标，静默切换）
+      const origin = e && typeof e.clientX === 'number' ? { x: e.clientX, y: e.clientY } : null
+      setTheme(this.themePreference, origin)
     },
     //兜底释放 keep-alive 未能销毁的页面实例
     //背景：Vue 2 的 keep-alive 在 max 溢出时调用 pruneCacheEntry，其中

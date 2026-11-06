@@ -469,7 +469,10 @@ export default {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: rgba(95,99,104,.12);
+    /* 原先是 rgba(95,99,104,.12) 的淡灰圆，叠在磨砂玻璃底上深浅两种主题都
+       几乎看不见（用户反馈）；改成主题色实底 + 白色三角，与播放器播放按钮同语言 */
+    background: var(--c-accent);
+    color: #fff;
   }
 
   &:hover {

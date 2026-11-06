@@ -3584,7 +3584,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       &.mode-random:hover, &.mode-loop:hover, &.is-chorus:hover { color: $accent; }
     }
     .barPlay {
-      width: 32px; height: 32px; border-radius: 50%; background: $accent; color: var(--theme-on-accent);
+      width: 32px; height: 32px; border-radius: 50%; background: $accent; color: #fff;
       display: flex; align-items: center; justify-content: center; cursor: pointer;
       box-shadow: 0 2px 12px rgba(var(--theme-accent-rgb), 0.3);
       transition: all 200ms cubic-bezier(0.22,0.61,0.36,1);

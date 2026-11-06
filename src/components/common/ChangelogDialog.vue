@@ -63,6 +63,24 @@ export default {
   overflow-y: auto;
   padding-right: 4px;
   margin-right: -4px;
+
+  // 滚动条与全站一致（reset.scss 里 html/body 那套）：5px 细条 + 语义 token，
+  // 不写死颜色，深色下自动换成白色滑块
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  &::-webkit-scrollbar-track {
+    border-radius: 5px;
+    background: var(--c-bg-hover);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 5px;
+    background: var(--c-scroll-thumb);
+
+    &:hover { background: var(--c-text-tertiary); }
+  }
 }
 
 .cl-entry {

@@ -388,7 +388,7 @@ export default {
 
   .actHint {
     font-size: .75rem;
-    color: #999;
+    color: var(--c-text-tertiary);
   }
 }
 
@@ -396,10 +396,10 @@ export default {
   height: 28px;
   padding: 0 14px;
   border-radius: 14px;
-  border: 1px solid rgba(0, 0, 0, .12);
+  border: 1px solid var(--c-border-strong);
   background: transparent;
   font-size: .78rem;
-  color: #555;
+  color: var(--c-text-secondary);
   cursor: pointer;
   transition: all .2s;
 
@@ -416,14 +416,14 @@ export default {
 
   /* 破坏性操作：常态就带红，悬停加深；比 .actBtn:hover 优先级高，不会被紫色覆盖 */
   &.danger {
-    border-color: rgba(220, 38, 38, .3);
-    color: #dc2626;
+    border-color: rgba(229, 72, 77, .35);
+    color: var(--c-danger-text);
   }
 
   &.danger:hover:not(:disabled) {
-    border-color: #dc2626;
-    background: rgba(220, 38, 38, .08);
-    color: #dc2626;
+    border-color: var(--c-danger);
+    background: rgba(229, 72, 77, .08);
+    color: var(--c-danger-text);
   }
 
   &:disabled {
@@ -439,8 +439,8 @@ export default {
   line-height: 1;
   border: none;
   border-radius: 6px;
-  background: rgba(0, 0, 0, .05);
-  color: #555;
+  background: var(--c-bg-hover);
+  color: var(--c-text-secondary);
   font-size: .8rem;
   cursor: pointer;
   transition: all .15s;
@@ -451,8 +451,8 @@ export default {
   }
 
   &.danger:hover:not(:disabled) {
-    background: rgba(220, 38, 38, .12);
-    color: #dc2626;
+    background: rgba(229, 72, 77, .14);
+    color: var(--c-danger-text);
   }
 
   &:disabled {
@@ -465,7 +465,7 @@ export default {
   .editLabel {
     display: block;
     font-size: .8rem;
-    color: #888;
+    color: var(--c-text-tertiary);
     margin: .9rem 0 .35rem;
 
     &:first-child {

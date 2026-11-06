@@ -43,3 +43,62 @@
 }
 
 html[data-theme="dark"] .logo img { filter: invert(1); }
+
+/* ---------------------------------------------------------------------------
+ * 主题切换过渡动画（配合 utils/theme.js 的 applyThemeWithTransition）
+ *
+ * 1) View Transitions API 路径，方向由 JS 决定（变量由 html 内联样式注入，
+ *    视图过渡伪元素继承自根元素，所以能读到）：
+ *    · 切浅色：--theme-vt-new-anim = theme-circle-reveal
+ *      新主题从点击位置圆形展开（新层在上）
+ *    · 切深色：--theme-vt-old-anim = theme-circle-converge
+ *      旧主题收缩进点击位置，深色从四周向中心聚拢（旧层在上，靠 z-index 反转）
+ * 2) 降级路径：不支持 startViewTransition 的浏览器，切主题时 JS 给 <html>
+ *    挂 .theme-anim，让全站颜色属性在 480ms 内平滑过渡；类名用完即摘。
+ * 两条路径都在 prefers-reduced-motion 下由 JS 直接跳过动画。
+ * ------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 480ms;
+  animation-timing-function: cubic-bezier(.4, 0, .2, 1);
+  animation-fill-mode: both;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: var(--theme-vt-old-z, auto);
+  animation-name: var(--theme-vt-old-anim, none);
+}
+
+::view-transition-new(root) {
+  z-index: var(--theme-vt-new-z, auto);
+  animation-name: var(--theme-vt-new-anim, none);
+}
+
+/* 浅色：从点击位置向外展开 */
+@keyframes theme-circle-reveal {
+  from { clip-path: circle(0 at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 0%)); }
+  to { clip-path: circle(var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 0%)); }
+}
+
+/* 深色：旧主题由满屏收缩到点击位置 */
+@keyframes theme-circle-converge {
+  from { clip-path: circle(var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 0%)); }
+  to { clip-path: circle(0 at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 0%)); }
+}
+
+html.theme-anim,
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition:
+    background-color 480ms ease,
+    background 480ms ease,
+    color 480ms ease,
+    border-color 480ms ease,
+    fill 480ms ease,
+    stroke 480ms ease,
+    box-shadow 480ms ease,
+    opacity 480ms ease !important;
+  transition-delay: 0ms !important;
+}

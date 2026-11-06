@@ -36,7 +36,7 @@
             <router-link v-if="isSelf" to="/annual" class="hero-annual">
               年度听歌报告<span class="hero-annual-arrow">→</span>
             </router-link>
-            <p class="hero-login" v-if="isSelf && lastLoginText">{{ lastLoginText }}</p>
+            <p class="hero-login" v-if="isSelf && lastLoginText" :title="lastLoginHint">{{ lastLoginText }}</p>
           </div>
           <!-- 关注 / 已关注：仅登录且非本人时出现，初始状态取 /user/detail 的 profile.followed -->
           <div class="hero-side hero-side--action" v-if="canFollow">
@@ -261,7 +261,7 @@ import * as userDetailApi from "@/api/UserDetail";
 import * as authApi from "@/api/auth";
 import { getAreaName, getCityName } from "@/utils/areaCode";
 import { formatMs, followSpanText } from "@/utils/filters";
-import { getIpLocation, maskIP } from "@/utils/ipLocation";
+import { getIpLocation, maskIP, isUnlocatableIp } from "@/utils/ipLocation";
 import { isLoggedIn } from "@/utils/auth";
 import coverLight from "@/mixins/coverLight";
 
@@ -340,13 +340,22 @@ export default {
     // 用 === 会导致「从他人主页跳到自己主页」时误判为非本人 → 统一转字符串比较
     isSelf() { return this.uid != null && this.loginInfo.userId != null && String(this.uid) === String(this.loginInfo.userId) },
     // 格式：「上次登录 · 浙江杭州 · 8月26日 17:37」
-    // 城市解析成功 → 城市+时间；失败 → IP打码+时间
+    // 城市解析成功 → 城市+时间；公网 IP 但解析失败 → IP打码+时间；
+    // 回环/内网地址（如 127.0.0.1）→ 只留时间，这种 IP 没有归属地可查，露出来只会误导
     lastLoginText() {
       if (!this.lastLoginInfo.time) return ''
       const time = formatMs(this.lastLoginInfo.time, 'M月D日 HH:mm')
       if (this.lastLoginInfo.location) return `上次登录 · ${this.lastLoginInfo.location} · ${time}`
-      if (this.lastLoginInfo.IP) return `上次登录 · IP ${maskIP(this.lastLoginInfo.IP)} · ${time}`
+      if (this.lastLoginInfo.IP && !isUnlocatableIp(this.lastLoginInfo.IP)) return `上次登录 · IP ${maskIP(this.lastLoginInfo.IP)} · ${time}`
       return `上次登录 · ${time}`
+    },
+    // 悬停解释：为什么这里可能只有一个时间没有地址
+    lastLoginHint() {
+      const ip = this.lastLoginInfo.IP
+      if (!this.lastLoginInfo.time) return ''
+      if (this.lastLoginInfo.location) return `上次登录地点：${this.lastLoginInfo.location}`
+      if (ip && isUnlocatableIp(ip)) return `登录记录里的 IP 是内网/本机地址（${maskIP(ip)}），无法解析归属地；退出后重新登录一次，记录会更新为当前公网 IP`
+      return '这条登录记录没有可解析的归属地信息'
     },
     loginInfoText() {
       return !!this.lastLoginInfo.time

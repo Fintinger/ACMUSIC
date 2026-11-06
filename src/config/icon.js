@@ -11,11 +11,15 @@ export default {
     listPlus: { type: 'svg', strokeWidth: 1.8, path: 'M4 6h16 M4 12h10 M4 18h10 M19 14v8 M15 18h8' },
     lyrics: { type: 'svg', strokeWidth: 1.8, path: 'M4 5h16 M4 10h12 M4 15h8 M4 20h8 M19 13v8 M16 16l3-3 3 3' },
     // ---- 播放器核心 ----
-    play: { type: 'svg', class: 'ac-play1', fill: 'currentColor', stroke: 'none', path: 'M8 4.8a1 1 0 0 1 1.5-.86l11 6.35a1 1 0 0 1 0 1.72l-11 6.35A1 1 0 0 1 8 17.5z' },
+    // 播放三角：三个转角用二次贝塞尔收圆（原来是 r=1 的尖角，小尺寸下像锐角）。
+    // 顶点仍取 (20,12)(8,4.6)(8,19.4)，控制点落在顶点上、端点沿边内收约 5px，
+    // 视觉圆角≈3（24 网格）。做成实心 path 而不是描边，避免缩放时粗细漂移。
+    play: { type: 'svg', class: 'ac-play1', fill: 'currentColor', stroke: 'none', path: 'M12.575 7.421 L15.854 9.443 Q20 12 15.854 14.557 L12.575 16.579 Q8 19.4 8 14.024 L8 9.976 Q8 4.6 12.575 7.421 Z' },
+    // 暂停双竖条跟着做同样的圆角，避免播放/暂停切换时一个柔软一个刀切
     pause: {
         type: 'svg',
         fill: 'currentColor', stroke: 'none',
-        path: 'M7 5h4v14H7zM13 5h4v14h-4z',
+        path: 'M8.4 5h1.2a1.4 1.4 0 0 1 1.4 1.4v11.2a1.4 1.4 0 0 1-1.4 1.4H8.4A1.4 1.4 0 0 1 7 17.6V6.4A1.4 1.4 0 0 1 8.4 5zM14.4 5h1.2a1.4 1.4 0 0 1 1.4 1.4v11.2a1.4 1.4 0 0 1-1.4 1.4h-1.2a1.4 1.4 0 0 1-1.4-1.4V6.4A1.4 1.4 0 0 1 14.4 5z',
     },
     prev: {
         type: 'svg',

@@ -621,7 +621,7 @@ export default {
       &.mode-random:hover, &.mode-loop:hover { color: var(--c-accent); }
       &.mode-spacer { pointer-events: none; border-color: transparent; background: none; }
     }
-    .playBtn { width: 44px; height: 44px; border-radius: 50%; background: var(--c-accent); color: var(--theme-on-accent); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(var(--theme-accent-rgb), 0.35); transition: all 220ms ease; i { font-size: 20px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(var(--theme-accent-rgb), 0.5); } &:active { transform: scale(0.95); } }
+    .playBtn { width: 44px; height: 44px; border-radius: 50%; background: var(--c-accent); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(var(--theme-accent-rgb), 0.35); transition: all 220ms ease; i { font-size: 20px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(var(--theme-accent-rgb), 0.5); } &:active { transform: scale(0.95); } }
   }
 
   .actionsRow {
@@ -761,7 +761,14 @@ export default {
   .progressSection .progressTimes { color: var(--player-menu-muted); }
   .expandedHint { color: var(--player-menu-accent); font-size: $fs-aux; text-align: center; line-height: 1.5; margin: 0; }
   .controlsRow button { padding: 0; font: inherit; color: inherit; }
-  .controlsRow .playBtn { width: 58px; height: 58px; border: none; }
+  // 大播放页按钮放大到 58px 后图标仍是基础尺寸 20px（占 34%），比 mini 条的
+  // 18/32（56%）明显偏小；这里按同一比例补到 34px（可见三角高约 21px），
+  // 加载圈同步放大
+  .controlsRow .playBtn {
+    width: 58px; height: 58px; border: none;
+    i { font-size: 34px; }
+    .player-loading-spinner { width: 22px; height: 22px; border-width: 2.5px; }
+  }
   .controlsRow .modeBtn { background: transparent; color: var(--player-menu-secondary); }
   .actionsRow .actionBtn.active { background: var(--player-menu-soft); border-color: var(--player-menu-accent); color: var(--player-menu-text); }
   .actionsRow .actionBtn.active .ac-icon { color: $player-danger; }
