@@ -3,10 +3,13 @@
 > 由 `scripts/build-devlog.mjs` 从 git 历史生成，**请勿手改**。
 > 重新生成：`yarn devlog`。阶段与意图的叙述见 `docs/DEVLOG.md`。
 
-共 174 个提交，时间跨度 2022-04-12 ~ 2026-11-05。
+共 177 个提交，时间跨度 2022-04-12 ~ 2026-11-06。
 
-## 2026-11（9 个提交）
+## 2026-11（12 个提交）
 
+- `30b4f7c` chore(release): v1.2.0 　`v1.2.0`
+- `df38620` docs: 补全开发日志编年史与 README 重写
+- `8156e78` feat(ui): 主题切换双向动画、深色可见性修复与播放按钮调整
 - `abf0e23` chore: 版本号升至 1.1.0 并同步文档 　`v1.1.0`
 - `3d5b717` fix(ui): 登录页「欢迎回来」居中显示
 - `13487e0` feat: 应用内更新日志（CHANGELOG.md + 弹窗 + 未读红点）
@@ -216,6 +219,7 @@
 - `v1.1-ui-polish` → `91bc77c`
 - `v1.1.0` → `abf0e23`
 - `v1.2-player-stability` → `85fc820`
+- `v1.2.0` → `30b4f7c`
 - `v1.2.0-icon-system` → `883e896`
 - `v1.3-page-navigation` → `407b1e5`
 - `v1.3-player-state` → `074cd77`
