@@ -8,13 +8,14 @@ NetEase Cloud Music third-party web client. Vue 2 SPA. No tests; deploy is GitHu
 - `yarn build` — production build to `dist/`
 - `yarn lint` — ESLint (config lives in `package.json` eslintConfig key)
 - `yarn changelog` — regenerate `src/data/changelog.generated.js` from `CHANGELOG.md` (also runs automatically via `prebuild` / `preserve`)
+- `yarn devlog` — regenerate `docs/DEVLOG_COMMITS.md` (git-derived commit list; run it after history-changing operations, don't hand-edit the output)
 
 No test runner exists.
 
 ## Setup gotchas
 
 - Styling uses **dart-sass** (`sass` 1.77 + `sass-loader` 7.3.1), not `node-sass`; builds work on modern Node (verified on Node 24). Sass emits `@import`/`legacy-js-api` deprecation warnings — noise, not errors.
-- API base URL comes from `VUE_APP_API_BASE_URL` in `.env`, read via `src/config.js`. (`.env` is git-tracked and also holds `VUE_APP_AMAP_KEY`.)
+- API base URL comes from `VUE_APP_API_BASE_URL` in `.env`, read via `src/config.js`. (`.env` is git-tracked and currently holds only this key — the Amap key was removed when ip-location moved server-side.)
 - DevServer proxies `/api` → `https://music.archai.space` in `vue.config.js` (keeps the `/api` prefix; the live nginx does the final dispatch).
 - `lintOnSave: false` in `vue.config.js` — errors only surface on `yarn lint`.
 - Production build memory: `yarn build` spawns thread-loader workers; in a sandboxed/restricted shell it can fail with `spawn EPERM` even though the build itself is fine.
@@ -55,6 +56,8 @@ No test runner exists.
 ## Version & changelog
 
 - Two logs, don't mix them: `CHANGELOG.md` (repo root) is **user-facing**; `docs/CHANGELOG_AI.md` is the internal dev log (acceptance status, deployment notes, trade-offs).
+- `docs/DEVLOG.md` is the **chronicle** (when did what happen) — it answers "什么时候做了什么", never duplicates per-change rationale; `docs/DEVLOG_COMMITS.md` is its auto-generated appendix (`yarn devlog`).
 - `CHANGELOG.md` format is strict and minimal — `## <version> — <date>`, `### <section>`, `- <item>`. `scripts/build-changelog.mjs` parses exactly that into `src/data/changelog.generated.js`; **never hand-edit the generated file**.
 - Version lives only in `package.json` (`src/config.js` reads it for the footer + in-app changelog). At release time keep it in sync with an annotated git tag `vX.Y.Z`; tags do not trigger the deploy workflow (it keys off `push master` + path filters).
+- Tag naming: `vX.Y.Z` = release only (must match `package.json`); development milestones use `stage/<yyyy-mm>-<topic>`. The older `v1.x-…` / `v1.2.0-icon-system` tags are legacy stage markers — don't copy that pattern.
 - In-app entry: avatar menu and footer → `ChangelogDialog`. The unread dot compares `localStorage.acmusic_seen_changelog` with the current version.

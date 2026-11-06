@@ -1,77 +1,77 @@
-## Vue-router
+<h1 align="center">ACMUSIC</h1>
 
-vue2x对应Vue-router3x
+<p align="center">网易云音乐第三方 Web 客户端 · Vue 2 单页应用</p>
 
-## axios
+<p align="center">
+  <a href="https://music.archai.space">在线体验</a> ·
+  <a href="docs/DEVLOG.md">开发日志</a> ·
+  <a href="CHANGELOG.md">更新日志</a>
+</p>
 
-```js
-import axios from "axios";
+<p align="center"><img src="docs/assets/screenshots/home.webp" alt="首页：网友精选碟" width="100%"></p>
 
-Vue.prototype.$axios = axios
-axios.defaults.baseURL = 'https://netease-cloud-music-api-nu-rosy.vercel.app'
+## 能做什么
+
+- **播放器**：逐字歌词、四条互不干扰的播放状态（队列策略 / 单曲形态含副歌与 A-B 区间 / 心动模式 / 定时停止）、系统媒体控制与全局快捷键、刷新后恢复队列与进度
+- **音源**：音质档位按曲目实际拥有的档位自适应；官方无货或仅给试听片段时自动切解灰源；CDN 不可达时经服务端音频代理兜底
+- **内容**：歌单、专辑、歌手、MV / 视频、搜索（智能匹配）、评论（支持楼中楼）、个人主页、年度听歌报告
+- **外观**：深浅双主题 + 可换主题色，全站语义 token 化；切换主题时新主题从点击处圆形展开（切深色反向聚拢）
+- **工程**：Vue Router history 模式 + 路由级分包 + 全局错误边界 + 骨架屏 + 封面懒加载；GitHub Actions 自动部署
+
+<table>
+<tr>
+<td><img src="docs/assets/screenshots/playlist.webp" alt="歌单详情" width="100%"></td>
+<td><img src="docs/assets/screenshots/player.webp" alt="展开播放器" width="100%"></td>
+</tr>
+<tr>
+<td align="center"><sub>歌单详情</sub></td>
+<td align="center"><sub>展开播放器 · 相似歌曲</sub></td>
+</tr>
+</table>
+
+## 技术栈
+
+- **Vue 2**（Options API）+ **Vue Router 3**（history 模式）+ **Vuex 3**（`UserAbout` / `TracksAbout`）
+- **Element UI**（全局注册）、**xgplayer**（MV / 视频）、原生 `Audio`（音乐）
+- **dart-sass** + vue-cli 5；ESLint 配置写在 `package.json` 的 `eslintConfig`
+
+## 本地开发
+
+```bash
+yarn install
+yarn serve        # http://localhost:8080，/api 已代理到线上后端，不用另起服务
+yarn build        # 产物 dist/（prebuild 会先刷新应用内更新日志）
+yarn lint
+yarn serve:stop   # 端口被占或残留 dev server 时清掉 8080
 ```
 
-## 开发日志(JI)
+## 环境变量
 
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `VUE_APP_API_BASE_URL` | `/api` | 接口网关前缀。开发时由 devServer 代理，生产时由 nginx 转发到自建 API 服务 |
 
+前端不直连网易云，也不持有任何第三方 Key（IP 归属地等能力已在服务端代理）。
 
+## 目录
 
-
-### 第一阶段：基本框架搭建
-
-- 初始化项目，写好基本路由结构以及用elementUI布置基本框架 <2022年4月7日>
-- 部署API到vercel，引入并配置axios，引入sass，配置好banner部分 <2022年4月8日>
-- 首页HomePage结构优化，采用grid布局，不会发生结构混乱问题，定义全局class样式(`gridLayout`)，加上之后自动采用grid布局；对于CategoryPage，是采用**点击按钮更新当前组件数据并重新渲染**还是**利用编程式路由导航直接跳转组件**，最终选择了后者。<2022年4月9日>
-- 体验到用跳转组件的好处了，因为数据上CategoryPage中不同的页面有不同的数据结构，因此并没有办法做到用通用的模板进行渲染；elementUI的[InfiniteScroll 无限滚动](https://element.eleme.cn/#/zh-CN/component/infiniteScroll#infinitescroll-wu-xian-gun-dong)感觉不太好用，存在自动调用`load()`的BUG，除非给container设置固定的宽高，但实际上一般不会那么做的。<2022年4月11日>
-- 终于！！基本的框架搭建完毕，接下来就是歌单详情页、MV详情页、唱片详情页、播放功能的组件、登陆页面用户信息的获取以及渲染……🧐<2022年4月12日>
-
-
-
-
-
-### 第二阶段：各种具体功能的实现
-
-- 专辑详情页面，想过用全局事件总线的方式实现，但实际上问题很多。最后参考了[yesmusic](https://music.qier222.com/)的方式，利用路由来实现，具体就是通过传递`params`或者`query`参数的方式实现(我选择后者)，再通过[路由的props配置](https://www.fintinger.site/p/vue2.0%E5%AD%A6%E4%B9%A0%E5%B0%8F%E7%BB%93/#7%E8%B7%AF%E7%94%B1%E7%9A%84props%E9%85%8D%E7%BD%AE)，实现数据的传递，最后在路由的`activated`钩子中进行数据的动态更新<2022年4月13日>
-- 所有歌单(不包括歌手榜和赞赏榜)和专辑点击跳转详情逻辑完成，就是给的api很奇怪，比如说访问`/playlist/track/all?id=2399935867&limit=100&offset=3`应该得到100首，然而只得到99首。。。这与offset无关，因为有404首。还有，这里的`offset`参数是“偏移的页数”，不用自定义的`page`变量即可做到分批次获取。<2022年4月15日>
-- 歌手详情页完成，包括基本信息展示，TOP50，热门MV，专辑等。专辑利用之前完成的逻辑，可点击。此外，还有获取歌手所有歌曲功能。再吐槽一下这个`offset`参数，在`/artist/songs`这个接口下，`offset`又变成了“偏移个数”而不是“偏移页数”。。 需要借用`page`遍量，标注出“偏移页数”再进行分批次获取。
-  - 利用[全局事件总线](https://www.fintinger.site/p/vue2.0%E5%AD%A6%E4%B9%A0%E5%B0%8F%E7%BB%93/#%e5%85%a8%e5%b1%80%e4%ba%8b%e4%bb%b6%e6%80%bb%e7%ba%bfglobaleventbus)实现歌单的点击，专辑的点击，歌手的点击，歌手全部歌曲的点击。<2022年4月16日>
-- 歌曲的播放页完成(仅包括`fixed`定位下的那一小条...)！！！又双叒吐槽一下API，那个获取音乐URL的API`/song/url?id=33894312`真的啥都获取不到，一般url都为null。。还好，有个莫名其妙的API：`https://music.163.com/song/media/outer/url?id=id.mp3`，给audio标签即可播放。。真好👏🏼此外，对于Audio标签，不用插入到DOM树里面，而是利用其自身属性或者方法即可。对于其`current`属性的监听，可以利用audio标签上的监听事件(不是document监听！！)`timeupdate`或`canplay`即可，例如：
-
-```js
-//sel===songElement,就是audio标签
-this.sel.addEventListener('timeupdate', this._currentTime)
-this.sel.addEventListener('canplay', this._durationTime)
-//<2022年4月17日>
+```
+src/api/            接口封装（统一 request 实例）
+src/components/     通用组件、布局组件（layout/）、播放器（musicPlayer/）
+src/pages/          路由级页面
+src/mixins/         搜索等页面的共享逻辑
+src/utils/          主题、音源、歌词、颜色提取等工具
+src/assets/scss/    base/ 下是语义 token（唯一色值出处）
+ops/nginx/          线上 nginx 配置镜像与部署手册（CI 不会部署它）
 ```
 
-- 播放器真的很复杂！！！今天完成歌曲详情页展示，其实就是歌词。。写样式永远是最麻烦的ou还好，终于写完了整个歌曲播放的逻辑有三个窗口模式：mini(仅进度条)，normal(看不到歌词)，expand(带歌词)，支持歌词点击跳转，随着歌曲播放各期自动添加class`cur`，以便后续进行样式设计。还差搜索页面，登录页面！！先休整两天，整整两天时间没动论文！我emo了，肝论文去了，拜拜！<2022年4月19日>
-- 完成mv播放界面，用到了貌似西瓜视频官方的[视频播放器组件](https://v2.h5player.bytedance.com/)（手写播放器真的很麻烦◑﹏◐），API简单，该有的功能都有，大赞！！（论文提交了四遍了……）<2022年4月24日>
-- 准备写登录界面，基本完成二维码登录逻辑（成功接收到返回的cookie）接口调太多遍，显示账号异常了。。只能明天(24h之后)再继续了<2022年4月25日>
-- 登录界面完成，手机号只能用验证码登录。优化了各个页面中存在的多个请求依次问题，利用axios的`all()`和`spread()`方法并发请求，代码逻辑简单，页面也流畅，好耶！在搜索界面，最终决定采用`router-link`路由的形式，这意味着又需要写好多个组件（单曲, 专辑, 歌手, 歌单, 用户, MV, 歌词, 电台, 视频, 综合, 声音），这样也更符合逻辑貌似，比图单曲界面和歌词界面的功能就完全不一样，几乎无法复用，所以还是写成单独组件好。<2022年4月26日>
-- 搜索界面完成，并且有以下新的收获或者改动<2022年4月27日>
-  - 对于像歌单布局，专辑布局，歌曲布局，歌手布局，MV布局，视频布局全部抽成组件，写样式更方便
-  - 在Search界面的子路由中，采用`mixin`技术公用方法和数据，极大简化子路由复杂度
-  - 发现还有视频页以及用户详情页没有做，这个需要完善一下
-  - 搜索API`/cloudsearch`在进行声音搜索，也就是`type=2000`时，经常返回空值，使用`search`API就好了
-- 视频播放页完成，并且将视频播放页的布局抽离出来让MV和Video公用。日常吐槽：<2022年4月28日>
-  - 这video跟mv差别本身不大，API中视频名称一会是"name"，一会又是"title"等等之类的问题，所以不得不单独抽离出一个关于key名称配置项，在引入该组件的时候需要传入配置，默认是MV格式的数据。
-  - 所提供的搜索API`/cloudsearch`进行视频搜索，也就是`type=1014`时，返回的数据中既有video，又有mv，这就不得不在判断为MV时，在video页面做一次重定向，redirect到mv播放界面，此时需要使用路由中的`replace`跳转，以防止出现历史记录无法back的问题。
-- 用户详情页面完成。抽出公共组件`UserDetailLayout`以便登录之后的user页面和用户详情页面使用。<2022年4月30日>
-- 完成了扫码登录后个人信息展示的逻辑，自动展示个人信息，且保存登录状态；而且通过`vuex`保存个人信息，在首页展示个人头像。<2022年5月4日>
-- 根据所给API对发现页大改造，目前发现页分为四类：歌单、MV、视频、榜单，在各大类下展示具体的页面，充分利用API。<2022年5月7日>
-- 小细节优化，包括在歌曲播放界面使用相似音乐、相似歌单([获取最近 5 个听了这首歌的用户](https://neteasecloudmusicapi.vercel.app/#/?id=获取最近-5-个听了这首歌的用户)API失效)；在搜索结果页面使用多重匹配，更快找到搜索结果；video播放界面让mlog的id转成video的id……<2022年5月9日>
-- 登录状态记入vuex中，添加推荐歌单、日推歌曲，私人FM，歌曲链接优化(登录之后能够获取到歌曲URL)……<2022年5月11日>
-- 优化音乐播放器逻辑，完善手机验证码逻辑<2022年5月12日>
-  - 一首歌播放结束后自动播放下一曲，末尾则回零
-  - 利用Promise，解决反复触发play方法，歌曲一首一首加载的BUG，利用promiseList(一个自定义的用来存储Promise的队列)暂存需要触发的Promise，而不是直接触发；通过监听promiseList变化只执行最新添加进来的Promise
-  - 将歌曲列表保存到vuex中进行共享，以便添加播放整个列表、私人FM播放等
-- 完成私人FM页面逻辑，完善清空播放列表逻辑。私人FM不通过song的改变触发歌曲播放，而是直接改变存储在vuex中的current playlist达到改变current song的目的<2022年5月13日>
-- 新增歌曲、MV、Video、歌单、专辑评论区<2022年5月19日>
-- 评论区功能优化，包括新增评论，回复评论，点赞评论，删除评论。此外，决定整个项目的图标使用阿里巴矢量图标库来完成<2022年5月22日>
+## 部署
 
+- 推送到 `master` 触发 `.github/workflows/deploy.yml`（带路径过滤），构建产物发布到 VPS；失败时可用 `scripts/deploy.sh` 兜底
+- **nginx 不由 CI 部署**，改 `ops/nginx/*.conf` 不会影响线上，操作步骤见 [`ops/nginx/README.md`](ops/nginx/README.md)
+- git tag 不触发部署，发布动作与部署动作是两件事
 
+## 说明
 
-### 什么时候能继续优化？
-
-谁知道呢～
-
+本项目为第三方客户端，仅供学习与自用，与网易云音乐官方无关。
+音乐、封面、歌词等内容的版权归网易云音乐及相应权利人所有；接口来自开源项目 [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)。

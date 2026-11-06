@@ -3294,3 +3294,43 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 ### 2026-11-05 — 应用内更新日志（CHANGELOG.md → 弹窗 + 未读红点）
 - 计划：新增面向使用者的 `CHANGELOG.md`（与内部的 `docs/CHANGELOG_AI.md` 分离，避免把"未验收/未部署"这类话露给用户）。用 `scripts/build-changelog.mjs` 把 Markdown 转成 `src/data/changelog.generated.js`，挂在 `prebuild` / `preserve` 上（`npm run build` 会自动触发，CI 无需改）。App 增加 `ChangelogDialog`，入口放在头像菜单与页脚；未读状态用 `localStorage.acmusic_seen_changelog` 与 `package.json` 版本比对，有新版本时头像和菜单项各点一个小红点。版本号 1.0.0 → 1.1.0（package.json 与 lock 根版本同步），页脚自动显示 v1.1.0。
 - 结果：新增 `CHANGELOG.md`、`scripts/build-changelog.mjs`、`src/data/changelog.generated.js`、`src/components/common/ChangelogDialog.vue`、`src/utils/changelog.js`；改动 `src/App.vue`、`src/components/common/AppFooter.vue`、`src/assets/scss/navigationBar.scss`、`package.json`、`package-lock.json`、`AGENTS.md`（补充版本与日志约定）。lint 通过、dev 编译通过；未真机验收，未提交/未部署、未打 tag。
+
+### 2026-11-06 — 主题切换动画 + 三处深色可见性修复 + 上次登录 IPv6 归属地
+- 计划（5 项用户反馈）：`1)` 深浅色切换过渡动画——主路径 View Transitions API 从切换按钮处圆形扩散（clip-path 动画 + JS 写入 --theme-reveal-x/y/r 视口坐标），不支持 startViewTransition 的浏览器降级为 <html>.theme-anim 全局 380ms 颜色过渡（用完即摘），prefers-reduced-motion 下直接切换；首帧初始化与系统主题自动变化仍走无动画的 applyTheme。`2)` 歌单所有者操作区（编辑信息/管理歌曲/行内 ↑↓✕/danger）颜色全部写死浅色系（#555 / rgba(0,0,0,.05) / #999 / #888），深色下几乎看不清——统一换成语义 token（--c-text-secondary / --c-bg-hover / --c-border-strong / --c-danger-text）。`3)` 私FM「播放全部」的 .btn-icon-circle 原为 rgba(95,99,104,.12) 淡灰圆叠磨砂玻璃底，深浅两态都几乎不可见——改 var(--c-accent) 实底 + 白色三角。`4)` 播放条 .barPlay 与播放详情页 .playBtn 图标色原为 var(--theme-on-accent)（#101013 近黑），改 #fff。`5)` 上次登录只显示 IP：线上实测 ip-location 对 IPv4 正常（223.5.5.5→浙江·杭州），对 encodeURIComponent 编码后的 IPv6（冒号→%3A）返回空 location，对未编码 IPv6 正常——根因是 3001 辅助服务不对 query 参数 decode；前端侧改为不再编码（IP 字符集 URL 安全），服务端真正的修复（decode 参数）不在本仓库，待 VPS 侧处理。maskIP 顺带修 IPv6 泄露全地址的问题（按 ':' 切分只留前两组）。
+- 结果：改 `src/utils/theme.js`（applyThemeAnimated / setTheme 带 origin）、`src/App.vue`（toggleTheme 传点击坐标）、`src/assets/scss/app.scss`（view-transition + .theme-anim 样式）、`src/pages/ListDetail.vue`、`src/components/PersonalFM.vue`、`src/components/musicPlayer/PlayerCore.vue`、`src/components/musicPlayer/MusicPlayer.vue`、`src/utils/ipLocation.js`；版本 1.1.0→1.1.1，CHANGELOG.md 增 1.1.1 段并 yarn changelog 重新生成。lint 通过、build 通过；动画效果未做真机逐浏览器验收（View Transitions 仅 Chromium/Safari 18+，Firefox 走降级路径）。未提交/部署。
+
+### 2026-11-06 — 主题动画双向化 + 播放三角圆角 + 上次登录回环 IP 处理（版本号回退）
+- 计划（4 项用户反馈）：`1)` 切换动画分方向——切浅色时新主题从点击点圆形展开（裁剪 new 层，半径 0→R）；切深色时反向，旧主题由满屏收缩进点击点（裁剪 old 层，半径 R→0，靠 z-index 把 old 压到 new 之上），深色即从四周向中心聚拢。方向由 JS 写入 --theme-vt-old/new-anim、--theme-vt-old/new-z 变量驱动（视图过渡伪元素继承根元素变量，避免依赖 `html[attr]::view-transition-*` 这种不可靠选择器）。`2)` 播放三角圆角化：只改图标不改圆形底座——三个角用二次贝塞尔收圆（顶点 (20,12)(8,4.6)(8,19.4)，端点沿边内收约 5px，视觉圆角≈3/24），pause 双竖条同步做 1.4 圆角避免一软一硬。`3)` 上次登录：线上 IP 为 127.0.x.x（回环地址），任何 IP 库都无归属地，属数据本身问题；前端改为「回环/内网 IP 不展示」，只显示时间并挂 title 说明原因，避免继续显示无意义的「IP 127.0.***.***」。`4)` 按要求回退版本号：package.json / lock 回到 1.1.0，撤掉 CHANGELOG.md 的 1.1.1 段（用户日志等全部改完 push 时再统一加），开发记录仍留在 docs/CHANGELOG_AI.md。
+- 结果：改 `src/utils/theme.js`（applyThemeWithTransition，方向变量 + 连点保护）、`src/assets/scss/app.scss`（theme-circle-reveal / theme-circle-converge 两套 keyframes + old/new 分层的 z-index 变量）、`src/config/icon.js`（play 圆角路径、pause 同风格）、`src/utils/ipLocation.js`（isUnlocatableIp）、`src/components/layout/UserDetailLayout.vue`（lastLoginText 过滤回环 IP + lastLoginHint tooltip）、package.json / package-lock.json / CHANGELOG.md（回退）。
+- 验证：无头 Edge + CDP 实测——切深色中间帧可见浅色圆形收缩、深色由边缘进入；切浅色为反向扩散；结束后无残留裁剪。播放条 .barPlay 计算样式 color=rgb(255,255,255)、背景 #8685ef、图标路径为圆角版本，放大截图确认三角圆角正常。lint / build 通过。
+- 已知未解：127.0.0.1 的来源在服务端（网易记录的就是回环地址），真正的归属地需要重新登录让记录更新为公网 IP；若重登后仍是 127.x，则说明 API 网关没有把真实客户端 IP 透传给网易（X-Real-IP/realIP），需在 3000/3001 或 nginx 侧排查，不在本仓库范围内。
+
+### 2026-11-06 — 大播放页播放按钮图标放大
+- 现象：mini 播放条 32px 圆钮配 18px 图标（占 56%）观感正常，展开后按钮放大到 58px，但 `i { font-size: 20px }` 来自基础 `.playBtn`，图标只占 34%，看起来缩水。
+- 处理：在 `.playerWrapper.expandWindow` 里给 `.controlsRow .playBtn` 单独把图标补到 34px（可见三角高约 21px，与 mini 条比例一致），加载圈同步放大到 22px / 2.5px 描边；基础 44px 形态不动。
+- 验证：无头 Edge 打开大播放页实测——按钮 58×58、图标计算字号 34px，截图与左右切歌按钮的视觉重量平衡；lint / build 通过。未提交/部署。
+
+### 2026-11-06 — 补全开发日志：DEVLOG 编年史 + 提交清单生成器 + README 瘦身
+- 背景：README 里 2022 年的手写日志（2022-04-07 ~ 05-22，20 条）是这段时期唯一史料（git 在 2022 只有 1 个提交），但没有和 2026 年的开发记录连起来；`docs/CHANGELOG_AI.md` 只覆盖 2026-09-02 之后，中间 2026-07-30 ~ 09-01（约 50 个提交）是空档。
+- 处理：`1)` 新建 `docs/DEVLOG.md` 编年史：2022 两阶段原文迁移（保留第一人称语气与踩坑细节，只统一日期格式并去掉内嵌日期）、2023 零星维护、2026 按七波主题分段（地基与播放器 → 播放器深水区 → 工程化清理 → bug 大扫除 → P0 与首次上线 → 四层播放状态与主页重构 → 1.0 发布），附版本线与资料索引。`2)` 新增 `scripts/build-devlog.mjs` + `yarn devlog`：从 git 历史生成 `docs/DEVLOG_COMMITS.md`（按年月分组、提交行标注所在 tag、末尾标签索引），字段用 \u001f 分隔避免提交信息里的竖线截断。`3)` README 瘦身为简介/技术栈/命令/目录/文档索引，原手写日志迁至 DEVLOG（含两条 2022 技术备忘附录），避免两处维护。`4)` AGENTS.md 补 `yarn devlog` 命令与 DEVLOG 定位说明；修正 `.env` 仍带 `VUE_APP_AMAP_KEY` 的过期描述（高德 Key 已随 ip-location 服务端化移除）。
+- 结果：文档三层分工落地——DEVLOG 讲历程、CHANGELOG_AI 讲取舍、CHANGELOG 讲用户可见变化。生成器实测输出 8 个月 / 174 个提交 / 8 个标签，2022-04-12 ~ 2026-11-05。lint 通过；纯文档与脚本改动，未触碰 src。未提交/部署。
+
+### 2026-11-06 — 补齐版本标签并收敛 tag 命名
+- 背景：174 个提交只有 3 个版本号，版本线起点断裂——2022 年那次真实交付既没 tag 也没 CHANGELOG；同时 v1.0.0 / v1.1.0 两个正式发布从未打过标签，而 2026-08 的 8 个阶段 tag 全都用 `v` 开头，和版本号撞前缀。
+- 处理：`1)` 补 `v0.1.0`（指向 c5b72a1，message 明确标注"补记，非当时发布"）；`2)` 补正式发布 tag `v1.0.0`（2c79ebb）、`v1.1.0`（abf0e23）；`3)` 新增三个阶段标记 `stage/2026-08-player`（7d946ab）、`stage/2026-09-cleanup`（896e202）、`stage/2026-10-refactor`（497a97c），不占版本号；`4)` 命名规则收敛写进 AGENTS.md 与 DEVLOG：`vX.Y.Z` 只表示发布，阶段进度用 `stage/<yyyy-mm>-<topic>`，老 tag 不追改。
+- 结果：全部为本地 annotated tag，未 push；`yarn devlog` 已重新生成 `docs/DEVLOG_COMMITS.md`，提交行会就地标注所在 tag，末尾标签索引 14 条。DEVLOG 版本线补上 0.1.0 并新增"阶段标记"小节。未改动 package.json（本批改动仍等 push 时统一定 1.2.0）。
+- 补充：0.2.0 当时也只有 `chore(release): v0.2.0` 提交、没有 tag，一并补 `v0.2.0`（9c4e962），使 0.1.0 → 0.2.0 → 1.0.0 → 1.1.0 四个版本号全部有 tag 可查。
+
+### 2026-11-06 — README 重写（配图 + 功能亮点 + 部署说明）
+- 背景：开发日志迁出后，README 只剩索引骨架，缺门面（无截图、无功能说明），也没提部署与 CI 边界。仓库是 public，首屏观感直接影响别人要不要往下看。
+- 处理：`1)` 结构改为「标题定位 → 首屏截图 → 功能亮点（播放器/音源/内容/外观/工程）→ 技术栈 → 本地开发 → 环境变量 → 目录 → 部署 → 文档索引 → 说明」；标题用 `<h1 align="center">` 而不是在 div 里写 markdown（GitHub 的 HTML block 会吞掉块内 markdown）。`2)` 新增三张实拍截图 `docs/assets/screenshots/{home,playlist,player}.webp`（深色主题、1440×900、未登录、无个人数据），PNG 转 WebP 后 1.85MB → 288KB。`3)` 新增 `scripts/shot-readme.mjs` + `yarn shot:readme`，从本地 dev server 自动重拍三张图并转 WebP。`4)` 补部署说明：push master 触发 Actions（带路径过滤）、`scripts/deploy.sh` 兜底、nginx 不由 CI 部署、tag 不触发部署。
+- 踩坑记录（写进脚本注释）：无头浏览器不主动产帧，Vue 的展开过渡会永远卡在 `opacity:0`，必须反复 `Page.captureScreenshot` 强制出帧；带 `backdrop-filter` 的悬浮按钮在 `--disable-gpu` 下偶发渲染成黑块，多刷几帧恢复。
+- 结果：`yarn shot:readme` 实测可复现（home 151KB / playlist 54KB / player 70KB）。README 链接与图片路径全部自检通过。未提交/部署。
+- 调整（用户要求）：删掉 README 的「文档」索引表，篇幅 91 → 77 行；顶部仍保留「开发日志 / 更新日志」两个入口，`ops/nginx/README.md` 因部署段落需要保留。其余文档（PROJECT_CONTEXT、ARCHITECTURE_DECISIONS、API_INDEX/GAPS、AGENTS）不再从 README 直达，改由仓库 docs/ 目录与 AGENTS.md 发现。
+
+### 2026-11-06 — 更新日志补齐历史版本（0.1.0 / 0.2.0）并定版 1.2.0
+- 背景：应用内更新日志只有 1.0.0 / 1.1.0 两段，2022 至 2026-11-04 的历史在用户侧完全不可见——`CHANGELOG.md` 是 1.0.0 首发时才建立的，0.2.0 有 release 提交但当时没有日志机制，2022 版更没有。
+- 处理（用户选 C：全部补齐）：`1)` 新增 `## 0.2.0 — 2026-10-21`：按当时提交还原（播放器 P0 五项、系统媒体控制与快捷键、歌单编辑闭环、全站页脚、CI 首次自动部署、音频 https、路由分包与错误边界、8080 端口固定）。`2)` 新增 `## 0.1.0 — 2022-05（补记）`：开头加「说明」小节，明确"当年没有发布流程、按 DEVLOG 原始日志整理、仓库内这段只有一个提交"，再列 6 条功能；日期用 2022-05 而非 tag 指向的 04-12，因为版本覆盖整个 2022 春的开发。`3)` 新增 `## 1.2.0 — 2026-11-06`：本批改动（动画、播放按钮、FM 图标、深色可见性、回环 IP）。`4)` package.json / lock 升 1.2.0，`yarn changelog` 生成 5 个版本；DEVLOG 版本线把「待发」替换为 1.2.0 并修正 0.1.0 的日期表述。
+- 结果：应用内「更新日志」从 2 段变 5 段（1.2.0 / 1.1.0 / 1.0.0 / 0.2.0 / 0.1.0），1.1.0 用户的红点会在部署后亮起。**未提交、未打 v1.2.0 tag**——tag 必须指向 release 提交，等提交后再打，避免指向旧 HEAD。
+- 调整（用户要求）：`0.1.0` 段去掉「说明」小节与日期里的「（补记）」后缀，应用内只显示 `v0.1.0 · 2022-05` 和 6 条功能（补记的事实改由 `docs/DEVLOG.md` 的版本线说明承担，不再出现在用户可见日志里）。已重新生成，5 个版本不变。
+- 调整：更新日志弹窗的滚动区接上全站滚动条规范（5px 宽 / 轨道 `--c-bg-hover` / 滑块 `--c-scroll-thumb` + 5px 圆角 + hover 提亮），此前用的是系统默认粗滚动条且不随深色主题变化。实测计算样式：width 5px、thumb rgba(255,255,255,.3)、track rgba(255,255,255,.06)。未改 1.2.0 用户日志（属视觉细节，不占条目）。
