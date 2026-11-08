@@ -455,7 +455,17 @@ export default {
     trackAlbumPic(t) { return (t.album && t.album.picUrl) || (t.al && t.al.picUrl) || '' },
     trackArtists(t) { const ar = t.ar || t.artists; return ar && ar.length ? ar.map(a => a.name).join(' / ') : '' },
     playSimilarTrack(t) { this.$bus.$emit('songClk', t) },
-    arClick() { const ar = (this.currentSong.ar || this.currentSong.artists); if (ar && ar[0]) this.$bus.$emit('arClk', ar[0].id) },
+    /**
+     * 歌手名点击。刷新后 currentSong 是从 player_state 恢复的精简对象，
+     * 老数据里可能只有名字没有 id —— 名字一起发出去，由 App 兜底反查 id。
+     */
+    arClick() {
+      const ar = this.currentSong.ar || this.currentSong.artists
+      const first = Array.isArray(ar) ? ar[0] : ar
+      if (!first) return
+      if (typeof first === 'string') this.$bus.$emit('arClk', 0, first)
+      else this.$bus.$emit('arClk', first.id, first.name)
+    },
     alClick() { const id = (this.currentSong.al && this.currentSong.al.id) || (this.currentSong.album && this.currentSong.album.id); if (id) this.$bus.$emit('alClk', id) },
     plClk(id) { this.$bus.$emit('plClk', id) },
     progressClk(evt) {

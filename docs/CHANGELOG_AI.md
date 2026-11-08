@@ -3334,3 +3334,12 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 结果：应用内「更新日志」从 2 段变 5 段（1.2.0 / 1.1.0 / 1.0.0 / 0.2.0 / 0.1.0），1.1.0 用户的红点会在部署后亮起。**未提交、未打 v1.2.0 tag**——tag 必须指向 release 提交，等提交后再打，避免指向旧 HEAD。
 - 调整（用户要求）：`0.1.0` 段去掉「说明」小节与日期里的「（补记）」后缀，应用内只显示 `v0.1.0 · 2022-05` 和 6 条功能（补记的事实改由 `docs/DEVLOG.md` 的版本线说明承担，不再出现在用户可见日志里）。已重新生成，5 个版本不变。
 - 调整：更新日志弹窗的滚动区接上全站滚动条规范（5px 宽 / 轨道 `--c-bg-hover` / 滑块 `--c-scroll-thumb` + 5px 圆角 + hover 提亮），此前用的是系统默认粗滚动条且不随深色主题变化。实测计算样式：width 5px、thumb rgba(255,255,255,.3)、track rgba(255,255,255,.06)。未改 1.2.0 用户日志（属视觉细节，不占条目）。
+
+### 2026-11-08 — 修复：刷新后 / 云盘曲目的歌手名点击不跳转
+- 现象：页面刷新之后，播放详情页点歌手名没反应；「我的 → 云盘」里点歌手名同样点不动，即便该歌手在网易云存在。
+- 根因（同一个：点击时手上没有歌手 id）：
+  1. `PlayerCore._saveState()` 只把歌手名文本写进 `acmusic_player_state`，`_restoreState()` 恢复时合成 `ar: [{name}]` 没有 id → `arClick` emit `undefined` → `router.push({name:'artistDetail', query:{id:undefined}})`，URL 落到 `/artistDetail`（无 id），歌手页判非法 id 显示「歌手详情加载失败」。
+  2. 云盘曲目是自己上传的文件，网易云返回 `simpleSong.ar[0].id === 0`（只有名字、没有关联歌手）→ `RankList.arClk` 里的 `if (id)` 直接 return，连路由都不动。
+- 处理：`1)` 新增 `src/utils/artistLink.js`：`resolveArtistId(id, name)` —— id 合法直接用，否则 `/search?type=100` 按名字反查，完全同名优先，命中按名字缓存、连点用 pending 去重、失败不缓存以便重试。`2)` `App.artistClick(id, name)` 增加第二参数，id 无效但有名字时先反查再跳，查不到 `$toast.warning('没找到歌手「X」')`；`albumClick` 补 `isValidId` 守卫（原来会把 undefined 拼成 `/albumDetail`）。`3)` `_saveState` 增存 `ar:[{id,name}]` 与 `alId`，`_restoreState` 还原（老存档没有 id 就退化成只有名字，走反查）；顺手把专辑 id 也存了，刷新后专辑行点击不再丢。`4)` `MusicPlayer.arClick` 把歌手名一起 emit；`RankList` 兼容 `ar`/`artists`/纯字符串并 emit `(id, name)`；`UserDetailLayout` 映射云盘数据时若 `ar` 为空或名字为 null，用外层 `artist` 文本补 `{id:0, name}`。
+- 验证：无头 Edge + CDP 四场景全过 —— 新存档带 id 直跳 `?id=6452`（零额外请求）；老存档只有名字经反查后跳 `?id=6452`；`artistClick(0,'周杰伦')`（云盘形态）跳 `?id=6452`；不存在的名字不跳转且有 toast。持久化回路（恢复→再存）`ar`/`alId` 不丢。lint 通过，dev 编译通过。
+- 注意事项：老用户的 `acmusic_player_state` 没有 id，首次点歌手名会多发一次搜索请求（之后走内存缓存）；云盘曲目因源数据只有名字，每次会话首次点击同理。版本号保持 1.2.0 未动，CHANGELOG.md 未加段（用户可见日志与版本号绑定，等下个版本再纳入）。

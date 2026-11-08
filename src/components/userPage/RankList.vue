@@ -10,8 +10,8 @@
       <div class="rankMeta">
         <p class="rankName" :title="t.name">{{ t.name || '未知' }}</p>
         <p v-if="artistText(t)" class="rankArtist" :title="artistText(t)">
-          <span v-for="(a, ind) in (t.ar || [])" :key="ind" @click.stop="arClk(a.id)">{{ a.name }}<i
-              v-if="ind !== t.ar.length - 1">, </i></span>
+          <span v-for="(a, ind) in artistsOf(t)" :key="ind" @click.stop="arClk(a)">{{ a.name }}<i
+              v-if="ind !== artistsOf(t).length - 1">, </i></span>
         </p>
       </div>
       <span v-if="metaText(t)" class="rankVal">{{ metaText(t) }}</span>
@@ -68,8 +68,20 @@ export default {
       const al = t.al || t.album || {}
       return al.picUrl || ''
     },
+    /**
+     * 歌手列表：兼容 ar / artists，且把纯字符串补成对象。
+     * 云盘曲目（自己上传的文件）常常 ar 为空、只有外层 artist 文本，
+     * 所以这里不能只认 t.ar。
+     */
+    artistsOf(t) {
+      let ar = (t && (t.ar || t.artists)) || []
+      if (!Array.isArray(ar)) ar = [ar]
+      return ar
+        .map(a => (typeof a === 'string' ? { id: 0, name: a } : (a || {})))
+        .filter(a => a.name)
+    },
     artistText(t) {
-      return (t.ar || []).map(a => a.name).join(', ')
+      return this.artistsOf(t).map(a => a.name).join(', ')
     },
     metaText(t) {
       if (this.meta === 'count') return t.recordPlayCount ? t.recordPlayCount + ' 次' : ''
@@ -79,8 +91,14 @@ export default {
     play(t) {
       this.$bus.$emit('songClk', t)
     },
-    arClk(id) {
-      if (id) this.$bus.$emit('arClk', id)
+    /**
+     * 点歌手名。云盘曲目的 ar[].id 恒为 0（自己上传的文件没有关联歌手），
+     * 只传 id 会被 App 的守卫挡掉，所以名字一起发出去，由 App 按名字反查。
+     */
+    arClk(a) {
+      const artist = typeof a === 'string' ? { id: 0, name: a } : (a || {})
+      if (!artist.id && !artist.name) return
+      this.$bus.$emit('arClk', artist.id, artist.name)
     },
   },
 }

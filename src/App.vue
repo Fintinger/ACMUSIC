@@ -112,6 +112,7 @@ import { isChangelogUnread, markChangelogSeen } from '@/utils/changelog';
 import {watchAccent} from '@/utils/accent';
 import {doLogout} from "@/utils/auth";
 import { saveScroll, restoreScroll } from "@/utils/scrollMemory";
+import { resolveArtistId, isValidId } from '@/utils/artistLink'
 import config from "./config"
 import {getStoredTheme, setTheme, watchTheme} from '@/utils/theme'
 
@@ -198,15 +199,35 @@ export default {
       })
     },
     albumClick(id) {
+      // 没有 id 就别跳 —— 以前会把 undefined 拼成 `/albumDetail`，落到「加载失败」页
+      if (!isValidId(id)) return
       this.$router.push({
         name: "albumDetail",
         query: {id}
       })
     },
-    artistClick(id) {
-      this.$router.push({
-        name: "artistDetail",
-        query: {id},
+    /**
+     * 歌手名点击：优先用现成的 id；只有在拿不到 id 时才按名字反查
+     * （刷新后恢复的播放器队列、云盘上传曲目都属于这一类，见 utils/artistLink.js）。
+     */
+    artistClick(id, name) {
+      if (isValidId(id)) {
+        this.$router.push({
+          name: "artistDetail",
+          query: {id},
+        })
+        return
+      }
+      if (!name) return
+      resolveArtistId(0, name).then(artistId => {
+        if (!artistId) {
+          this.$toast.warning(`没找到歌手「${name}」`)
+          return
+        }
+        this.$router.push({
+          name: "artistDetail",
+          query: {id: artistId},
+        })
       })
     },
     artistAllSongsClick(id) {

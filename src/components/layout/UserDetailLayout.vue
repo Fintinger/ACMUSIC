@@ -769,7 +769,23 @@ export default {
         : Promise.resolve()
       const p3 = isSelf
         ? User.getCloud().then(res => {
-            res.data.data.forEach(val => { val.simpleSong.fileSize = val.fileSize; this.cloudTracks.push(val.simpleSong) })
+            const list = res.data.data || []
+            list.forEach(val => {
+              const song = val.simpleSong || {}
+              song.fileSize = val.fileSize
+              /**
+               * 云盘里是自己上传的文件：网易云不给关联歌手，ar 可能为空、
+               * 可能只有 {id: 0, name}、甚至 name 为 null（只在最外层给个 artist 文本）。
+               * 这里统一补成 [{id, name}]，先保证「点得动」——
+               * id 缺失/为 0 时由 App 按名字反查（utils/artistLink.js）。
+               */
+              if (!Array.isArray(song.ar)) song.ar = []
+              if (!song.ar.some(a => a && a.name) && val.artist) {
+                const firstId = (song.ar[0] && Number(song.ar[0].id)) || 0
+                song.ar = [{ id: firstId, name: val.artist }]
+              }
+              this.cloudTracks.push(song)
+            })
           }).catch(() => { this.cloudTracks = []; this.partialLoadError = true })
         : Promise.resolve()
       const p4 = isSelf

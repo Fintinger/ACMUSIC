@@ -2943,6 +2943,31 @@ export default {
      *      当前曲不在队列里 → 列表高亮丢失、`currentPlaylist[ind]` 为 undefined
      * 现在改为以 curIndex 为中心取窗口，并把窗口偏移从 currentIndex 里扣掉。
      */
+    /**
+     * 只保留「id + 名字」的歌手数组，供持久化用。
+     * 早期版本只存了歌手名文本（artists 字符串），刷新后 currentSong.ar 里没有 id，
+     * 点歌手名就只能 emit 一个 undefined —— 于是详情页拿不到 id、跳转失效。
+     * 这里把 id 一并带上；名字也留着，万一老数据没 id 还能按名字反查。
+     */
+    _artistLite(track) {
+      const raw = track && (track.ar || track.artists)
+      if (!raw) return []
+      const list = Array.isArray(raw) ? raw : [raw]
+      return list
+        .map(a => (typeof a === 'string'
+          ? { id: 0, name: a }
+          : { id: Number(a && a.id) || 0, name: (a && a.name) || '' }))
+        .filter(a => a.id || a.name)
+    },
+    /** 专辑同理：详情页的专辑行点击也依赖 id */
+    _albumLite(track) {
+      const al = (track && (track.al || track.album)) || {}
+      return {
+        id: Number(al.id) || 0,
+        name: al.name || '',
+        picUrl: al.picUrl || ''
+      }
+    },
     _saveState() {
       const s = this.currentSong
       if (!s || !s.id) return
@@ -2951,6 +2976,8 @@ export default {
         id: t.id,
         name: t.name || '',
         artists: this._artistText(t),
+        ar: this._artistLite(t),
+        alId: this._albumLite(t).id,
         album: (t.al && t.al.name) || (t.album && t.album.name) || '',
         picUrl: (t.al && t.al.picUrl) || (t.album && t.album.picUrl) || '',
         duration: t.dt || t.duration || 0,
@@ -2970,7 +2997,10 @@ export default {
           // 专辑名要一起存：否则刷新后大播放器的专辑行是空的（原来只存了封面）
           album: (s.al && s.al.name) || (s.album && s.album.name) || '',
           cover: (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || '',
-          artists: this._artistText(s)
+          artists: this._artistText(s),
+          // 歌手/专辑的 id 必须单独存：详情页那两行文案点了要跳详情
+          ar: this._artistLite(s),
+          alId: this._albumLite(s).id
         },
         playlist,
         playlistOffset: offset,
@@ -3119,9 +3149,11 @@ export default {
               id: t.id,
               name: t.name || '',
               artists: t.artists || '',
-              ar: t.artists ? [{ name: t.artists }] : [],
+              // 新数据带 ar（含 id）；老存档只有 artists 字符串，退化成「只有名字」，
+              // 点歌手名时由 App 按名字反查 id（utils/artistLink.js）
+              ar: Array.isArray(t.ar) && t.ar.length ? t.ar : (t.artists ? [{ name: t.artists }] : []),
               album: t.album || '',
-              al: { name: t.album || '', picUrl: t.picUrl || '' },
+              al: { id: Number(t.alId) || 0, name: t.album || '', picUrl: t.picUrl || '' },
               picUrl: t.picUrl || '',
               dt: t.duration || 0,
               duration: t.duration || 0,
@@ -3149,8 +3181,14 @@ export default {
           this.currentSong = {
             id: data.song.id,
             name: data.song.name,
-            al: { name: data.song.album || '', picUrl: data.song.cover },
-            ar: [{ name: data.song.artists }]
+            al: {
+              id: Number(data.song.alId) || 0,
+              name: data.song.album || '',
+              picUrl: data.song.cover || ''
+            },
+            ar: Array.isArray(data.song.ar) && data.song.ar.length
+              ? data.song.ar
+              : [{ name: data.song.artists }]
           }
           this.showBar = true
         }
