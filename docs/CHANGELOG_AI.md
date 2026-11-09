@@ -3355,3 +3355,47 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 补充（登出场景）：`doLogout()` 里显式 `SET_HEART_MODE false`。登出是明确的语义动作，不想依赖 PlayerCore 的 `isLogin` watcher（它读的 `UserAbout/isLogin` getter 在求值时写 state，这种"算子里改依赖"的写法本项目已记过一次缓存不可靠）。顺带确认：退出登录后刷新**不会**恢复心动模式——`doLogout` 清掉了 MUSIC_U，而 `isLoggedIn()` 只认 MUSIC_U；未登录时 main.js 的游客登录写的是 `MUSIC_A` / `MUSIC_R_T`（不含 MUSIC_U），所以游客态也不会被误判成登录用户（实测：只剩游客 cookie + 存档 heartMode=true，刷新后 heart=false、队尾按普通队列处理）。
 - 注意事项：FM 兜底取流只在"没有首页组件"时启用，两条路径互斥，不会重复请求；`fmStagedBatch` 仍是会话态，刷新后为空（所以非首页刷新的第一轮会现拉一次，约 200~500ms 空档）。与上一条一并发布为 1.2.1（CHANGELOG.md 合并成一段）。
 - 发版：`package.json` / `package-lock.json` 1.2.0 → 1.2.1；`CHANGELOG.md` 新增 `## 1.2.1 — 2026-11-09` 并把 11-08 的歌手名跳转修复与本次两处修复合并成一段；`yarn changelog` 重新生成（6 个版本）；`docs/DEVLOG.md` 版本线补 1.2.1；打 annotated tag `v1.2.1` 指向本次 release 提交。
+
+### 2026-11-09 — 新增：播放详情页「歌曲信息」tab（百科事实 / 背景故事 / 乐评）
+
+- 背景：用户问「歌曲信息返回时有没有背景故事」。实测 `/song/detail` 只有 `alia`（别名，偶尔是影视出处）与 `tns`（译名），没有 `description` 字段；网关上有三条可用的侧路，此前项目一个都没接：`/ugc/song/get`（词曲编曲、语种、发行时间、唱片公司、原曲，纯结构化事实）、`/song/wiki/summary`（音乐百科 DSL：曲风、推荐标签、BPM、获奖、影视出处、`songComment` 乐评正文）、`/album` 的 `description`（专辑级长文，常常就是创作动机，《海阔天空》那条 1462 字）。三者互补：百科给「事实」，专辑介绍给「故事」，乐评给「补充」。
+- 方案：播放详情页右栏加第 4 个 tab「歌曲信息」，顺序即阅读顺序——副标题（影视/原曲出处）→ 基本信息（发行时间/语种/唱片公司/BPM/译名/原曲）+ 词曲编曲（歌手名可点跳转）→ 背景故事（专辑介绍，默认 6 行折叠）→ 乐评（有才渲染）→ 收录与获奖。**懒加载**：只有切到这个 tab 且歌变了才发请求，三路并发，单个失败不影响其余；切回歌词不销毁已加载内容，避免来回切重复请求。请求带序号守卫，快速切歌时旧响应不覆盖新数据。解析逻辑抽到 `utils/songInfo.js`（纯函数，`blocks → creatives` 按 `creativeType` 遍历，不按下标取；`language`/`bpm` 的值在 `textLinks[0].text` 而不是 `resources`），组件只负责渲染。
+- 影响文件：`src/api/Tracks.js`（+2 接口）、`src/api/Album.js`（无需改，复用 `getDetail`）、`src/utils/songInfo.js`（新增）、`src/components/musicPlayer/SongInfoPanel.vue`（新增）、`src/components/musicPlayer/MusicPlayer.vue`（tab 列表 + 面板挂载 + `_restoreUi` 白名单）。不改 PlayerCore、不动播放链路、不新增依赖。
+- 验证计划：`yarn lint` + `yarn build`；dev server 实页核查四种数据形态——资料全（《孤勇者》/《海阔天空》）、只有部分（《起风了》副标题是原曲出处）、几乎全空（小语种/翻唱）、云盘曲目（接口 404 时不报错只显示空态）。
+- 结果：`yarn lint` ✅ / `yarn build` ✅（无新增依赖，chunk 里只多了一个小组件）。
+- 实测（无头 Edge + CDP，2026-11-09）：
+  - **懒加载真的生效**：进播放器、停在歌词时，`ugc/song/get`、`song/wiki/summary`、`album` 三个请求都是 0 次；切到「歌曲信息」正好 3 次；切回歌词再切回来 0 次（组件常驻 + `loadedId` 去重）；换歌后只补新歌那 2~3 次。
+  - 内容：《孤勇者》= 副标题（双城之战主题曲）+ 发行时间/语种/BPM + 作词唐恬/作曲钱雷/编曲钱雷 + 乐评（含作者）+ 东方风云榜获奖 + 影视 chip；《海阔天空》= 唱片公司滚石（ugc 没给，走 album 兜底）+ 译名 + 1462 字专辑介绍（折叠 → 展开 → 收起 三步都验过）；《情非得已（童声版）》= 只有基本信息 + 原曲，无背景无乐评；不存在的 id = 空态「暂无歌曲资料」。
+  - 布局：1440 / 1280 / 1100 / 1000 / 820 五档宽度下 `.rightTabs` 的 `scrollWidth === clientWidth`，四 tab 不溢出；单列（≤900px）时面板底部留 76px，最后一张卡片不会被悬浮「查看评论」压住。
+  - 一个坑：面板被 `v-show` 收起时 `scrollHeight/clientHeight` 都是 0，`measureDesc` 会误判成「没溢出」并吞掉「展开全文」按钮。已用 `offsetParent === null` 直接跳过测量，并在 `active` 变 true 时补量一次（实测切 tab + 改窗口宽度后按钮仍在）。
+- 注意事项：
+  - **「背景故事」是专辑级的**，同专辑所有歌共享同一段（《海阔天空》那段讲的是 Beyond 十年，不是单曲创作轶事）；真正的单曲背景只有 `songComment` 乐评，覆盖不稳（8 首抽样 4 首有），没有就是没有——面板不该为它留空块。
+  - `/song/wiki/summary` 是未文档化的 DSL（`blocks → creatives`，取值位置反直觉：`language`/`bpm` 在 `textLinks` 不在 `resources`），上游改版的影响面被限制在 `utils/songInfo.js` 一个文件；组件只认 `buildSongInfo` 的固定结构。
+  - 三路接口全部 404/空（歌确实没收录）→ 「这首歌还没有人补充百科」；某一路是**连不上**（axios error 无 `response`）才判 `error` → 「资料加载失败，稍后再试」。404 不算失败，否则云盘/冷门曲目会被说成网络故障。
+  - 顺带修了一处会被本次改动打坏的地方：`scripts/shot-readme.mjs` 原来用 `rightTabs span[1]` 点「相似歌曲」，插进新 tab 后会点到「歌曲信息」，改成按文字选（以后再加 tab 也不会错位）。
+  - 未提交。建议 `feat: add song info tab to player`（`src/*` + `scripts/shot-readme.mjs`），`docs: log song info tab` 单独一条。
+
+### 2026-11-09 — 修复：「查看专辑」后全屏播放器不收起（同路由不产生路由变化）
+
+- 现象（用户反馈）：点「歌曲信息 → 查看专辑」，播放窗口没有缩小，一直盖在专辑页上。
+- 复现：**已经在目标专辑页**时最容易复现——`router.push` 到同一地址会被 vue-router 去重（`VueRouter.prototype.push` 还被全局兜底过），`$route` 不变化，而 MusicPlayer 里唯一负责收起的 `'$route'() { if (this.isExpand) this.isExpand = false }` 就不会触发。从别的页面点进来则是正常的（实测 `/` → `/albumDetail?id=34209` 能收）。
+- 处理：`1)` `SongInfoPanel.albumClk()` 改为先 `$emit('close-player')` 再发 `alClk`——收起不再依赖路由副作用；按钮只在 `album.id` 有值时才渲染，所以不会出现"收起了却没跳转"。`2)` `MusicPlayer` 接 `@close-player="isExpand = false"`。`3)` 顺带补了收起时的底条状态：`minified()` 里先 `clearHideTimer()` 再 `showBar = true`——大播放器盖住底条期间 `onMouseLeave` 排下的 hideTimer 会在收起后一两秒把播放条塌成 28px 细线，看起来像"播放器整个消失"，而不是"缩小成播放条"。
+- 验证：无头 Edge + CDP 实测同路由点「查看专辑」——`playerWrapper` 从 `expandWindow` 退回普通态、`.expandedOverlay` 不再可见，底条 `flex/61px` 稳定可见（+100ms / +600ms / +1.6s / +4s / +11s 五个采样点都还在，`hideTimer` 为空）；异页跳转路径同样正常，截图确认专辑页完整露出、底条内容（封面/歌名/喜欢/上一首/播放/下一首/进度/音质/音量/定时）齐全。
+- 注意：`showBar` / `clearHideTimer` 是 `PlayerCore` 的显示态与计时器，不是播放状态机，从 `MusicPlayer` 直接引用（项目里已有 `$refs.pgPanel.sel.currentTime` 这类先例）；不影响播放、队列、取流任何链路。收起后底条会常驻到用户再次移入移出为止（原来是被残留计时器提前收掉的），这是本次想要的"缩小"语义。
+
+### 2026-11-09 — 修复：老专辑简介里的「下载代码表」被当正文渲染（《如果的事》排版像乱码）
+
+- 现象（用户反馈 + 截图）：范玮琪《如果的事》的「歌曲信息 → 背景故事」是一大段看不懂的文字，夹杂「范玮琪 / 313299 / 424583 / 313300…」这类数字行，看起来像排版坏了。
+- 根因：不是排版问题，是**数据脏**。这首歌的专辑《Faces Of FanFan》简介原文 7154 字（一张 2008 年的精选集宣传稿），后 1/3 是当年的「新歌＋精选全纪录专辑歌曲下载数据」表：129 行「歌名/歌手/来电答铃代码/原音铃声代码」，再往后还有 8 行运营商下载方式。`white-space: pre-line` 忠实还原了这些换行，于是短行 + 纯数字行堆成一坨，折叠态只露出一部分、更像乱码。
+- 处理：`utils/songInfo.js` 的 `cleanDesc` 增加**按段落剪枝**（`pruneDesc`）：`1)` 丢「数据表段落」——非空行 ≥ 4 且纯 3~8 位数字行 ≥ 2；`2)` 丢「服务说明段落」——命中 下载方式/铃声代码/答铃/简讯/直拨/手机上网下载/原音铃声；`3)` 顺带去掉开头的 BOM（原文首字符是 U+FEFF）与行尾空白。**只丢段落不丢整篇**，序号曲目表（「CD2 Fan Fan's Self / 1、放电…」）是给人看的，保留。剪过就在卡片里补一行「已省略简介中的下载方式 / 代码表」，避免用户发现和专辑页原文对不上。
+- 验证：同一首《如果的事》剪枝后 7154 → 5800 字，`313299` / `下载方式` / `简讯` 全部消失，结尾干净收在「2008范玮琪『我们是朋友』演唱会 / 11月1日 台北台大体育馆 / 11月22日 台中中兴大学惠荪堂」；回归《海阔天空》1460 字、《孤勇者》420 字均**未触发剪枝**（无提示行、结尾完整），说明规则只咬数据表。`yarn lint` ✅ `yarn build` ✅。
+- 注意：这套规则是启发式，宁可少剪不可多剪——数字行阈值取「≥2 行」+「≥4 行段落」，正常文案里出现的年份/日期成不了表；真遇到误剪，删掉 `DESC_NOISE` 里对应词即可。另：精选集/合辑的简介本来就是**专辑级宣传稿**，和单曲未必有关（这张讲的是范范剪短发和周华健合唱），界面上靠小标题「专辑《X》介绍」交代来源，未做进一步裁剪。
+- **撤回（用户要求，同日）**：源数据既然是纯文本，就按上游返回原样展示，不做内容裁剪。`cleanDesc` 回到「只去开头 BOM + 首尾空白」，`pruneDesc` / `DESC_NOISE` / `isDataParagraph` / `album.pruned` 字段与「已省略简介中的下载方式 / 代码表」提示行一并删除。实测《如果的事》恢复全文（`innerText` 7104 字，`313299` / `下载方式` / `简讯` 都在，展开后约 10300px 滚动）。
+
+### 2026-11-09 — 发布 v1.3.0（播放详情页「歌曲信息」）
+
+- 发版范围：本批三次改动合并成一个版本——`1)` 新增「歌曲信息」tab（三条接口懒加载、背景故事 / 乐评 / 获奖 / 词曲编曲可点）；`2)` 「查看专辑」先收播放器再跳转，修同路由不收起 + 收起后底条塌成细线；`3)` 专辑简介剪枝方案按用户要求撤回，恢复上游原文。
+- 版本与产物：`package.json` / `package-lock.json` 1.2.1 → 1.3.0；`CHANGELOG.md` 新增 `## 1.3.0 — 2026-11-09`（新增 / 改进 / 修复三段，只写用户可见变化）；`yarn changelog` 重新生成，应用内更新日志从 6 个版本变 7 个；`docs/DEVLOG.md` 补「第八波：歌曲信息与 1.3.0」并在版本线加 1.3.0 行。
+- 提交拆分（按项目规范不混提）：`feat(player): 播放详情页新增歌曲信息标签页`（`src/api/Tracks.js`、`src/utils/songInfo.js`、`SongInfoPanel.vue`、`MusicPlayer.vue`、`scripts/shot-readme.mjs`）→ `docs: 记录歌曲信息标签页与查看专辑收起播放器`（`CHANGELOG_AI.md`、`DEVLOG.md`）→ `chore(release): v1.3.0`（版本号 + `CHANGELOG.md` + 生成物）→ `docs: 刷新提交清单至 v1.3.0`（`yarn devlog` 产物）。
+- 验收：`yarn lint` ✅ `yarn build` ✅；撤回剪枝后复测《如果的事》简介与上游原文一致（7104 字，代码表完整保留），《海阔天空》《孤勇者》不受影响。
+- 注意：annotated tag `v1.3.0` 打在 `chore(release)` 提交上，不指向后续的 devlog 提交；tag 不触发部署，部署由 `push master` 的路径过滤决定（`.github/workflows/deploy.yml`）。
