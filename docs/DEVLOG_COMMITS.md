@@ -3,10 +3,13 @@
 > 由 `scripts/build-devlog.mjs` 从 git 历史生成，**请勿手改**。
 > 重新生成：`yarn devlog`。阶段与意图的叙述见 `docs/DEVLOG.md`。
 
-共 177 个提交，时间跨度 2022-04-12 ~ 2026-11-06。
+共 180 个提交，时间跨度 2022-04-12 ~ 2026-11-09。
 
-## 2026-11（12 个提交）
+## 2026-11（15 个提交）
 
+- `75cfd7e` chore(release): v1.2.1 　`v1.2.1`
+- `b2ab9a9` fix(artist): 刷新后与云盘曲目的歌手名点击失效
+- `4a4e6f4` docs: 刷新提交清单至 v1.2.0
 - `30b4f7c` chore(release): v1.2.0 　`v1.2.0`
 - `df38620` docs: 补全开发日志编年史与 README 重写
 - `8156e78` feat(ui): 主题切换双向动画、深色可见性修复与播放按钮调整
@@ -221,6 +224,7 @@
 - `v1.2-player-stability` → `85fc820`
 - `v1.2.0` → `30b4f7c`
 - `v1.2.0-icon-system` → `883e896`
+- `v1.2.1` → `75cfd7e`
 - `v1.3-page-navigation` → `407b1e5`
 - `v1.3-player-state` → `074cd77`
 - `v1.3.0-motion-design` → `a906439`
