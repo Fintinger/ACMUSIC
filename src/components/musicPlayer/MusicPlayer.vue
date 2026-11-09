@@ -58,6 +58,7 @@
         <div class="heroRight">
           <div class="rightTabs">
             <span :class="{ active: rightTab === 'lyric' }" @click="rightTab = 'lyric'"><BaseIcon name="lyrics"/> 歌词</span>
+            <span :class="{ active: rightTab === 'info' }" @click="rightTab = 'info'"><BaseIcon name="disc"/> 歌曲信息</span>
             <span :class="{ active: rightTab === 'tracks' }" @click="rightTab = 'tracks'"><BaseIcon name="play"/> 相似歌曲</span>
             <span :class="{ active: rightTab === 'playlist' }" @click="rightTab = 'playlist'"><BaseIcon name="list"/> 相似歌单</span>
           </div>
@@ -75,6 +76,9 @@
                   </p>
                 </div>
               </div>
+            </div>
+            <div v-show="rightTab === 'info'" class="tabPanel">
+              <SongInfoPanel :song="currentSong" :active="rightTab === 'info'" @close-player="isExpand = false"/>
             </div>
             <div v-show="rightTab === 'tracks'" class="tabPanel">
               <div v-if="!simiTracks.length" class="panelEmpty"><p>暂无相似歌曲</p></div>
@@ -109,6 +113,7 @@
 
 <script>
 import PlayCore from "@/components/musicPlayer/PlayerCore";
+import SongInfoPanel from "@/components/musicPlayer/SongInfoPanel";
 import CommentLayout from "@/components/layout/CommentLayout";
 import { buildBackground } from "@/utils/colorExtractor";
 import { parseLyricData, parseLrcText, findActiveIndex, findActiveWord } from "@/utils/lyric";
@@ -119,7 +124,7 @@ import { isLoggedIn } from "@/utils/auth";
 export default {
   name: "MusicPlayer",
   props: ['song'],
-  components: { PlayCore, CommentLayout },
+  components: { PlayCore, SongInfoPanel, CommentLayout },
   data() {
     return {
       isExpand: false,
@@ -206,6 +211,14 @@ export default {
       document.body.style.overflow = ''
       this.$refs.pgPanel.$off('tUpdate')
       if (this.scrollObserver) { this.scrollObserver.disconnect(); this.scrollObserver = null }
+      // 收起大播放器时把底条还原成完整态。PlayerCore 的 showBar 会在 10 秒无操作后
+      // 自己收成一条 28px 的细进度线（空闲形态）；大播放器盖住过底条，期间可能已经排了
+      // 一个 hideTimer，不取消的话刚"缩小"出来的播放条一两秒后又塌成细线，
+      // 看起来就像播放器没了。所以这里先撤掉残留计时器再点亮。
+      if (this.$refs.pgPanel) {
+        this.$refs.pgPanel.clearHideTimer()
+        this.$refs.pgPanel.showBar = true
+      }
     },
     closePlayer() {
       if (this.isModalOpen) {
@@ -238,7 +251,7 @@ export default {
       let saved = null
       try { saved = JSON.parse(sessionStorage.getItem('acmusic_player_ui') || 'null') } catch (e) { saved = null }
       if (!saved) return
-      if (['lyric', 'tracks', 'playlist'].indexOf(saved.rightTab) !== -1) this.rightTab = saved.rightTab
+      if (['lyric', 'info', 'tracks', 'playlist'].indexOf(saved.rightTab) !== -1) this.rightTab = saved.rightTab
       const pg = this.$refs.pgPanel
       // 没有在播的歌别硬撑全屏；PlayerCore 是子组件，mounted 顺序保证它的队列已恢复完
       if (saved.expand && pg && pg.currentSong && pg.currentSong.id) {
@@ -260,8 +273,8 @@ export default {
     },
 
     onWheel(e) {
-      // 歌词、队列和设置各自滚动，避免滚歌词时整页跳到评论区。
-      if (e.target.closest && e.target.closest('.lyricsScroll, .cardScroll')) return
+      // 歌词、队列和信息各自滚动，避免在里面滚鼠标时整页跳到评论区。
+      if (e.target.closest && e.target.closest('.lyricsScroll, .cardScroll, .songInfoScroll')) return
       const scroller = this.$refs.scrollEl
       if (!scroller) return
       if (this.transitioning) { e.preventDefault(); return }

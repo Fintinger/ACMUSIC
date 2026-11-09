@@ -115,7 +115,8 @@ await settle(async () => {
   return o === '1'
 })
 // 右栏默认是歌词；这首老歌只有制作人信息，切到「相似歌曲」画面更充实
-await evaluate("document.querySelectorAll('.rightTabs span')[1] && document.querySelectorAll('.rightTabs span')[1].click()")
+// 按文字选而不是下标：右栏 tab 会陆续增加（如 2026-11 新增的「歌曲信息」），下标会错位
+await evaluate("(() => { const tab = [].find.call(document.querySelectorAll('.rightTabs span'), el => el.textContent.indexOf('相似歌曲') > -1); if (!tab) return 'no-tab'; tab.click(); return 'ok' })()")
 await settle(async () => (await evaluate("document.querySelectorAll('.cardScroll .musicCard').length")) > 0, 20, 150)
 await sleep(1500)
 await settle(async () => true, 6, 120)

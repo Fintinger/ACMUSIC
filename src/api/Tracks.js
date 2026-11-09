@@ -243,3 +243,40 @@ export function recommendResource(limit = 10) {
 export function simiPlaylist(id) {
     return request('/simi/playlist', { params: { id } })
 }
+
+/**
+ * 歌曲简要百科信息（UGC 词条）
+ * 说明 : 只给结构化事实，没有任何故事性文案。
+ *   - songSubTitle：副标题，常是影视/游戏/综艺出处，或「原曲：《XX》—某某」
+ *   - lyricArtists / composeArtists / arrangeArtists：词/曲/编曲，元素带 artistId 可跳歌手页
+ *   - publishTime：发行时间（毫秒时间戳）
+ *   - originalSong：翻唱曲目才有，字段是 originalSongName / originalSongArtistName / originalSongAlbumName
+ *   - 未收录的歌曲**不报错**，只是字段大面积 null（company / roleArtists / songTags 常年为空）
+ * 游客可用，无需登录。
+ * @param {string|number} id 歌曲 id
+ */
+export function songWikiMeta(id) {
+    return request('/ugc/song/get', { params: { id } })
+}
+
+/**
+ * 音乐百科摘要（播放详情页「歌曲信息」用）
+ * 说明 : 返回 blocks[] → creatives[] 的通用 DSL，**必须按 creativeType 遍历，不能按下标取**。
+ *   已实测的 creativeType（2026-11-09，游客态）：
+ *     songTag       曲风，值在 resources[].uiElement.mainTitle.title
+ *     songBizTag    推荐标签（治愈/悲伤…），结构同上
+ *     language      语种，值在 uiElement.textLinks[0].text（不在 resources 里）
+ *     bpm           BPM，结构同 language
+ *     songAward     获奖，resources[] 的 mainTitle 是颁奖礼、subTitles 是「获 + 奖项名」
+ *     entertainment 影视/综艺出处，resources[].uiElement.mainTitle.title
+ *     songComment   乐评，正文在 resources[].uiElement.descriptions[].description，
+ *                   作者在 mainTitle.title（形如「乐评来自 XXX」）；有时正文本身就是创作背景
+ *     sheet         乐谱图片（前端未使用）
+ *   覆盖不稳定：抽样 8 首里 4 首有乐评正文，曲风/语种/BPM 覆盖较好。
+ *   「全部」入口指向 orpheus://rnpage，是客户端私有协议，Web 端不可用。
+ * 游客可用，无需登录。
+ * @param {string|number} id 歌曲 id
+ */
+export function songWikiSummary(id) {
+    return request('/song/wiki/summary', { params: { id } })
+}
