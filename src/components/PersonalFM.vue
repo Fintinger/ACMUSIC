@@ -53,7 +53,7 @@
 
 <script>
 import pubsub from 'pubsub-js'
-import { fetchFmBatch } from "@/utils/personalFm"
+import { fetchFmBatch, currentFmFetchOptions, markFmUiMounted, markFmUiUnmounted } from "@/utils/personalFm"
 import { imgParam } from "@/utils/filters"
 
 export default {
@@ -317,10 +317,8 @@ export default {
       // 且排除当前这批 id，避免换批后卡片看起来没变化
       const excludeIds = this.currentList.map(s => s.id)
       // 漫游模式：默认走 /personal_fm（推荐流），其余走 /personal/fm/mode
-      const { fmMode, fmSubmode } = this.$store.state.TracksAbout
-      const opts = fmMode && fmMode !== 'DEFAULT'
-        ? { mode: fmMode, submode: fmMode === 'SCENE_RCMD' ? fmSubmode : undefined }
-        : null
+      // （规则与 PlayerCore 的无 UI 兜底共用 currentFmFetchOptions）
+      const opts = currentFmFetchOptions(this.$store.state.TracksAbout)
       return fetchFmBatch(3, 4, excludeIds, opts)
         .then(songs => {
           if (!Array.isArray(songs) || !songs.length) return null
@@ -374,6 +372,8 @@ export default {
     }
   },
   mounted() {
+    // 认领 FM 取流：本组件在的用户会走事件协作，PlayerCore 不再自己拉
+    markFmUiMounted()
     this.$bus.$on('fm-roam', this.startRoam)
     this.$on('initPlay', () => {
       if (this.currentList.length) {
@@ -393,6 +393,8 @@ export default {
     })
   },
   beforeDestroy() {
+    // 归还取流归属：之后由 PlayerCore 兜底（例如用户离开首页后队列播完）
+    markFmUiUnmounted()
     this.stopCarousel()
     if (this.staleTimer) { clearTimeout(this.staleTimer); this.staleTimer = null }
     this.$bus.$off('fm-roam', this.startRoam)

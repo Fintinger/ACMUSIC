@@ -72,4 +72,13 @@ export function doLogout() {
     store.commit('UserAbout/UPDATE_DATA', {key: 'profile', value: {}});
     //更新登陆状态
     store.commit('UserAbout/UPDATE_DATA', {key: 'IS_LOGIN', value: false});
+    /**
+     * 心动模式基于红心歌单，没有登录态就没有意义，跟着关掉。
+     *
+     * 不依赖 PlayerCore 里的 `isLogin` watcher：它读的 `UserAbout/isLogin`
+     * getter 在求值时写 state（`state.IS_LOGIN = isLoggedIn()`），这种"算子里改
+     * 依赖"的写法在本项目已被记过一次缓存不可靠（见 PlayerCore 顶部关于该 getter
+     * 的注释）。登出是明确的语义动作，直接 commit 最稳；没开过心动时是幂等空操作。
+     */
+    store.commit('TracksAbout/SET_HEART_MODE', false);
 }

@@ -3342,4 +3342,16 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
   2. 云盘曲目是自己上传的文件，网易云返回 `simpleSong.ar[0].id === 0`（只有名字、没有关联歌手）→ `RankList.arClk` 里的 `if (id)` 直接 return，连路由都不动。
 - 处理：`1)` 新增 `src/utils/artistLink.js`：`resolveArtistId(id, name)` —— id 合法直接用，否则 `/search?type=100` 按名字反查，完全同名优先，命中按名字缓存、连点用 pending 去重、失败不缓存以便重试。`2)` `App.artistClick(id, name)` 增加第二参数，id 无效但有名字时先反查再跳，查不到 `$toast.warning('没找到歌手「X」')`；`albumClick` 补 `isValidId` 守卫（原来会把 undefined 拼成 `/albumDetail`）。`3)` `_saveState` 增存 `ar:[{id,name}]` 与 `alId`，`_restoreState` 还原（老存档没有 id 就退化成只有名字，走反查）；顺手把专辑 id 也存了，刷新后专辑行点击不再丢。`4)` `MusicPlayer.arClick` 把歌手名一起 emit；`RankList` 兼容 `ar`/`artists`/纯字符串并 emit `(id, name)`；`UserDetailLayout` 映射云盘数据时若 `ar` 为空或名字为 null，用外层 `artist` 文本补 `{id:0, name}`。
 - 验证：无头 Edge + CDP 四场景全过 —— 新存档带 id 直跳 `?id=6452`（零额外请求）；老存档只有名字经反查后跳 `?id=6452`；`artistClick(0,'周杰伦')`（云盘形态）跳 `?id=6452`；不存在的名字不跳转且有 toast。持久化回路（恢复→再存）`ar`/`alId` 不丢。lint 通过，dev 编译通过。
-- 注意事项：老用户的 `acmusic_player_state` 没有 id，首次点歌手名会多发一次搜索请求（之后走内存缓存）；云盘曲目因源数据只有名字，每次会话首次点击同理。版本号保持 1.2.0 未动，CHANGELOG.md 未加段（用户可见日志与版本号绑定，等下个版本再纳入）。
+- 注意事项：老用户的 `acmusic_player_state` 没有 id，首次点歌手名会多发一次搜索请求（之后走内存缓存）；云盘曲目因源数据只有名字，每次会话首次点击同理。当天以 1.2.0 同版本号热修上线（commit b2ab9a9）；用户可见日志与版本号绑定，本条最终并入 1.2.1 发布。
+
+### 2026-11-09 — 修复：刷新后私人 FM / 心动模式播完队列不再自动取歌
+- 现象：刷新页面后，私人 FM、心动模式（以及其他依赖续批的模式）播到当前列表最后一首就停住——列表循环会绕回第一首重播，顺序播放直接停，都不会去拿新歌。
+- 根因（三层，前两层是主因）：
+  1. **`isPersonalFM` 没进存档**。`_saveState` 只存了 heartMode，没存 FM 标记；刷新后 `isPersonalFM` 回到 false，队尾直接掉进普通队列逻辑（`getNextIndex` 回绕 / `_onQueueEnd` 停播），FM 分支根本不执行。
+  2. **FM 的取流方只挂在首页**。`fmPrefetch` / `getPersonalFM` 两个事件由 `PersonalFM` 组件订阅，而它只在首页挂载（`keep-alive` 只在站内跳转时保住它）。刷新后停在任意非首页，publish 没有任何订阅者，即使标记还在也拉不到歌。
+  3. **心动模式的恢复门槛过严**。`_restoreState` 要求 `user-profile.userId`，但 `setLogin()` 只写 cookie 不写 profile（`phoneLogin` / `qrcodeLogin` 都没传第二参），profile 要等用户进过「我的」页才落盘 → 登录后没去过我的页的用户刷新一次就悄悄丢了心动模式。另外 `_heartExtend` 失败时是静默 return，队尾表现为"卡住不动"。
+- 处理：`1)` `_saveState` 增加 `fm: !!this.isPersonalFM`，`_restoreState` 还原（与 heart 互斥，heart 优先）。`2)` `utils/personalFm.js` 新增取流归属登记 `markFmUiMounted` / `markFmUiUnmounted` / `isFmUiMounted` 和 `currentFmFetchOptions`（复用同一套漫游模式规则）；`PersonalFM` 在 mounted/beforeDestroy 登记与归还，`_doFetch` 改用共享的 options。`3)` PlayerCore 新增 `_fmAdvance()` 统一 `nextSong` / `_autoNext` 的队尾处理：有 UI 走原事件协作，没 UI 时用 `_fmPrefetchSelf()`（进最后一首预取到 `fmStagedBatch`）+ `_fmFetchAndApply()` 兜底，应用统一走 `_applyFmBatch()`（REPLACE_PLAYLIST + `playFmNewBatch(null, 0)`，避开同下标空操作）。`4)` 心动模式的恢复只看 `isLoggedIn()`；`_heartExtend` 遇 `NO_UID` 关掉开关并提示，`_heartAdvance` 续批失败时给出「心动推荐暂时取不到」而不是静默卡住。
+- 验证：无头 Edge + CDP 注入刷新态实测——非首页刷新 `fm:true`，队尾后队列换成真实 /personal_fm 歌曲（sid 由 1003 变 3451531274）；清掉暂存后队尾现拉 3 次 `/api/personal_fm` 并成功换队；首页（PersonalFM 在）仍走事件协作、换队正常；心动模式在缺 `user-profile` 时也能恢复开关（日志 `[Heart] restore`），假 cookie 拿不到 uid 时按新逻辑退出并提示。lint 通过。
+- 补充（登出场景）：`doLogout()` 里显式 `SET_HEART_MODE false`。登出是明确的语义动作，不想依赖 PlayerCore 的 `isLogin` watcher（它读的 `UserAbout/isLogin` getter 在求值时写 state，这种"算子里改依赖"的写法本项目已记过一次缓存不可靠）。顺带确认：退出登录后刷新**不会**恢复心动模式——`doLogout` 清掉了 MUSIC_U，而 `isLoggedIn()` 只认 MUSIC_U；未登录时 main.js 的游客登录写的是 `MUSIC_A` / `MUSIC_R_T`（不含 MUSIC_U），所以游客态也不会被误判成登录用户（实测：只剩游客 cookie + 存档 heartMode=true，刷新后 heart=false、队尾按普通队列处理）。
+- 注意事项：FM 兜底取流只在"没有首页组件"时启用，两条路径互斥，不会重复请求；`fmStagedBatch` 仍是会话态，刷新后为空（所以非首页刷新的第一轮会现拉一次，约 200~500ms 空档）。与上一条一并发布为 1.2.1（CHANGELOG.md 合并成一段）。
+- 发版：`package.json` / `package-lock.json` 1.2.0 → 1.2.1；`CHANGELOG.md` 新增 `## 1.2.1 — 2026-11-09` 并把 11-08 的歌手名跳转修复与本次两处修复合并成一段；`yarn changelog` 重新生成（6 个版本）；`docs/DEVLOG.md` 版本线补 1.2.1；打 annotated tag `v1.2.1` 指向本次 release 提交。

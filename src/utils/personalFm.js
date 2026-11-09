@@ -1,6 +1,44 @@
 import * as tracksApi from "@/api/Tracks"
 
 /**
+ * 私人 FM 的「取流归属」登记。
+ *
+ * 背景：FM 的取流一直由首页的 `PersonalFM` 组件负责（它订阅 fmPrefetch /
+ * getPersonalFM 两个 pubsub 事件）。但那个组件只挂在首页，**刷新后停在任何
+ * 别的页面就没有订阅者**：PlayerCore 在队尾 publish 出去的事件石沉大海，
+ * 播放器停在最后一首不动。
+ *
+ * 用一个挂载计数让 PlayerCore 知道"有没有 UI 在管取流"：
+ * 有 UI → 沿用原来的事件协作（UI 还要更新三张卡片）；
+ * 没 UI → PlayerCore 自己用 fetchFmBatch 兜底。
+ */
+let uiMounted = 0
+
+export function markFmUiMounted() {
+    uiMounted += 1
+}
+
+export function markFmUiUnmounted() {
+    uiMounted = Math.max(0, uiMounted - 1)
+}
+
+export function isFmUiMounted() {
+    return uiMounted > 0
+}
+
+/**
+ * 按当前「私人漫游」模式组装 fetchFmBatch 的 opts。
+ * 抽出来是为了让组件和 PlayerCore 兜底走完全相同的取流规则：
+ * DEFAULT 走 /personal_fm，其余走 /personal/fm/mode，SCENE_RCMD 才带场景键。
+ * @param {{fmMode?:string, fmSubmode?:string}} state TracksAbout 的 state
+ */
+export function currentFmFetchOptions(state) {
+    const fmMode = state && state.fmMode
+    if (!fmMode || fmMode === 'DEFAULT') return null
+    return { mode: fmMode, submode: fmMode === 'SCENE_RCMD' ? state.fmSubmode : undefined }
+}
+
+/**
  * 私人 FM 批次拉取：一次结果不足时补请求并按 id 去重，保证 UI 拿到互不重复的歌曲。
  *
  * 背景（2026-10-21 实测 https://music.archai.space/api/personal_fm）：

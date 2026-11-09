@@ -283,6 +283,8 @@ import ModeMenu from "@/components/musicPlayer/ModeMenu"
 import { setAudioCache, getAudioCache, getAudioUrl, removeAudioCache } from "@/utils/audioCache"
 import { getChorus } from "@/utils/chorusCache"
 import { fetchHeartBatch, resetHeartPlaylistId } from "@/utils/heartMode"
+// FM 取流：首页 PersonalFM 在时走事件协作，不在时（刷新后停在别的页面）本组件兜底
+import { fetchFmBatch, isFmUiMounted, currentFmFetchOptions } from "@/utils/personalFm"
 // 直接用 isLoggedIn() 而不是 UserAbout/isLogin getter：后者没有响应式依赖，
 // Vue 会永久缓存（见 CHANGELOG 2026-10 关于该 getter 的修复记录）
 import { isLoggedIn } from "@/utils/auth"
@@ -433,6 +435,9 @@ export default {
       isPersonalFM: false,
       // 续批的 in-flight promise：并发调用要复用同一个，否则会重复拉两批
       heartExtendPromise: null,
+      // 无 UI 时 FM 续播的 in-flight 标记（预取 / 队尾取流各一个）
+      fmPrefetching: false,
+      fmFetchingSelf: false,
       shufflePos: -1,
       // _autoNext 锁：防止 song end 期间 timeNow watcher 多次触发 _autoNext
       // （音频暂停前 timeupdate 事件持续触发，会让 _autoNext 被多次调用）
@@ -906,7 +911,10 @@ export default {
      * 真正的切换由 reactive 流程在歌曲自然结束 / 用户点 next 时触发
      */
     fmShouldPrefetch(needed) {
-      if (needed) pubsub.publish('fmPrefetch', Date.now())
+      if (!needed) return
+      // 有 UI 时由 PersonalFM 拉并暂存（它还要刷那三张卡）；没有 UI 时自己预取
+      if (isFmUiMounted()) pubsub.publish('fmPrefetch', Date.now())
+      else this._fmPrefetchSelf()
     },
     heartShouldPrefetch(needed) {
       if (needed) this._heartExtend()
@@ -1494,13 +1502,11 @@ export default {
       if (this._consumeSleep(true)) return
       if (this.heartMode) { this._heartAdvance(); return }
       if (this.isPersonalFM) {
-        // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
+        // FM 模式：未到末尾时顺序切，到末尾才触发取流（见 _fmAdvance）
         if (this.curIndex < this.currentPlaylist.length - 1) {
           this.curIndex = this.curIndex + 1
         } else {
-          // 末尾：通知 PersonalFM 应用 staged batch（数据应已 prefetch 完毕）
-          // curIndex 由 playFmNewBatch 在 staged 应用后推进
-          pubsub.publish('getPersonalFM', new Date().getTime())
+          this._fmAdvance()
         }
         return
       }
@@ -1537,13 +1543,12 @@ export default {
       if (this.playMode === 'loop' && !(opts && opts.skipLoop)) { this._restartCurrent(); return }
       if (this.heartMode) { this._heartAdvance(); return }
       if (this.isPersonalFM) {
-        // FM 模式：未到末尾时顺序切，到末尾才触发 reactive 流程
+        // FM 模式：未到末尾时顺序切，到末尾才触发取流（见 _fmAdvance）
         if (this.curIndex < this.currentPlaylist.length - 1) {
           this.curIndex = this.curIndex + 1
         } else {
-          // 末尾：通知 PersonalFM 应用 staged batch（proactive prefetch 应已就绪）
-          // 若是首次 FM session（无 staged），PersonalFM 会同步 fetch + apply（有 ~200ms 静音）
-          pubsub.publish('getPersonalFM', new Date().getTime())
+          // 末尾：有 UI 时由 PersonalFM 应用预取批次，没有 UI 时本组件自己拉
+          this._fmAdvance()
         }
         return
       }
@@ -1751,7 +1756,12 @@ export default {
         return true
       }).catch(err => {
         this.heartExtendPromise = null
-        console.warn('[Heart] extend failed', err && err.message)
+        console.warn('[Heart] extend failed', err && err.reason, err && err.message)
+        // uid 都拿不到就别硬撑着了：留着开关只会让首页卡片亮着"播放中"却永远不续歌
+        if (err && err.reason === 'NO_UID' && this.heartMode) {
+          this.heartMode = false
+          this.showHint('登录态异常，已退出心动模式', 'warning')
+        }
         return false
       })
       return this.heartExtendPromise
@@ -1764,13 +1774,16 @@ export default {
         this.curIndex = this.curIndex + 1
         return
       }
-      this._heartExtend().then(() => {
+      this._heartExtend().then(ok => {
         if (!this.heartMode) return
         if (this.curIndex < this.currentPlaylist.length - 1) {
           this.currentSongSource = 'playlist'
           this.playlistContextId = this.playContextId
           this.curIndex = this.curIndex + 1
+          return
         }
+        // 续批失败 / 拿到的都被去重光了：不要留一个"静音卡在最后一首"的黑箱
+        if (!ok) this.showHint('心动推荐暂时取不到，已停在最后一首', 'warning')
       })
     },
     getNextIndex() {
@@ -2671,6 +2684,70 @@ export default {
       this.curIndex = startIndex
     },
     /**
+     * FM 队尾续播总入口（nextSong 与 _autoNext 共用）。
+     *
+     * 两套协作方式：
+     *  - 首页 PersonalFM 在（isFmUiMounted）→ 沿用原设计 publish 事件，
+     *    由它应用预取批次并同步那三张卡片；
+     *  - 不在（刷新后停在别的页面 / 首页被 keep-alive 回收）→ 没有任何订阅者，
+     *    publish 出去等于石沉大海，播放器会停在最后一首。这时本组件自己兜底：
+     *    先用预取批次，没有就现拉一批。
+     */
+    _fmAdvance() {
+      if (isFmUiMounted()) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
+      const staged = this.$store.state.TracksAbout.fmStagedBatch
+      if (staged && staged.length) { this._applyFmBatch(staged); return }
+      this._fmFetchAndApply()
+    },
+    /** 无 UI 时的预取：拉一批放进 fmStagedBatch，等队尾直接应用，减少空档 */
+    _fmPrefetchSelf() {
+      if (this.fmPrefetching) return
+      const staged = this.$store.state.TracksAbout.fmStagedBatch
+      if (staged && staged.length) return
+      this.fmPrefetching = true
+      fetchFmBatch(3, 4, [], currentFmFetchOptions(this.$store.state.TracksAbout))
+        .then(list => {
+          if (Array.isArray(list) && list.length) {
+            this.$store.commit('TracksAbout/SET_FM_STAGED_BATCH', list)
+            console.log('[FM]', { action: 'self_prefetch', count: list.length })
+          }
+        })
+        .catch(() => { /* 预取失败不打扰用户，队尾会再试一次 */ })
+        .finally(() => { this.fmPrefetching = false })
+    },
+    /** 无 UI 时的队尾取流：拉一批直接换队播放 */
+    _fmFetchAndApply() {
+      if (this.fmFetchingSelf) return
+      this.fmFetchingSelf = true
+      const exclude = this.currentPlaylist.map(t => t.id)
+      fetchFmBatch(3, 4, exclude, currentFmFetchOptions(this.$store.state.TracksAbout))
+        .then(list => {
+          if (!this.isPersonalFM) return
+          if (!Array.isArray(list) || !list.length) {
+            this.showHint('私人 FM 暂时取不到新歌，已停在最后一首', 'radio')
+            return
+          }
+          this._applyFmBatch(list)
+        })
+        .catch(err => {
+          console.warn('[FM] self_fetch_failed', err && err.message)
+          this.showHint('私人 FM 续播失败，请稍后再试', 'warning')
+        })
+        .finally(() => { this.fmFetchingSelf = false })
+    },
+    /**
+     * 应用一批 FM 歌曲：整队替换 + 从第 0 首开播。
+     * 下标相同/同曲的情况交给 playFmNewBatch 处理（Vue 对同值赋值不触发 watcher，
+     * 直接写 curIndex 会变成空操作，声音还停在旧歌上）。
+     */
+    _applyFmBatch(batch) {
+      if (!Array.isArray(batch) || !batch.length) return
+      this.$store.commit('TracksAbout/CLEAR_FM_STAGED_BATCH')
+      this.$store.commit('TracksAbout/REPLACE_PLAYLIST', batch)
+      this.playFmNewBatch(null, 0)
+      console.log('[FM]', { action: 'self_apply', count: batch.length })
+    },
+    /**
      * 队列就地改写：统一走 REPLACE_PLAYLIST，改完把 curIndex 对齐回当前曲
      * （watcher 里有"目标与当前同 id 就跳过"的守卫，所以对齐不会触发重新播放）
      */
@@ -3013,6 +3090,10 @@ export default {
         // 心动模式是"队列来源"而不是单纯开关：不存的话刷新后队列虽在，但播到队尾
         // 不会再向红心歌单续批（见 _autoNext → _heartAdvance 分支）
         heartMode: !!this.heartMode,
+        // 私人 FM 同理：不存的话刷新后 isPersonalFM 回到 false，
+        // 队尾会掉进普通队列逻辑（列表循环绕回第一首 / 顺序播放直接停），
+        // 既不再取 FM 新歌，也不再显示"私人FM"来源标
+        fm: !!this.isPersonalFM,
         // 定时停止：time 档存绝对截止时间戳，刷新后能接着倒计时（见 _restoreSleep）
         sleepMode: this.sleepMode,
         sleepValue: this.sleepValue,
@@ -3238,9 +3319,25 @@ export default {
            */
           let profile = {}
           try { profile = this.$store.getters['UserAbout/userProfile'] || {} } catch (e) { profile = {} }
-          if (data.heartMode && isLoggedIn() && profile.userId && this.currentSong && this.currentSong.id) {
+          /**
+           * 私人 FM：只认存档里的 fm 标记。它与心动互斥，两个都为真时以心动为准
+           * （正常写入不会同时为真，防的是中途切模式的存档）。
+           */
+          if (data.fm && !data.heartMode) {
+            this.isPersonalFM = true
+            console.log('[FM]', { action: 'restore', songId: this.currentSong && this.currentSong.id })
+          }
+          /**
+           * 心动模式的门控原来还要求 user-profile.userId —— 太严了：
+           * setLogin() 只写 cookie 不写 profile（phoneLogin / qrcodeLogin 都没传），
+           * profile 要等用户进过「我的」页才落盘。于是"登录后没去过我的页"的用户
+           * 刷新一次就悄悄丢了心动模式，队尾再也不续批。
+           * 现在只看登录态：真拿不到 uid 时 fetchHeartBatch 会报 NO_UID，
+           * 由 _heartExtend 收尾并给出提示，不会再无声失败。
+           */
+          if (data.heartMode && isLoggedIn() && this.currentSong && this.currentSong.id) {
             this.heartMode = true
-            console.log('[Heart]', { action: 'restore', songId: this.currentSong.id })
+            console.log('[Heart]', { action: 'restore', songId: this.currentSong.id, hasUid: !!profile.userId })
           }
         })
       } catch (e) { /* ignore */ }
