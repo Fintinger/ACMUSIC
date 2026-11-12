@@ -9,6 +9,7 @@
 import VideoPlayerLayout from "@/components/layout/VideoPlayerLayout";
 import * as mvApi from "@/api/Mv";
 import { fetchRelatedVideos } from "@/utils/relatedVideos";
+import { markMvDead } from "@/utils/songMv";
 
 export default {
   name: "mvPlay",
@@ -47,10 +48,18 @@ export default {
         const res = await this.getDetail(this.id)
         if (version !== this.requestVersion) return
         const data = res.data && res.data.data
-        if (!data || !data.name) throw new Error('Invalid MV detail')
+        // 上游对下架 MV 回的就是 {code:404}，HTTP 仍是 200：只能靠 data 判空。
+        // 记进负缓存，列表徽标下次不再亮，免得反复点进空页
+        if (!data || !data.name) { markMvDead(this.id); throw new Error('Invalid MV detail') }
         this.detail = data
         this.getSimiMv(this.id, version).then(list => { if (version === this.requestVersion) this.simiMvs = list }).catch(() => {})
-      } catch (_) { if (version === this.requestVersion) this.detailFailed = true }
+      } catch (err) {
+        if (version === this.requestVersion) {
+          this.detailFailed = true
+          // 上游对下架 MV 回的是 HTTP 404 + {code:404}，axios 直接 reject，走不到上面的判空
+          if (err && err.response && err.response.status === 404) markMvDead(this.id)
+        }
+      }
       finally { if (version === this.requestVersion) this.loading = false }
       await source
     },
@@ -85,7 +94,15 @@ export default {
     }
   },
   beforeDestroy() { this.requestVersion++ },
-  activated() { this.loadMedia() },
+  activated() {
+    /**
+     * 进 MV 页先停歌：播放器是全站常驻的（App.vue 里的 MusicPlayer），
+     * 路由切走不会停，MV 一播就是两个音轨同时响。
+     * 停在这里而不是停在各个入口，是因为直接打开 /mv?id= 的深链也要覆盖。
+     */
+    this.$bus.$emit('pause-song')
+    this.loadMedia()
+  },
 }
 </script>
 

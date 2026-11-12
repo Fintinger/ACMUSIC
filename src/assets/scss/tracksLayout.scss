@@ -149,6 +149,14 @@
     text-align: left;
   }
 
+  // 歌名行：歌名 + MV 角标。歌名负责吃掉剩余宽度并省略，角标永远不压缩
+  .titleRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
   // 列表内一律省略号（原 scoText 跑马灯在列表里多行同滚，是持续噪音源）
   .name {
     border: 0;
@@ -164,6 +172,31 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    // flex 子项默认 min-width:auto，不置 0 的话长标题会把角标顶出可视区
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  // MV 角标：文字标签而不是图标——11px 的图标在 15px 歌名旁边看不清，
+  // 而「MV」两个字母本身就是全站通用的表意单位（详情页标题、搜索分类都在用）
+  .mvTag {
+    flex: 0 0 auto;
+    height: 16px;
+    padding: 0 4px;
+    border: 1px solid var(--c-border-strong);
+    border-radius: 3px;
+    background: transparent;
+    color: $font-black-2;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: .5px;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+
+    &:hover { color: $color-main; border-color: $color-main; }
+    &:focus-visible { outline: 1px solid $color-main; outline-offset: 1px; }
   }
 
   .artist {

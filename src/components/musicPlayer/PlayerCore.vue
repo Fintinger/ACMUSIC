@@ -51,6 +51,14 @@
           <BaseIcon v-if="isLiked" name="likeFill"/>
           <BaseIcon v-else name="like"/>
         </i>
+        <!-- 有官方 MV 时挨着红心放一盏小灯：只有 4~6 成歌曲有，所以不做灰态，直接不出现 -->
+        <button
+            v-if="currentMvId && !isMvDead(currentMvId)"
+            type="button"
+            class="mvBtn"
+            :title="'播放《' + songName + '》的 MV'"
+            @click.stop="openMv"
+        >MV</button>
       </div>
       <div class="barCenter">
         <!-- 四层播放模式的当前组合。绝对定位在左端：不参与 barControls 的居中计算，
@@ -254,6 +262,7 @@
                   <span class="plSongName">{{ s.name }}</span>
                   <span class="plSongArtist">{{ getArtistStr(s) }}</span>
                   <span class="plOps">
+                    <span v-if="mvOf(s)" class="plOp" title="播放 MV" @click.stop="openTrackMv(s)"><BaseIcon name="mv" :size="12"/></span>
                     <span class="plOp" title="下一首播放" @click.stop="playNext(s)"><BaseIcon name="next" :size="12"/></span>
                     <span class="plOp" title="从队列移除" @click.stop="removeFromQueue(s)"><BaseIcon name="close" :size="12"/></span>
                   </span>
@@ -293,6 +302,8 @@ import * as tracks from "@/api/Tracks";
 import * as userApi from "@/api/User";
 import * as authApi from "@/api/auth";
 import { toHttpsUrl, imgParam } from "@/utils/filters";
+import { mvIdOf, isMvDead } from "@/utils/songMv";
+import { songMvMixin } from "@/mixins/songMvMixin";
 
 // 打卡门槛：播满 30 秒或过半（先到者）。
 // 太短的「点一下就切」报了也不会被网易云计入，只会白打一次接口。
@@ -303,6 +314,8 @@ export default {
   name: "PlayCore",
   props: ["song", "isExpand"],
   components: { QualityMenu, ModeMenu },
+  // currentMvId / resolveSongMv：当前歌曲对应的 MV，见 utils/songMv.js
+  mixins: [songMvMixin],
   data() {
     return {
       // 播放器内联状态条：承载「A-B 选点 / 副歌 / 心动模式 / 定时停止」这类持续状态。
@@ -777,6 +790,8 @@ export default {
         }
         this._loadChorus()
         this._loadSongLevels(val.id)
+        // 当前歌曲的 MV：自带 mv 就直接出，缺字段（FM / 刷新恢复）才补一次详情
+        this.resolveSongMv(val)
         console.log('[PlayIntent]', { songId: val.id, source: this.currentSongSource, playIntentId: this.playIntentId, playContextId: this.playContextId, requestId: this.playRequestId, action: 'start' })
         console.log('[PlayContext]', { songId: val.id, source: this.currentSongSource, contextId: this.playContextId, playlistContextId: this.playlistContextId, requestId: this.playRequestId })
         normalizeTrack(val)
@@ -1028,7 +1043,6 @@ export default {
      * 输入框 / 文本域 / 可编辑区域 / 滑块聚焦时不拦截，避免影响搜索、评论和拖动进度。
      */
     _onGlobalKeydown(e) {
-      if (e.defaultPrevented) return
       // 组合键留给浏览器（Ctrl+←→ 等）
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target
@@ -1041,11 +1055,30 @@ export default {
         if (t.closest && t.closest('.el-textarea, .el-input, [contenteditable="true"]')) return
       }
       if (e.key === ' ' || e.code === 'Space') {
-        if (e.repeat) return
+        // 长按只认第一次，后续 repeat 事件只负责挡住页面滚动
+        if (e.repeat) { e.preventDefault(); return }
+        /**
+         * 空格是这个播放器的"播放/暂停"键，优先级最高：
+         *
+         * 1. <button> 自带默认行为（空格 = 点它）。焦点落在「下一首」上的路径有两条：
+         *    鼠标点过之后焦点残留，或者用 Tab 移过去 —— 不拦的话"想暂停"会变成"一直切歌"。
+         *    这里统一 preventDefault 取消默认激活，回车仍然可以正常激活按钮。
+         * 2. 刻意**不**看 e.defaultPrevented：浏览器扩展（平滑滚动、Vim 类按键插件）会在
+         *    捕获阶段先把空格 preventDefault 掉去做自己的事，按旧逻辑会直接 return，
+         *    表现就是"点了空白处之后按空格没反应"。被抢了也要接管。
+         *
+         * 唯一的例外是弹窗里的按钮（评论弹窗 / Element UI 确认框）：交还给浏览器（= 确认），
+         * 免得写评论或确认弹窗时误触播放控制。输入框 / 滑块在更上面已经直接放行。
+         */
+        const focused = document.activeElement
+        if (focused && focused.tagName === 'BUTTON' &&
+            focused.closest('.el-dialog__wrapper, .el-message-box__wrapper, .comment-overlay, [role="dialog"]')) return
         e.preventDefault()
         this.togglePlay()
         return
       }
+      // 其余快捷键尊重已处理的事件（比如视频播放器自己吃掉的左右键）
+      if (e.defaultPrevented) return
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         const dir = e.key === 'ArrowRight' ? 1 : -1
         if (e.shiftKey) {
@@ -2402,6 +2435,19 @@ export default {
         })
     },
     showSongDetail() { if (!this.currentSong.isVoice) this.$emit('SDClk', this.currentSong) },
+    /** 封面角标 / 队列里的 MV：统一交给 App 的全局 mvClk 通道 */
+    openMv() {
+      if (!this.currentMvId || isMvDead(this.currentMvId)) return
+      this.$bus.$emit('mvClk', this.currentMvId)
+    },
+    mvOf(track) {
+      const id = mvIdOf(track)
+      return id && !isMvDead(id) ? id : 0
+    },
+    openTrackMv(track) {
+      const id = this.mvOf(track)
+      if (id) this.$bus.$emit('mvClk', id)
+    },
     onMouseEnter() { this.clearHideTimer(); this.showBar = true },
     onMouseLeave() { this.scheduleHide() },
     onMouseMove() { this.clearHideTimer(); if (!this.showBar) this.showBar = true },
@@ -3058,6 +3104,8 @@ export default {
         album: (t.al && t.al.name) || (t.album && t.album.name) || '',
         picUrl: (t.al && t.al.picUrl) || (t.album && t.album.picUrl) || '',
         duration: t.dt || t.duration || 0,
+        // MV id 一起存：否则刷新后播放条角标和队列里的 MV 入口要等一次补拉才出现
+        mv: Number(t.mv) || 0,
         source: t.source || ''
       })
       // filter(Boolean)：队列里理论上不该有空元素，但一个 null 就能让整次保存抛错
@@ -3077,7 +3125,8 @@ export default {
           artists: this._artistText(s),
           // 歌手/专辑的 id 必须单独存：详情页那两行文案点了要跳详情
           ar: this._artistLite(s),
-          alId: this._albumLite(s).id
+          alId: this._albumLite(s).id,
+          mv: Number(s.mv) || 0
         },
         playlist,
         playlistOffset: offset,
@@ -3238,6 +3287,7 @@ export default {
               picUrl: t.picUrl || '',
               dt: t.duration || 0,
               duration: t.duration || 0,
+              mv: Number(t.mv) || 0,
               source: t.source || ''
             })
           }
@@ -3269,7 +3319,9 @@ export default {
             },
             ar: Array.isArray(data.song.ar) && data.song.ar.length
               ? data.song.ar
-              : [{ name: data.song.artists }]
+              : [{ name: data.song.artists }],
+            // 老存档没有 mv 字段（默认 0），播放条角标随后由 resolveSongMv 补拉
+            mv: Number(data.song.mv) || 0
           }
           this.showBar = true
         }
@@ -3347,6 +3399,8 @@ export default {
 mounted() {
     this._restoreState()
     this._restoreVolume()
+    // 恢复出来的歌曲是 lite 结构（_saveState 没存 mv），这里补一次
+    if (this.currentSong && this.currentSong.id) this.resolveSongMv(this.currentSong)
     try {
       // playMode 已经由 _restoreState 从 player_state 恢复时，不再读第二个来源
       if (!this._playModeRestored) {
@@ -3376,6 +3430,13 @@ mounted() {
     // 首页「心动模式」入口卡片：只发信号，真正的开关逻辑（登录校验/取流/换队列）在这里
     this._heartToggleHandler = () => this.toggleHeartMode()
     this.$bus.$on('heart-toggle', this._heartToggleHandler)
+    /**
+     * 进入 MV / 视频页时请求停歌。
+     * 播放器是全局常驻的，路由切走不会自己停；MV 有自己的音轨，
+     * 不暂停就是「歌曲 + 视频」两个声音同时响。
+     */
+    this._pauseForVideoHandler = () => { if (this.isPlay) this.pauseSong() }
+    this.$bus.$on('pause-song', this._pauseForVideoHandler)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
     /**
@@ -3416,6 +3477,7 @@ mounted() {
     pubsub.unsubscribe(this.fmBatchId)
     this.$bus.$off('fm-mode', this._fmModeHandler)
     this.$bus.$off('heart-toggle', this._heartToggleHandler)
+    this.$bus.$off('pause-song', this._pauseForVideoHandler)
     if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
     this._clearSourceStatusTimers()
   }
@@ -3611,10 +3673,33 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     .barArtist { font-size: 12px; color: $text-sec; line-height: 1.3; }
   }
   .likeBtn {
-    font-size: 18px; color: $text-sec; cursor: pointer; flex-shrink: 0; padding: 5px;
+    font-size: 18px; color: $text-sec; cursor: pointer; flex-shrink: 0; padding: 4px;
     transition: all 200ms cubic-bezier(0.22,0.61,0.36,1);
     &:hover { color: $text; transform: scale(1.15); }
     &.liked { color: #ef4444; filter: drop-shadow(0 0 4px rgba(239,68,68,0.25)); }
+  }
+  // MV 入口：紧跟红心。用文字标签而不是图标——「MV」两个字母在这里比任何
+  // 播放/影片图标都更容易一眼认出，且和右侧「完整 / 定时」的胶囊是同一种语言
+  .mvBtn {
+    flex-shrink: 0;
+    height: 18px;
+    padding: 0 4px;
+    margin-left: -4px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    background: rgba(255,255,255,0.04);
+    color: $text-sec;
+    font-family: inherit;
+    font-size: 10px; font-weight: 600; line-height: 1; letter-spacing: .5px;
+    cursor: pointer;
+    transition: all 160ms $ease-standard;
+
+    &:hover {
+      color: $accent;
+      background: rgba(var(--theme-accent-rgb), 0.1);
+      border-color: rgba(var(--theme-accent-rgb), 0.45);
+    }
+    &:focus-visible { outline: 1px solid $accent; outline-offset: 2px; }
   }
 }
 
@@ -3928,6 +4013,8 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 }
 @media (max-width: 1024px) {
   .barLeft { flex: 0 0 180px; width: 180px; }
+  // 180px 里再放一颗 MV 胶囊，歌名只剩三四个字，不如不给（列表页/大播放器仍有入口）
+  .barLeft .mvBtn { display: none; }
   .barRight { flex: 0 0 188px; width: 188px; }
   // 窄屏只留图标+箭头，避免右侧挤出可用区
   .barRight .chorusWrap .chorusTrigger .chorusLabel { display: none; }

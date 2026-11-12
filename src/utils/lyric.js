@@ -13,6 +13,15 @@
 const LRC_TAG_RE = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g
 const YRC_HEAD_RE = /^\[(\d+),(\d+)\]/
 const YRC_WORD_RE = /\((\d+),(\d+),-?\d+\)([^()]*)/g
+// 翻译行与原文行的时间戳允许有细微出入（yrc 行首 ms 与 lrc 的 mm:ss.xx 常差几十毫秒）
+const TR_MATCH_TOL = 0.35
+
+function tagToSeconds(match) {
+  const min = Number(match[1])
+  const sec = Number(match[2])
+  const ms = match[3] ? Number((match[3] + '00').slice(0, 3)) : 0
+  return min * 60 + sec + ms / 1000
+}
 
 /** 富文本行 → {t, lytxt}；不是富文本返回 null */
 export function parseJsonLyricLine(line) {
@@ -27,18 +36,27 @@ export function parseJsonLyricLine(line) {
   }
 }
 
-/** 标准 LRC 行 → {t, lytxt}；一行挂多个时间戳时取最后一个 */
-export function parseLrcLine(line) {
+/**
+ * 标准 LRC 行 → 时间戳对应的行数组。
+ * 老歌词一行常挂多个时间戳（`[00:10.00][01:20.00]副歌`），只取最后一个会让整段重复出现
+ * 的副歌在时间轴上凭空少一次，所以这里逐标签展开，正文取最后一个标签之后的部分。
+ */
+export function parseLrcLines(line) {
+  const s = String(line)
+  const tags = []
   LRC_TAG_RE.lastIndex = 0
-  if (!LRC_TAG_RE.test(String(line))) return null
-  LRC_TAG_RE.lastIndex = 0
-  let last = null
   let m
-  while ((m = LRC_TAG_RE.exec(line))) last = m
-  const min = Number(last[1])
-  const sec = Number(last[2])
-  const ms = last[3] ? Number((last[3] + '00').slice(0, 3)) : 0
-  return { t: min * 60 + sec + ms / 1000, lytxt: line.slice(last.index + last[0].length).trim() }
+  while ((m = LRC_TAG_RE.exec(s))) tags.push(m)
+  if (!tags.length) return []
+  const last = tags[tags.length - 1]
+  const text = s.slice(last.index + last[0].length).trim()
+  return tags.map(tag => ({ t: tagToSeconds(tag), lytxt: text }))
+}
+
+/** 标准 LRC 行 → {t, lytxt}；一行挂多个时间戳时取最后一个（兼容旧调用） */
+export function parseLrcLine(line) {
+  const rows = parseLrcLines(line)
+  return rows.length ? rows[rows.length - 1] : null
 }
 
 /** yrc 逐字行 → {t, lytxt, words:[{t,d,txt}]} */
@@ -68,8 +86,8 @@ export function parseLrcText(text) {
       if (jsonRow.lytxt) rows.push({ t: jsonRow.t, lytxt: jsonRow.lytxt, cur: false })
       return
     }
-    const lrcRow = parseLrcLine(line)
-    if (lrcRow) rows.push({ t: lrcRow.t, lytxt: lrcRow.lytxt || '<br>', cur: false })
+    const lrcRows = parseLrcLines(line)
+    if (lrcRows.length) lrcRows.forEach(r => rows.push({ t: r.t, lytxt: r.lytxt || '<br>', cur: false }))
   })
   return rows.sort((a, b) => a.t - b.t)
 }
@@ -108,14 +126,17 @@ export function parseLyricData(data) {
   if (!rows.length) return []
 
   if (tText) {
-    const trMap = {}
-    parseLrcText(tText).forEach(r => {
-      if (r.lytxt && r.lytxt !== '<br>') trMap[r.t.toFixed(2)] = r.lytxt
-    })
-    rows.forEach(r => {
-      const tr = trMap[r.t.toFixed(2)]
-      if (tr) r.tr = tr
-    })
+    // 取时间上最接近的一行（容差 TR_MATCH_TOL）。原来用 toFixed(2) 做键精确匹配，
+    // 逐字歌词的行首来自 yrc 的毫秒值，和翻译的 mm:ss.xx 常差几十毫秒，翻译会整首丢失。
+    const trRows = parseLrcText(tText).filter(r => r.lytxt && r.lytxt !== '<br>')
+    if (trRows.length) {
+      let j = 0
+      rows.forEach(r => {
+        // rows / trRows 都按时间升序，最近行的下标只会单调后移
+        while (j + 1 < trRows.length && Math.abs(trRows[j + 1].t - r.t) <= Math.abs(trRows[j].t - r.t)) j++
+        if (Math.abs(trRows[j].t - r.t) <= TR_MATCH_TOL) r.tr = trRows[j].lytxt
+      })
+    }
   }
   return rows
 }

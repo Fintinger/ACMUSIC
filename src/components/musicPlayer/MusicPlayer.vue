@@ -32,7 +32,7 @@
             <div class="progressTimes"><span>{{ formatTime(timeNow) }}</span><span>{{ formatTime(duration) }}</span></div>
           </div>
           <p v-if="expandedHint" class="expandedHint" role="status">{{ expandedHint }}</p>
-          <div class="controlsRow" @keydown.space.stop @keydown.left.stop @keydown.right.stop>
+          <div class="controlsRow" @keydown.left.stop @keydown.right.stop>
             <button type="button"
                 class="modeBtn"
                 :class="'mode-' + playMode"
@@ -49,8 +49,9 @@
             <button type="button" aria-label="下一首" class="trackBtn nextBtn" @click="nextTrack"><BaseIcon name="next" :size="20"/></button>
             <span class="modeBtn mode-spacer" aria-hidden="true"></span>
           </div>
-          <div class="actionsRow" @keydown.space.stop>
+          <div class="actionsRow">
             <button class="actionBtn" :aria-pressed="isLiked" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>喜欢</span></button>
+            <button v-if="currentMvId && !isMvDead(currentMvId)" class="actionBtn" @click="openMv"><BaseIcon name="mv"/><span>看 MV</span></button>
             <button class="actionBtn" :disabled="downloading" @click="downloadSong"><BaseIcon name="download"/><span>{{ downloading ? '获取中' : '下载' }}</span></button>
 
           </div>
@@ -64,7 +65,11 @@
           </div>
           <div class="rightContent">
             <div v-show="rightTab === 'lyric'" class="tabPanel">
-              <div v-if="!lyric.length" class="panelEmpty"><p>暂无歌词</p><p class="emptyHint">纯音乐，请欣赏</p></div>
+              <!-- 加载中不留白也不闪"纯音乐"：先用几行占位条撑住版面 -->
+              <div v-if="lyricLoading && !lyric.length" class="lyricSkeleton" aria-hidden="true">
+                <span v-for="n in 7" :key="n" class="lyricSkLine" :style="{ width: lyricSkWidths[n - 1] }"></span>
+              </div>
+              <div v-else-if="!lyric.length" class="panelEmpty"><p>暂无歌词</p><p class="emptyHint">纯音乐，请欣赏</p></div>
               <div v-else class="lyricsScroll" ref="lyricsScroll">
                 <div class="lyricsInner">
                   <p v-for="(line, idx) in lyric" :key="idx" :class="{ active: line.cur, spacer: !line.lytxt || line.lytxt === '<br>' }" @click="lyricClick(line.t)">
@@ -120,17 +125,27 @@ import { parseLyricData, parseLrcText, findActiveIndex, findActiveWord } from "@
 import config from "@/config";
 import * as tracksApi from "@/api/Tracks";
 import { isLoggedIn } from "@/utils/auth";
+import { songMvMixin } from "@/mixins/songMvMixin";
 
 export default {
   name: "MusicPlayer",
   props: ['song'],
   components: { PlayCore, SongInfoPanel, CommentLayout },
+  // currentMvId：当前歌曲的 MV，操作区「看 MV」按钮用（见 utils/songMv.js）
+  mixins: [songMvMixin],
   data() {
     return {
       isExpand: false,
       coreReady: false,
       isModalOpen: false,
       lyric: [],
+      // 歌词请求序号：只认最后一次请求的响应（快速切歌时旧响应会后到）
+      lyricSeq: 0,
+      // 歌词属于哪首歌，用来判断换歌时要不要先清空
+      lyricSongId: 0,
+      lyricLoading: false,
+      // 占位条宽度，写成常量避免模板里算随机数
+      lyricSkWidths: ['72%', '54%', '86%', '62%', '48%', '78%', '58%'],
       // 下载按钮请求中标志，防止连点
       downloading: false,
       timeNow: 0,
@@ -186,6 +201,7 @@ export default {
       val ? this.expanded() : this.minified()
       this._rememberUi()
     },
+    'currentSong.id'(id) { if (id) this.resolveSongMv(this.currentSong) },
     timeNow(val) { this.needUpdate(val) },
     rightTab() { this._rememberUi() },
     coverUrl(url) { if (url) this.$nextTick(() => this.updateBackground()) },
@@ -340,17 +356,46 @@ export default {
       this.colorSongId = sid
       this.bgStyle = 'linear-gradient(rgba(41,49,62,.72), rgba(32,38,51,.88)), ' + buildBackground(img)
     },
+    /**
+     * 取歌词。三条来源的顺序：/lyric/new（带 yrc 逐字）→ 失败或空 → 旧 /lyric 兜底。
+     *
+     * 两道守卫，都是踩过的坑：
+     * 1. **序号**：快速切歌时旧歌的歌词可能比新歌晚到，直接赋值会把上一首的词写进面板
+     *    （表现为"歌词和歌对不上"，刷新才好）。
+     * 2. **清空时机**：换歌时才置空，并且用骨架占位，否则面板会闪一下"纯音乐，请欣赏"。
+     */
     getLyric(id) {
-      this.lyric = []; this.lastActiveIdx = -1
-      // 旧接口兜底：/lyric 只给标准 LRC，但覆盖最广
-      const legacy = () => tracksApi.lyric(id).then(res => {
-        const text = res && res.data && res.data.lrc && res.data.lrc.lyric
-        this.lyric = text ? parseLrcText(text) : []
-      }).catch(() => { this.lyric = [] })
+      const songId = id || (this.currentSong && this.currentSong.id) || 0
+      const seq = ++this.lyricSeq
+      this.lyricLoading = true
+      if (this.lyricSongId !== songId) {
+        this.lyricSongId = songId
+        this.lyric = []
+        this.lastActiveIdx = -1
+      }
 
-      tracksApi.lyricNew(id).then(res => {
+      const apply = rows => {
+        // 旧请求的迟到响应直接丢弃
+        if (seq !== this.lyricSeq) return
+        this.lyric = rows
+        this.lyricLoading = false
+        this.lastActiveIdx = -1
+        // 新歌词的第一句可能十几秒后才出现，needUpdate 那时才会滚动；
+        // 不在这里归零就会停在上一首滚到的位置，看起来像歌词串了
+        this.$nextTick(() => {
+          if (this.$refs.lyricsScroll) this.$refs.lyricsScroll.scrollTop = 0
+        })
+      }
+
+      // 旧接口兜底：/lyric 只给标准 LRC，但覆盖最广
+      const legacy = () => tracksApi.lyric(songId).then(res => {
+        const text = res && res.data && res.data.lrc && res.data.lrc.lyric
+        apply(text ? parseLrcText(text) : [])
+      }).catch(() => apply([]))
+
+      tracksApi.lyricNew(songId).then(res => {
         const rows = parseLyricData(res && res.data)
-        if (rows.length) this.lyric = rows
+        if (rows.length) apply(rows)
         else return legacy()
       }).catch(() => legacy())
     },
@@ -368,6 +413,17 @@ export default {
         this.lyric.forEach((ly, i) => {
           const on = i === curIdx
           if (ly.cur !== on) ly.cur = on
+          /**
+           * 顺便把逐字进度归一：唱过的行直接置成"整行唱完"，还没到的行置 -1，
+           * 当前行的进度由下面那步实时算。
+           * 不归一的话，行切走的瞬间会把它那一刻的 wcur 留在原地——那一行于是永远
+           * 停在"半行亮半行暗"的样子，看起来像唱过的词也有深浅（yrc 的字时间经常越过
+           * 下一行的行首，最后几个字根本等不到点亮）。
+           */
+          if (ly.words && ly.words.length) {
+            const want = i < curIdx ? ly.words.length - 1 : (i > curIdx ? -1 : ly.wcur)
+            if (ly.wcur !== want) ly.wcur = want
+          }
         })
         this.lastActiveIdx = curIdx
         this.$nextTick(() => {
@@ -480,6 +536,16 @@ export default {
       else this.$bus.$emit('arClk', first.id, first.name)
     },
     alClick() { const id = (this.currentSong.al && this.currentSong.al.id) || (this.currentSong.album && this.currentSong.album.id); if (id) this.$bus.$emit('alClk', id) },
+    /**
+     * 看 MV：必须先把全屏播放器收起来。
+     * 展开态是一个铺满视口的遮罩，直接 router.push 只会把 MV 页盖在下面，
+     * 用户看到的还是歌词页（SongInfoPanel 的「查看专辑」踩过同一个坑）。
+     */
+    openMv() {
+      if (!this.currentMvId || this.isMvDead(this.currentMvId)) return
+      this.isExpand = false
+      this.$bus.$emit('mvClk', this.currentMvId)
+    },
     plClk(id) { this.$bus.$emit('plClk', id) },
     progressClk(evt) {
       const p = this.$refs.pgPanel; if (!p || !this.$refs.progressPanel) return
@@ -690,14 +756,31 @@ export default {
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%);
     &::-webkit-scrollbar { width: 4px; } &::-webkit-scrollbar-track { background: transparent; } &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
     .lyricsInner { padding: 40vh 0; }
-    p { font-size: 16px; line-height: 2.5; color: rgba(255,255,255,0.28); text-align: center; cursor: pointer; transition: all 400ms cubic-bezier(0.22,0.61,0.36,1); margin: 0; padding: 0 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; &:hover { color: rgba(255,255,255,0.45); } &.active { font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.92); line-height: 2; } &.spacer { height: 10px; font-size: 0; } }
-    /* 逐字（yrc）：未唱到的字压暗，唱到的字提亮 */
-    .lyricWord { opacity: .45; transition: opacity 120ms linear, color 120ms linear; }
-    .lyricWord.on { opacity: 1; }
-    p.active .lyricWord.on { color: #fff; text-shadow: 0 0 14px rgba(var(--theme-accent-rgb), 0.5); }
+    // 长句允许折行：原来 nowrap + ellipsis 会把长句从两侧切断（居中文本溢出是两头都切），
+    // 英文歌和带长制作人名单的歌最明显，看起来像"歌词少了半句"
+    p { font-size: 16px; line-height: 2.5; color: rgba(255,255,255,0.28); text-align: center; cursor: pointer; transition: all 400ms cubic-bezier(0.22,0.61,0.36,1); margin: 0; padding: 0 16px; white-space: normal; overflow-wrap: anywhere; &:hover { color: rgba(255,255,255,0.45); } &.active { font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.92); line-height: 2; } &.spacer { height: 10px; font-size: 0; } }
+    /* 逐字（yrc）：只有当前行做"唱到 / 没唱到"的区分。
+       非当前行（唱过的、还没到的）统一满不透明度，靠行的淡色来区分层级——
+       否则唱过的行会留下上一刻的 wcur，出现深浅不一的花字 */
+    .lyricWord { opacity: 1; transition: opacity 120ms linear, color 120ms linear; }
+    p.active .lyricWord { opacity: .45; }
+    p.active .lyricWord.on { opacity: 1; color: #fff; text-shadow: 0 0 14px rgba(var(--theme-accent-rgb), 0.5); }
     /* 翻译副行 */
-    .lyricTr { display: block; font-size: .6em; font-weight: 400; line-height: 1.7; color: rgba(255,255,255,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lyricTr { display: block; font-size: .6em; font-weight: 400; line-height: 1.7; color: rgba(255,255,255,0.5); white-space: normal; overflow-wrap: anywhere; }
     p.active .lyricTr { color: rgba(255,255,255,0.62); }
+  }
+
+  /* 歌词加载占位：位置和真实歌词一致（居中、行高相近），换歌时不会跳一下 */
+  .lyricSkeleton {
+    display: flex; flex-direction: column; align-items: center; gap: 26px;
+    padding: 26vh 16px 0; box-sizing: border-box; height: 100%;
+  }
+
+  .lyricSkLine {
+    height: 12px; border-radius: $radius-pill;
+    background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer $shimmer-duration infinite;
   }
 
   .panelEmpty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 200px; color: rgba(255,255,255,0.28); p { margin: 0; font-size: 15px; } .emptyHint { font-size: 13px; opacity: 0.5; margin-top: 6px; } }
@@ -804,9 +887,18 @@ export default {
   .tabPanel .lyricsScroll, .tabPanel .cardScroll { height: 100%; min-height: 0; max-height: none; box-sizing: border-box; }
   .lyricsScroll { height: 66vh; max-height: 700px; min-height: 400px;
     .lyricsInner { padding: 30vh 0; }
-    p { font-size: clamp(16px, 1.6vw, 22px); line-height: 2.8; color: var(--player-menu-muted); white-space: nowrap; word-break: keep-all; }
+    // word-break: keep-all 会让中文长句断不开（只能整行溢出被裁），配合折行改成 normal
+    p { font-size: clamp(16px, 1.6vw, 22px); line-height: 2.8; color: var(--player-menu-muted); white-space: normal; word-break: normal; overflow-wrap: anywhere; }
     p.active { font-size: clamp(22px, 2.2vw, 32px); color: var(--player-menu-text); }
-    p span { white-space: nowrap; }
+    /**
+     * 层级：唱过的行（当前行之前）保持基础灰度，还没到的行（当前行之后的所有兄弟）再压一档。
+     * 用兄弟选择器而不是逐行打标记：歌词是顺序渲染的，当前行后面必然是"未到"的部分，
+     * 少一份状态就少一处同步问题；切换时 p 上已有的 transition 会把这个变化带成渐变。
+     */
+    p.active ~ p { opacity: .58; }
+    // 逐字片段的字/词内部不拆开，折行只发生在片段之间（这条别写给 p span：
+    // 会把整行文本和翻译行也锁成 nowrap，长句就又溢出被裁了）
+    p .lyricWord { white-space: nowrap; }
   }
   .cardScroll { max-height: 66vh; overflow-y: auto; }
   button:focus-visible { outline: 2px solid var(--player-menu-accent); outline-offset: 3px; }

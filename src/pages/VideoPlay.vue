@@ -128,7 +128,11 @@ export default {
     }
   },
   beforeDestroy() { this.requestVersion++ },
-  activated() { this.loadMedia() }
+  activated() {
+    // 同 mvPlay：进视频页先停歌，避免和视频音轨叠在一起
+    this.$bus.$emit('pause-song')
+    this.loadMedia()
+  }
 }
 </script>
 

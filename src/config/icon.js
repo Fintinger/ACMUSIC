@@ -193,6 +193,12 @@ export default {
         stroke: 'currentColor', strokeWidth: 1.8,
         path: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
     },
+    // MV：屏幕 + 播放三角，和 disc（唱片）区分开——「看」和「听」是两种动作
+    mv: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 1.8,
+        path: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z M10 9.2l5 2.8-5 2.8V9.2z',
+    },
     location: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 1.8,

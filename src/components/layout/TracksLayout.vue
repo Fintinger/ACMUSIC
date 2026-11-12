@@ -34,7 +34,12 @@
           <cover-image :src="coverOf(t)" :alt="(t.name || '未知') + '的封面'"/>
         </span>
         <div class="col-title">
-          <button type="button" class="name" :title="'播放 ' + (t.name || '未知')" @click="songClk(t)">{{ t.name || '未知' }}</button>
+          <!-- 歌名 + MV 角标同一行：角标只在真的有 MV 时出现（实测约 4~6 成歌曲有），
+               不占固定列宽，避免整列留白 -->
+          <div class="titleRow">
+            <button type="button" class="name" :title="'播放 ' + (t.name || '未知')" @click="songClk(t)">{{ t.name || '未知' }}</button>
+            <button v-if="mvOf(t)" type="button" class="mvTag" :title="'播放《' + (t.name || '未知') + '》的 MV'" @click.stop="mvClk(mvOf(t))">MV</button>
+          </div>
           <span class="artist" :title="artistList(t).map(a => a.name).join(', ')">
             <span
                 v-for="(a, ind) in artistList(t)"
@@ -61,6 +66,7 @@
 import {mapActions} from 'vuex'
 import CoverImage from "@/components/common/CoverImage";
 import {format_s} from "@/utils/filters";
+import {mvIdOf, isMvDead} from "@/utils/songMv";
 
 export default {
   name: "TracksLayout",
@@ -127,6 +133,16 @@ export default {
     durationOf(t) {
       const v = t.dt || t.duration
       return v ? format_s(v) : ''
+    },
+    /**
+     * 这一行可播的 MV id，0 表示不显示角标
+     * 只读 song.mv，不为每一行发请求：列表里绝大多数接口本来就带这个字段，
+     * 缺字段的（私人 FM 之类）宁可没有入口，也不值得 50 行打 50 个请求
+     */
+    mvOf(t) {
+      const id = mvIdOf(t)
+      if (!id || isMvDead(id)) return 0
+      return id
     },
     mvClk(id) {
       this.$bus.$emit('mvClk', id)

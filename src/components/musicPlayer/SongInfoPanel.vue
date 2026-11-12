@@ -45,6 +45,22 @@
         </div>
       </section>
 
+      <!-- 官方 MV：这首歌「有什么可看的」也是资料的一部分，和背景故事同级 -->
+      <section v-if="mv" class="siCard">
+        <h3 class="siCardTitle">MV</h3>
+        <button type="button" class="siMv" :title="'播放《' + mv.name + '》的 MV'" @click="playMv">
+          <span class="siMvCover">
+            <img v-if="mv.cover" :src="mv.cover | https" alt="">
+            <BaseIcon v-else name="mv" :size="18"/>
+          </span>
+          <span class="siMvMain">
+            <span class="siMvName">{{ mv.name }}</span>
+            <span class="siMvSub">{{ mvMeta }}</span>
+          </span>
+          <span class="siMvGo"><BaseIcon name="play" :size="11"/></span>
+        </button>
+      </section>
+
       <!-- 背景故事：目前唯一能给成段长文的来源是专辑介绍（专辑级，同专辑歌曲共享） -->
       <section v-if="info.album" class="siCard">
         <h3 class="siCardTitle">背景故事</h3>
@@ -81,7 +97,10 @@
 <script>
 import * as tracksApi from "@/api/Tracks"
 import * as albumApi from "@/api/Album"
+import * as mvApi from "@/api/Mv"
 import { buildSongInfo } from "@/utils/songInfo"
+import { formatCount, format_s } from "@/utils/filters"
+import { mvIdOf, markMvDead, ensureMvId } from "@/utils/songMv"
 
 /**
  * SongInfoPanel —— 播放详情页右栏「歌曲信息」
@@ -106,6 +125,8 @@ export default {
       loading: false,
       error: false,
       info: null,
+      // 官方 MV（/mv/detail 拉回来的一小块摘要），没有就不渲染这张卡
+      mv: null,
       // 已加载完成的歌曲 id，避免同一首歌重复请求
       loadedId: 0,
       // 请求序号：只认最后一次请求的响应
@@ -122,6 +143,14 @@ export default {
     hasBasics() {
       const info = this.info
       return !!(info && (info.facts.length || info.credits.length || info.styles.length || info.moods.length))
+    },
+    mvMeta() {
+      const m = this.mv
+      if (!m) return ''
+      const parts = []
+      if (m.playCount) parts.push(formatCount(m.playCount) + ' 次播放')
+      if (m.duration) parts.push(format_s(m.duration))
+      return parts.join(' · ')
     }
   },
   watch: {
@@ -149,8 +178,14 @@ export default {
       this.loading = true
       this.error = false
       this.info = null
+      this.mv = null
 
       const albumId = (this.song.al && this.song.al.id) || (this.song.album && this.song.album.id) || 0
+
+      // MV 摘要单独一路：没有 MV 的歌曲完全不发这个请求
+      const mvId = mvIdOf(this.song)
+      if (mvId) this.loadMv(mvId, seq)
+      else ensureMvId(this.song).then(id => { if (id && seq === this.reqSeq) this.loadMv(id, seq) })
 
       // 三路并发、各自兜底：百科没收录是常态，一路失败不该把整页变空白
       let failed = 0
@@ -181,6 +216,34 @@ export default {
         this.loading = false
         this.error = true
       })
+    },
+    /**
+     * MV 摘要。上游对下架 MV 回的是 HTTP 200 + {code:404}，所以判的是 data 里有没有 name。
+     * 判到失效就记负缓存：列表徽标 / 播放条角标会同步消失，不用等这一页重开。
+     */
+    loadMv(id, seq) {
+      mvApi.detail(id).then(res => {
+        if (seq !== this.reqSeq) return
+        const d = res && res.data && res.data.data
+        if (!d || !d.name) { markMvDead(id); return }
+        this.mv = {
+          id,
+          name: d.name,
+          cover: d.cover || '',
+          playCount: d.playCount || 0,
+          duration: d.duration || 0
+        }
+      }).catch(err => {
+        // 网络问题：这张卡不出现，但不写负缓存；HTTP 404 才是真的下架
+        if (seq !== this.reqSeq) return
+        if (err && err.response && err.response.status === 404) markMvDead(id)
+      })
+    },
+    playMv() {
+      if (!this.mv) return
+      // 同「查看专辑」：先收全屏播放器，否则遮罩会盖住 MV 页
+      this.$emit('close-player')
+      this.$bus.$emit('mvClk', this.mv.id)
     },
     /** 折叠态量一次高度，判断要不要出「展开全文」 */
     measureDesc() {
@@ -342,6 +405,65 @@ export default {
 .siTag--style {
   background: var(--player-menu-soft);
   color: $player-text-primary;
+}
+
+/* ---------- MV ---------- */
+.siMv {
+  display: flex;
+  align-items: center;
+  gap: $sp-3;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover .siMvName { color: $player-accent; }
+  &:focus-visible { outline: 1px solid $player-accent; outline-offset: 2px; }
+}
+
+.siMvCover {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $player-text-tertiary;
+  background: rgba(255, 255, 255, 0.06);
+
+  img { width: 100%; height: 100%; object-fit: cover; display: block; }
+}
+
+.siMvMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.siMvName {
+  font-size: $fs-card-title;
+  color: $player-text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color $motion-fast $ease-standard;
+}
+
+.siMvSub {
+  font-size: $fs-aux;
+  color: $player-text-tertiary;
+}
+
+.siMvGo {
+  flex: 0 0 auto;
+  color: $player-text-tertiary;
 }
 
 /* ---------- 背景故事 ---------- */
