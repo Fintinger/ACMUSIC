@@ -15,10 +15,10 @@
                 <router-link to="/"><BaseIcon name="home"/>首 页</router-link>
               </el-col>
               <el-col :span="8">
-                <router-link to="/explore/playlist/all"><BaseIcon name="explore"/>发 现</router-link>
+                <router-link to="/explore/playlists/all"><BaseIcon name="explore"/>发 现</router-link>
               </el-col>
               <el-col :span="8">
-                <router-link to="/user"><BaseIcon name="user"/>我 的</router-link>
+                <router-link to="/me"><BaseIcon name="user"/>我 的</router-link>
               </el-col>
             </el-row>
           </el-col>
@@ -242,6 +242,12 @@ export default {
         query: {id}
       })
     },
+    artistAllMvsClick(id) {
+      this.$router.push({
+        name: "artistAllMvs",
+        query: {id}
+      })
+    },
     songClick(song) {
       //退出 FM 模式（isPersonalFM 已下沉到 PlayerCore，通过 $bus 通知）
       //原实现写的是 this.$store.state.isPersonalFM = false（缺模块前缀，实际没生效）
@@ -267,7 +273,7 @@ export default {
       })
     },
     goUserPage() {
-      this.$router.push('/user')
+      this.$router.push('/me')
     },
     logout() {
       // 原实现用的是浏览器原生 confirm，与项目视觉完全脱节
@@ -302,6 +308,7 @@ export default {
     this.$bus.$on('arClk', this.artistClick)
     this.$bus.$on('arAsClk', this.artistAllSongsClick)
     this.$bus.$on('arAlClk', this.artistAllAlbumsClick)
+    this.$bus.$on('arAmClk', this.artistAllMvsClick)
     this.$bus.$on('songClk', this.songClick)
     this.$bus.$on('mvClk', this.mvClick)
     this.$bus.$on('vClk', this.videoClick)

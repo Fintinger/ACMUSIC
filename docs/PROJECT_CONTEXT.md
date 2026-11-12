@@ -212,7 +212,6 @@ ACMUSIC/
 │   │   ├── VideoPlay.vue
 │   │   ├── SearchResult.vue    # 搜索容器（多 tab 子路由）
 │   │   ├── DailySongs.vue      # 每日推荐落地页
-│   │   ├── Playlist.vue        # 发现/歌单子路由的容器
 │   │   ├── explorePage/        # 发现子路由
 │   │   │   ├── playlist/
 │   │   │   │   ├── AllList.vue          # 全部分类（横向 pill + 下拉）
@@ -224,7 +223,9 @@ ACMUSIC/
 │   │   │   └── VideoList.vue
 │   │   ├── artist/
 │   │   │   ├── ArtistDetail.vue        # 歌手详情（顶部 hero + 热门 50 / 专辑 / MV / 视频 / 相似）
-│   │   │   └── ArtistAllSongs.vue
+│   │   │   ├── ArtistAllSongs.vue      # 全部歌曲（offset 分页）
+│   │   │   ├── ArtistAllAlbums.vue     # 全部专辑（offset 分页）
+│   │   │   └── ArtistAllMvs.vue        # 全部 MV（offset 分页）
 │   │   └── search/            # 搜索结果 9 个子视图，全部 mixin searchMixin
 │   │       ├── TrackRes.vue
 │   │       ├── AlbumRes.vue
@@ -360,6 +361,8 @@ methods: { getList, initLoad, load }
 | `alClk` | id | 专辑卡片 | App → albumDetail |
 | `arClk` | id | 歌手卡片 | App → artistDetail |
 | `arAsClk` | id | 歌手全部歌曲 | App → artistAllSongs |
+| `arAlClk` | id | 歌手全部专辑 | App → artistAllAlbums |
+| `arAmClk` | id | 歌手全部 MV | App → artistAllMvs |
 | `songClk` | song obj | 歌曲点击 | App.songClick → MusicPlayer |
 | `mvClk` | id | MV 卡片 | App → mvPlay |
 | `vClk` | id | 视频卡片 | App → videoPlay |
@@ -370,11 +373,28 @@ methods: { getList, initLoad, load }
 
 ## 6. 路由（`router/index.js`）
 
+**路径命名约定（v1.4.0 起）**：全小写、只写资源名（不带 Detail / All / Res 这类页面角色词）、归属用嵌套（`/artist/songs`）、集合用复数（`/explore/playlists`）；带子路由的父级必须有 `redirect` 到默认子级。完整的六条写在 `router/index.js` 的 `routes` 上方。
+
+| 页面 | path | name |
+|---|---|---|
+| 首页 / 我的 | `/` `/me` | — / `me` |
+| 发现 | `/explore`（→ `/explore/playlists/all`） | — |
+| 歌单 / 专辑 / 歌手详情 | `/playlist` `/album` `/artist` | `listDetail` `albumDetail` `artistDetail` |
+| 歌手的全部歌曲 / 专辑 | `/artist/songs` `/artist/albums` | `artistAllSongs` `artistAllAlbums` |
+| 歌手的全部 MV | `/artist/mvs` | `artistAllMvs` |
+| MV / 视频 | `/mv` `/video` | `mvPlay` `videoPlay` |
+| 搜索 | `/search`（→ `/search/tracks`）+ `albums/artists/lyrics/mvs/playlists/tracks/users/videos/voices` | `search` + `*Res`/`trackList` |
+| 用户详情 | `/user?uid=` | `userDetail` |
+| 每日推荐 / 年度报告 | `/daily` `/annual` | `dailySongs` `annualReport` |
+
+> `name` 还没跟着 path 一起收（`mvPlay`/`trackList` 这类），改 path 不影响站内跳转（全部走 `{name}`）。
+> 旧地址统一在 `router/index.js` 末尾的「兼容旧地址」区用 redirect 兜住。
+
 **所有 detail 页通过 query 传 id/uid，并在路由 props 函数中解构**：
 
 ```js
 {
-  path: '/listDetail',
+  path: '/playlist',
   name: 'listDetail',
   component: ListDetail,
   props: ($route) => ({ id: $route.query.id })

@@ -336,7 +336,7 @@ export default {
       if (st && st.userId) return st
       return this.$store.getters["UserAbout/userProfile"] || {}
     },
-    // 注意 userId 是 number，而 /user-detail?uid=xxx 路由里拿到的是 string，
+    // 注意 userId 是 number，而 /user?uid=xxx 路由里拿到的是 string，
     // 用 === 会导致「从他人主页跳到自己主页」时误判为非本人 → 统一转字符串比较
     isSelf() { return this.uid != null && this.loginInfo.userId != null && String(this.uid) === String(this.loginInfo.userId) },
     // 格式：「上次登录 · 浙江杭州 · 8月26日 17:37」

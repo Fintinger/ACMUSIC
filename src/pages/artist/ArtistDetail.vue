@@ -73,13 +73,12 @@
     <section class="ar-section ar-mv-section">
       <div class="section-head">
         <h2>MV<em v-if="arBasicInfo.mvSize" class="section-count">{{ arBasicInfo.mvSize }} 个</em></h2>
-        <span v-if="mvToggleable" class="section-more" :class="{ 'is-loading': mvPaging.loading }"
-              @click="toggleMvs">
-          <template v-if="mvPaging.loading"><BaseIcon class="is-spinning" name="loader"/> 加载中…</template>
-          <template v-else>{{ expanded.mvs ? '收起' : '更多' }} <BaseIcon :name="expanded.mvs ? 'arrowUp' : 'arrowRight'"/></template>
+        <!-- 详情页只展示前 8 个，全量走 /artist/mvs 独立页（offset 分页） -->
+        <span v-if="hasMoreMvs" class="section-more" @click="arAmClk(id)" title="查看该歌手的全部 MV">
+          更多 <BaseIcon name="arrowRight"/>
         </span>
       </div>
-      <MvLayout v-if="mvs.length" :list="expanded.mvs ? mvs : mvs.slice(0, CARD_PREVIEW)" pic-name="imgurl16v9"/>
+      <MvLayout v-if="mvs.length" :list="mvs.slice(0, CARD_PREVIEW)" pic-name="imgurl16v9"/>
       <EmptyState v-else compact :title="sectionErrors.mvs ? 'MV 加载失败' : '暂无 MV'"/>
     </section>
 
@@ -118,10 +117,9 @@ import VideoLayout from "@/components/layout/VideoLayout";
 import CoverImage from "@/components/common/CoverImage";
 import * as artistApi from "@/api/Artist";
 
-// 首屏各区块只渲染 CARD_PREVIEW 张，专辑多取几张做缓冲（点「更多」是整页跳转，不再续拉）
+// 首屏各区块只渲染 CARD_PREVIEW 张，专辑 / MV 多点几张做缓冲（点「更多」是整页跳转，不再续拉）
 const ALBUM_INIT = 12;
 const MV_INIT = 16;
-const MV_PAGE = 50;
 
 export default {
   name: "ArtistDetail",
@@ -145,11 +143,11 @@ export default {
        * Vue 2 侦测不到对象新增属性，赋值没有 setter，视图不会重渲染，
        * 表现就是「【更多】点了完全没反应」。改成预声明后才是响应式的。
        */
-      expanded: { mvs: false, simi: false },
+      expanded: { simi: false },
       // 专辑还有没有下一页（只用来判断是否显示【更多】，真正的分页在 ArtistAllAlbums 页里做）
       albumMore: false,
-      // /artist/mv 是 offset 分页（返回 hasMore），用游标对象记录，展开时按页续拉
-      mvPaging: { offset: 0, more: false, loading: false },
+      // MV 同上：只用来决定要不要显示【更多】，分页在 ArtistAllMvs 页里做
+      mvMore: false,
       // 关注歌手（收藏歌手）状态
       followed: false,
       followPending: false,
@@ -165,15 +163,16 @@ export default {
         || this.albumMore
         || this.hotAlbums.length > this.CARD_PREVIEW
     },
-    mvToggleable() {
-      return this.expanded.mvs || this.mvPaging.more || this.mvs.length > this.CARD_PREVIEW
+    /** MV 区块是否显示【更多】（跳转全部 MV 页） */
+    hasMoreMvs() {
+      return this.mvMore || this.mvs.length > this.CARD_PREVIEW
     }
   },
   methods: {
     async loadArtist() {
       const version = ++this.requestVersion
       this.loading = true; this.loadError = false; this.partialError = false
-      this.expanded = { mvs: false, simi: false }
+      this.expanded = { simi: false }
       if (!/^[1-9]\d*$/.test(String(this.id || ''))) { this.loadError = true; this.loading = false; return }
       const jobs = [this.getAtDetail(), this.getTop50(), this.getAlbum(), this.getMVs(), this.getSimiAt(), this.getVid()]
       const results = await Promise.allSettled(jobs)
@@ -183,7 +182,7 @@ export default {
       this.arBasicInfo = data[0].artist; this.followed = !!this.arBasicInfo.followed
       this.top50songs = Array.isArray(data[1].songs) ? data[1].songs : []
       this.hotAlbums = Array.isArray(data[2].hotAlbums) ? data[2].hotAlbums : []; this.albumMore = !!data[2].more
-      this.mvs = Array.isArray(data[3].mvs) ? data[3].mvs : []; this.mvPaging.offset = this.mvs.length; this.mvPaging.more = !!data[3].hasMore
+      this.mvs = Array.isArray(data[3].mvs) ? data[3].mvs : []; this.mvMore = !!data[3].hasMore
       this.simiArtists = Array.isArray(data[4].artists) ? data[4].artists : []
       const video = data[5].data || {}; this.videos = Array.isArray(video.records) ? video.records : []
       this.sectionErrors = {
@@ -201,35 +200,10 @@ export default {
     arAsClk(id) { this.$bus.$emit('arAsClk', id) },
     /** 跳到「该歌手全部专辑」页（App.vue 里监听 arAlClk 做路由跳转） */
     arAlClk(id) { this.$bus.$emit('arAlClk', id) },
+    /** 跳到「该歌手全部 MV」页（App.vue 里监听 arAmClk 做路由跳转） */
+    arAmClk(id) { this.$bus.$emit('arAmClk', id) },
     songClk(song) { this.$bus.$emit('songClk', song) },
     mvClick(id) { this.$bus.$emit('mvClk', id) },
-
-    /** MV：【更多】= 展开并自动续拉到最后一页；展开后点击变【收起】 */
-    toggleMvs() {
-      if (this.mvPaging.loading) return
-      this.expanded.mvs = !this.expanded.mvs
-      if (this.expanded.mvs) this.loadRestMvs()
-    },
-    loadRestMvs() {
-      if (!this.mvPaging.more || this.mvPaging.loading) return Promise.resolve()
-      this.mvPaging.loading = true
-      const step = () => {
-        if (!this.mvPaging.more || !this.expanded.mvs) return Promise.resolve()
-        return artistApi.mvs(this.id, MV_PAGE, this.mvPaging.offset).then(res => {
-          const data = res.data || {}
-          const list = data.mvs || []
-          if (!list.length) { this.mvPaging.more = false; return }
-          const seen = new Set(this.mvs.map(m => m.id))
-          this.mvs = this.mvs.concat(list.filter(m => !seen.has(m.id)))
-          this.mvPaging.offset += list.length
-          this.mvPaging.more = !!data.hasMore
-          return step()
-        })
-      }
-      return step()
-        .catch(() => this.$toast.error('MV 加载失败，请稍后重试'))
-        .finally(() => { this.mvPaging.loading = false })
-    },
 
     /** 关注 / 取消关注该歌手 */
     toggleFollow() {

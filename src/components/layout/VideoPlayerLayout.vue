@@ -49,26 +49,28 @@
         </section>
       </div>
 
-      <!-- 相关推荐：有数据或仍在请求时都占位，避免列表出来后播放区被挤窄 -->
-      <aside v-if="simiVideo.length || simiLoading" class="simi-sidebar" :style="sidebarStyle">
-        <h2 class="simi-title">{{ simiFallback ? '为你推荐' : '相关推荐' }}</h2>
-        <div class="simi-list">
-          <template v-if="simiLoading && !simiVideo.length">
-            <div v-for="n in 6" :key="'sk' + n" class="simi-item simi-item--skeleton">
-              <div class="simi-cover skeleton-item"></div>
-              <div class="simi-info">
-                <div class="skel-line skeleton-item"></div>
-                <div class="skel-line skel-line--short skeleton-item"></div>
+      <!-- 相关推荐：高度跟左栏 .video-main 完全对齐（见 .simi-sidebar 说明） -->
+      <aside v-if="simiVideo.length || simiLoading" class="simi-sidebar">
+        <div class="simi-panel">
+          <h2 class="simi-title">{{ simiFallback ? '为你推荐' : '相关推荐' }}</h2>
+          <div class="simi-list">
+            <template v-if="simiLoading && !simiVideo.length">
+              <div v-for="n in 6" :key="'sk' + n" class="simi-item simi-item--skeleton">
+                <div class="simi-cover skeleton-item"></div>
+                <div class="simi-info">
+                  <div class="skel-line skeleton-item"></div>
+                  <div class="skel-line skel-line--short skeleton-item"></div>
+                </div>
               </div>
-            </div>
-          </template>
-          <div v-for="v in simiVideo" :key="v[si_id]" class="simi-item" @click="simiClickEvt(v[si_id])">
-            <div class="simi-cover"><cover-image :src="v[si_cover]" :alt="v[si_name] + '的封面'"/></div>
-            <div class="simi-info">
-              <div class="simi-name" :title="v[si_name]">{{ v[si_name] }}</div>
-              <div class="simi-artist" v-if="typeof v[si_arName] === 'string' && v[si_arName]">{{ v[si_arName] }}</div>
-              <div class="simi-artist" v-else-if="Array.isArray(v[si_arName]) && v[si_arName].length">
-                <span v-for="n in v[si_arName]" :key="n.userId">{{ n.userName }} </span>
+            </template>
+            <div v-for="v in simiVideo" :key="v[si_id]" class="simi-item" @click="simiClickEvt(v[si_id])">
+              <div class="simi-cover"><cover-image :src="v[si_cover]" :alt="v[si_name] + '的封面'"/></div>
+              <div class="simi-info">
+                <div class="simi-name" :title="v[si_name]">{{ v[si_name] }}</div>
+                <div class="simi-artist" v-if="typeof v[si_arName] === 'string' && v[si_arName]">{{ v[si_arName] }}</div>
+                <div class="simi-artist" v-else-if="Array.isArray(v[si_arName]) && v[si_arName].length">
+                  <span v-for="n in v[si_arName]" :key="n.userId">{{ n.userName }} </span>
+                </div>
               </div>
             </div>
           </div>
@@ -186,22 +188,12 @@ export default {
         { icon: "comment", label: "评论", value: d.commentCount, clickable: true },
         { icon: "share", label: "分享", value: d.shareCount }
       ].filter(s => s.value != null)
-    },
-    /** 侧栏与播放器顶部对齐（下移标题区高度）+ 与播放窗口等高 */
-    sidebarStyle() {
-      return {
-        "--simi-top": `${this.headH || 0}px`,
-        "--simi-max-h": `${this.playerH || 560}px`
-      }
     }
   },
   data() {
     return {
       // 视频容器左右两侧背景色（从封面主色动态提取）
       playerBgStyle: '',
-      // 标题区/播放器实时高度 → 侧栏对齐与限高
-      headH: 0,
-      playerH: 0,
       showWriteModal: false,
       // 评论发送后递增，强制评论区重载
       commentKey: 0
@@ -222,7 +214,7 @@ export default {
     },
     /** 标签可点：跳视频列表页并自动选中该标签 */
     goTag(t) {
-      this.$router.push({ path: "/explore/videoList", query: { tag: t.name } })
+      this.$router.push({ path: "/explore/videos", query: { tag: t.name } })
     },
     /** 统计项点击：目前只有"评论"可点，打开写评论弹窗 */
     onStatClick(s) {
@@ -250,32 +242,7 @@ export default {
       const [r, g, b] = colors[0]
       const main = `rgb(${r},${g},${b})`
       this.playerBgStyle = `background: linear-gradient(to right, ${main} 0%, #000 35%, #000 65%, ${main} 100%)`
-    },
-    /** 监听标题区与播放器尺寸，驱动侧栏对齐与限高 */
-    observeLayout() {
-      const head = this.$refs.videoHead
-      if (!head || this._ro) return
-      const measure = () => {
-        this.headH = head.offsetHeight
-        if (this.$refs.playerSection) this.playerH = this.$refs.playerSection.offsetHeight
-      }
-      measure()
-      if (typeof ResizeObserver === "undefined") {
-        window.addEventListener("resize", measure)
-        this._measure = measure
-        return
-      }
-      this._ro = new ResizeObserver(measure)
-      this._ro.observe(head)
-      if (this.$refs.playerSection) this._ro.observe(this.$refs.playerSection)
     }
-  },
-  updated() {
-    this.observeLayout()
-  },
-  beforeDestroy() {
-    if (this._ro) { this._ro.disconnect(); this._ro = null }
-    if (this._measure) { window.removeEventListener("resize", this._measure); this._measure = null }
   }
 }
 </script>
@@ -289,7 +256,7 @@ export default {
 
 /* 左（播放器+信息+评论）右（相关推荐）两栏 */
 .video-body {
-  display: flex; gap: 24px; align-items: flex-start;
+  display: flex; gap: 24px; align-items: stretch;
 }
 
 .video-main {
@@ -381,11 +348,22 @@ export default {
   }
 }
 
-/* 相关推荐侧栏：顶部与播放器对齐，高度不超过播放窗口 */
+/* 相关推荐侧栏：高度与左栏 .video-main 完全一致（顶部同起、底部同收）。
+   面板用绝对定位铺满侧栏——侧栏自身不产生内容高度，行高只由左栏决定；
+   否则 6~10 条推荐会把整行撑高，左栏底下被拉出一截空白、侧栏也会比播放区多出一块。
+   条目多的时候由 .simi-list 内部滚动，卡片外框始终不变形。
+   之所以不再用 JS 测 headH/playerH：标题与播放器是异步出现的，
+   首帧量到 0 之后就再也不会重算（ResizeObserver 挂在 head 上，播放器后来才挂载），
+   侧栏会停在「顶到标题、底边超出」的错误位置。 */
 .simi-sidebar {
   flex: 0 0 320px; width: 320px;
-  margin-top: var(--simi-top, 0);
-  max-height: var(--simi-max-h, 560px);
+  position: relative;
+  align-self: stretch;
+  min-height: 0;
+}
+
+.simi-panel {
+  position: absolute; inset: 0;
   display: flex; flex-direction: column;
   background: var(--c-bg-elevated); border-radius: 16px;
   padding: 18px 0 6px; box-shadow: 0 4px 16px rgba(0,0,0,.06);
@@ -459,9 +437,11 @@ export default {
   .video-body { flex-direction: column; }
   .simi-sidebar {
     flex: none; width: 100%;
+    position: static;
     margin-top: 16px;
-    max-height: 420px;
   }
+  /* 竖排时恢复常规流：高度跟内容走，超过 420px 才内部滚动 */
+  .simi-panel { position: static; max-height: 420px; }
 }
 
 .video-loading {

@@ -81,7 +81,7 @@ export default {
     curId() {
       this.reload()
     },
-    // 从播放页点标签跳转过来（/explore/videoList?tag=现场）
+    // 从播放页点标签跳转过来（/explore/videos?tag=现场）
     '$route.query.tag'() {
       this.applyRouteTag()
     }

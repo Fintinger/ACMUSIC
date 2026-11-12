@@ -310,7 +310,7 @@ export default {
         if (!r.ok) throw new Error(r.message)
         this.$toast.success('歌单已删除')
         this.$bus.$emit('playlistDeleted', this.id)
-        this.$router.push('/user')
+        this.$router.push('/me')
       } catch (e) {
         this.$toast.error('删除失败：' + (e.message || '请稍后重试'))
       } finally {

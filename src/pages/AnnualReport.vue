@@ -11,7 +11,7 @@
     <!-- 未登录 -->
     <div v-if="!isLogin" class="an-state">
       <p class="an-state-title">需要登录</p>
-      <p class="an-state-desc">年度报告只有本人能看，先去<router-link to="/user">登录</router-link>。</p>
+      <p class="an-state-desc">年度报告只有本人能看，先去<router-link to="/me">登录</router-link>。</p>
     </div>
 
     <!-- 加载 -->

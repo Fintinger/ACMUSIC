@@ -12,12 +12,12 @@ import { setRouteTitle, BASE } from "@/utils/title";
 const HomePage = () => import(/* webpackChunkName: "page-home" */ "@/pages/HomePage");
 const ExplorePage = () => import(/* webpackChunkName: "page-explore" */ "@/pages/ExplorePage");
 const UserPage = () => import(/* webpackChunkName: "page-user" */ "@/pages/UserPage");
-const Playlist = () => import(/* webpackChunkName: "page-playlist" */ "@/pages/Playlist");
 const ListDetail = () => import(/* webpackChunkName: "page-list-detail" */ "@/pages/ListDetail");
 const AlbumDetail = () => import(/* webpackChunkName: "page-album-detail" */ "@/pages/AlbumDetail");
 const ArtistDetail = () => import(/* webpackChunkName: "page-artist-detail" */ "@/pages/artist/ArtistDetail");
 const ArtistAllSongs = () => import(/* webpackChunkName: "page-artist-songs" */ "@/pages/artist/ArtistAllSongs");
 const ArtistAllAlbums = () => import(/* webpackChunkName: "page-artist-albums" */ "@/pages/artist/ArtistAllAlbums");
+const ArtistAllMvs = () => import(/* webpackChunkName: "page-artist-mvs" */ "@/pages/artist/ArtistAllMvs");
 const mvPlay = () => import(/* webpackChunkName: "page-mv" */ "@/pages/mvPlay");
 const VideoPlay = () => import(/* webpackChunkName: "page-video" */ "@/pages/VideoPlay");
 const SearchResult = () => import(/* webpackChunkName: "page-search" */ "@/pages/SearchResult");
@@ -54,30 +54,39 @@ const router = new VueRouter({
     // 切到 history 模式：URL 从 /#/path 变成 /path（更干净、SEO 友好）
     // Vercel 默认对 SPA 项目支持 fallback，无需额外配置
     mode: 'history',
+    /**
+     * 路径命名约定（v1.4.0 起，加路由前先看这里）：
+     * 1. path 全小写，多词用 `-` 连接；只写资源名，不带 Detail / All / Res / Play 这类页面角色词
+     *    —— `/playlist` `/album` `/artist` `/artist/songs` `/search/albums`
+     * 2. 归属关系用嵌套表达（`/artist/songs`），集合用复数（`/explore/playlists`、`/search/mvs`）
+     * 3. 参数一律走 query（见 ARCHITECTURE_DECISIONS 决策 4），键名固定 id / uid / keyword
+     * 4. 带子路由的父级必须有 redirect 到默认子级，不允许「tab 在、内容区空」的空壳
+     * 5. route name 保持 camelCase，可以晚于 path 改名；但不要再往 path 里塞 UI 词
+     * 6. 已发布的旧地址放到文件末尾「兼容旧地址」区，用 redirect 兜住，别直接删
+     */
     routes: [
         {path: '/', component: HomePage, meta: {level: 1}},
         {
             path: '/explore',
             component: ExplorePage,
             meta: {level: 1, title: '发现'},
+            // 父级带子路由时不留空壳：/explore 直接落到「全部歌单」
+            redirect: {name: 'allList'},
             children: [
-                {
-                    name: "playlist", path: 'playlist', component: Playlist, children: [
-                        {name: "allList", path: 'all', component: AllList},
-                        {name: "boutique", path: 'boutique', component: BoutiqueList},
-                    ]
-                },
-                {name: "leaderBoard", path: 'leaderBoard', component: LeaderBoard},
+                {name: "allList", path: 'playlists/all', component: AllList},
+                {name: "boutique", path: 'playlists/boutique', component: BoutiqueList},
+                {name: "leaderBoard", path: 'leaderboard', component: LeaderBoard},
                 //歌手榜
                 {name: "artistList", path: 'artists', component: ArtistList},
 
-                {name: "mvList", path: 'mvList', component: MvList},
-                {name: "videoList", path: 'videoList', component: VideoList},
+                {name: "mvList", path: 'mvs', component: MvList},
+                {name: "videoList", path: 'videos', component: VideoList},
             ]
         },
-        {path: '/user', component: UserPage, meta: {level: 1, title: '我的'}},
+        // 「我的」独立成 /me：/user 让给用户详情页（老书签 /user 会在末尾兜回这里）
+        {path: '/me', name: 'me', component: UserPage, meta: {level: 1, title: '我的'}},
         {
-            path: '/listDetail',
+            path: '/playlist',
             name: 'listDetail',
             component: ListDetail,
             meta: {level: 2, title: '歌单详情'},
@@ -86,7 +95,7 @@ const router = new VueRouter({
             }
         },
         {
-            path: '/albumDetail',
+            path: '/album',
             name: 'albumDetail',
             component: AlbumDetail,
             meta: {level: 2, title: '专辑详情'},
@@ -95,7 +104,7 @@ const router = new VueRouter({
             }
         },
         {
-            path: '/artistDetail',
+            path: '/artist',
             name: 'artistDetail',
             component: ArtistDetail,
             meta: {level: 2, title: '歌手详情'},
@@ -104,7 +113,7 @@ const router = new VueRouter({
             }
         },
         {
-            path: '/artistAllSongs',
+            path: '/artist/songs',
             name: 'artistAllSongs',
             component: ArtistAllSongs,
             meta: {level: 2, title: '全部歌曲'},
@@ -113,10 +122,19 @@ const router = new VueRouter({
             }
         },
         {
-            path: '/artistAllAlbums',
+            path: '/artist/albums',
             name: 'artistAllAlbums',
             component: ArtistAllAlbums,
             meta: {level: 2, title: '全部专辑'},
+            props($route) {
+                return {id: $route.query.id}
+            }
+        },
+        {
+            path: '/artist/mvs',
+            name: 'artistAllMvs',
+            component: ArtistAllMvs,
+            meta: {level: 2, title: '全部MV'},
             props($route) {
                 return {id: $route.query.id}
             }
@@ -140,53 +158,55 @@ const router = new VueRouter({
             }
         },
         {
-            path: '/search/',
+            path: '/search',
             name: 'search',
             component: SearchResult,
             meta: {level: 1, title: '搜索'},
+            // 没带分类的 /search 默认落到「歌曲」，别只渲染一排 tab
+            redirect: to => ({name: 'trackList', query: to.query}),
             children: [
                 {
-                    name: "albumRes", path: "albumRes", component: AlbumRes, props($route) {
+                    name: "albumRes", path: "albums", component: AlbumRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "artistRes", path: "artistRes", component: ArtistRes, props($route) {
+                    name: "artistRes", path: "artists", component: ArtistRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "lyricRes", path: "lyricRes", component: LyricRes, props($route) {
+                    name: "lyricRes", path: "lyrics", component: LyricRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "mvRes", path: "mvRes", component: MvRes, props($route) {
+                    name: "mvRes", path: "mvs", component: MvRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "playlistRes", path: "playlistRes", component: PlaylistRes, props($route) {
+                    name: "playlistRes", path: "playlists", component: PlaylistRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "trackList", path: "trackList", component: TrackRes, props($route) {
+                    name: "trackList", path: "tracks", component: TrackRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "userRes", path: "userRes", component: UserRes, props($route) {
+                    name: "userRes", path: "users", component: UserRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "videoRes", path: "videoRes", component: VideoRes, props($route) {
+                    name: "videoRes", path: "videos", component: VideoRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
                 {
-                    name: "voiceRes", path: "voiceRes", component: VoiceRes, props($route) {
+                    name: "voiceRes", path: "voices", component: VoiceRes, props($route) {
                         return {keyword: $route.query.keyword}
                     },
                 },
@@ -196,13 +216,50 @@ const router = new VueRouter({
             },
         },
         {
-            path: '/user-detail', name: "userDetail", component: UserDetail, meta: {level: 2, title: '用户详情'}, props($route) {
+            path: '/user',
+            name: "userDetail",
+            component: UserDetail,
+            meta: {level: 2, title: '用户详情'},
+            props($route) {
                 return {uid: $route.query.uid}
             },
+            /**
+             * /user 原来是「我的」（v1.4.0 挪到 /me）。老书签/老链接里的 /user 没有 uid，
+             * 直接退回到 /me，而不是落在一个「用户不存在」的空页上。
+             */
+            beforeEnter(to, from, next) {
+                if (to.query.uid) next()
+                else next({path: '/me', replace: true})
+            },
         },
-        {path: '/daily-songs', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2, title: '每日推荐'}},
+        {path: '/daily', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2, title: '每日推荐'}},
         // 年度听歌报告：本人数据，页面内部自行判断登录态
         {path: '/annual', name: "annualReport", component: AnnualReport, meta: {level: 2, title: '年度听歌报告'}},
+
+        /**
+         * ---- 兼容旧地址（v1.4.0 路由改名）----
+         * 旧链接/书签/外部引用仍然可用，地址栏会换成新路径。
+         * redirect 写成函数是为了把 query 一起带过去（id / uid / keyword / tag）。
+         * 等确认没人再用这些地址，整块删掉即可。
+         */
+        {path: '/listDetail', redirect: to => ({name: 'listDetail', query: to.query})},
+        {path: '/albumDetail', redirect: to => ({name: 'albumDetail', query: to.query})},
+        {path: '/artistDetail', redirect: to => ({name: 'artistDetail', query: to.query})},
+        {path: '/artistAllSongs', redirect: to => ({name: 'artistAllSongs', query: to.query})},
+        {path: '/artistAllAlbums', redirect: to => ({name: 'artistAllAlbums', query: to.query})},
+        {path: '/user-detail', redirect: to => ({name: 'userDetail', query: to.query})},
+        {path: '/daily-songs', redirect: to => ({name: 'dailySongs', query: to.query})},
+        {path: '/explore/leaderBoard', redirect: to => ({name: 'leaderBoard', query: to.query})},
+        {path: '/explore/mvList', redirect: to => ({name: 'mvList', query: to.query})},
+        {path: '/explore/videoList', redirect: to => ({name: 'videoList', query: to.query})},
+        // 旧的两级歌单目录（/explore/playlist/*）拍平成 /explore/playlists/*
+        {path: '/explore/playlist', redirect: to => ({name: 'allList', query: to.query})},
+        {path: '/explore/playlist/all', redirect: to => ({name: 'allList', query: to.query})},
+        {path: '/explore/playlist/boutique', redirect: to => ({name: 'boutique', query: to.query})},
+        // 搜索九个子视图：旧路径就是路由 name（/search/albumRes → /search/albums）
+        ...['albumRes', 'artistRes', 'lyricRes', 'mvRes', 'playlistRes', 'trackList', 'userRes', 'videoRes', 'voiceRes']
+            .map(name => ({path: `/search/${name}`, redirect: to => ({name, query: to.query})})),
+
         // 兜底：history 模式下任何未匹配的 URL 都落到这里，避免 router-view 空转白屏。
         // 必须放最后 —— vue-router 3 按定义顺序匹配，'*' 会吃掉后面所有路由。
         {path: '*', name: "notFound", component: NotFound, meta: {level: 1, title: '页面不存在'}},
@@ -226,6 +283,19 @@ const router = new VueRouter({
 
 router.beforeEach((to, from, next) => {
     to.meta.hasHistory = !!from.name
+    /**
+     * 地址规范化：vue-router 默认大小写不敏感、尾斜杠可选，同一个页面会被多种写法命中
+     * （/explore/leaderBoard 与 /explore/leaderboard、/search 与 /search/），地址栏却原样保留用户输入，
+     * 分享/收藏/统计里于是出现多个 URL。这里按命中的 name 反查规范路径，不一致就 replace 一次。
+     * 兜底路由（*）不参与：它的规范路径算不出来，参与会变成死循环。
+     */
+    if (to.name && to.name !== 'notFound') {
+        const canonical = router.resolve({name: to.name, params: to.params, query: to.query, hash: to.hash}).route
+        if (canonical.path !== to.path) {
+            next({path: canonical.path, query: to.query, hash: to.hash, replace: true})
+            return
+        }
+    }
     next()
 })
 

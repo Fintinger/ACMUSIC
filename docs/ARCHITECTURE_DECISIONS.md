@@ -103,14 +103,14 @@
 **问题**：如何传参？
 
 **选择方案**：
-- A) `:id` 动态路由段（`/listDetail/:id`）— URL 优雅但耦合路由
+- A) `:id` 动态路由段（`/playlist/:id`）— URL 优雅但耦合路由
 - B) query 参数 + 路由 props 函数 — URL 灵活，组件 prop 化
 
 **最终方案**：B
 
 ```js
 {
-  path: '/listDetail',
+  path: '/playlist',        // 2022 年叫 /listDetail，v1.4.0 统一路径时改掉了（决策本身没变）
   name: 'listDetail',
   component: ListDetail,
   props: ($route) => ({ id: $route.query.id })
