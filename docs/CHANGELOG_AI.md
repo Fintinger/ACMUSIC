@@ -35,6 +35,111 @@
 
 ## 历史记录
 
+### 2026-11-12 — FIX-video-sidebar-height 相关推荐侧栏与 video-main 严格等高
+
+### 修改内容
+
+MV / 视频播放页右栏「相关推荐」原来是 JS 量高度对齐的：`--simi-top` 取标题区高度让卡片下移到播放器顶，
+`--simi-max-h` 取播放器高度做限高。问题是标题和播放器都是异步出现的——首帧量到 0 之后，
+ResizeObserver 只挂在标题上（播放器后来才挂载），限高就永远停在默认 560px；条目一多，
+侧栏比左栏高出一截，条目少时又缩在中间。
+改成纯 CSS 三件事：
+
+1. `.video-body` 改 `align-items: stretch`，两栏共享同一行高；
+2. 侧栏 `.simi-sidebar` 只做定位容器（`position: relative` + `align-self: stretch`），内部不产生高度；
+3. 真正的卡片 `.simi-panel` 绝对定位铺满（`inset: 0`），上下边缘必然与左栏重合；
+   条目超出时仍由 `.simi-list` 内部滚动。
+
+顺带删掉 `sidebarStyle` computed、`headH` / `playerH`、`observeLayout()`、`updated()` 与只服务
+ResizeObserver 清理的 `beforeDestroy()`。窄屏（≤900px）改回常规流：`position: static` + `max-height: 420px`。
+
+### 修改文件
+- `src/components/layout/VideoPlayerLayout.vue`
+
+### 修改原因
+用户反馈侧栏明显比 `video-main` 高一截（截图里 6 条推荐把卡片顶到 485px，而左栏内容到 420px 就结束了）。
+根因不是高度值算错，而是「限高」依赖的 `playerH` 在播放器挂载前就被测完且不再更新。
+
+### 测试结果
+- `yarn lint` ✅
+- `yarn build` ✅
+- 浏览器核查（无头 Chromium，真实接口）：
+  - 1080×700：`.video-main` 与 `.simi-sidebar` 均为 top 120 / bottom 653（533px），底边差 0
+  - 1440×900：两侧均 574px，底边差 0
+  - `/mv?id=10880673`（10 条推荐）：两侧仍等高 564px，`.simi-list` 内部可滚动
+  - 640 宽：侧栏落回视频下方、宽度占满，`max-height: 420px`
+
+### 注意事项
+- 推荐条目少于卡片高度时，底部会留白（等高是硬约束的必然结果）；条目多时滚动，不撑高页面
+- 侧栏不再跟随播放器顶部对齐，而是与左栏顶部（标题）对齐——这是「等高」的直接结果
+- 回滚：恢复 `--simi-top` / `--simi-max-h` 两行与对应 JS 即可
+
+
+### 2026-11-12 — FEAT-song-mv 歌曲随时查看对应 MV：播放条 / 歌曲列表 / 全屏播放器 / 播放队列 / 歌曲信息
+
+### 修改内容
+
+1. **关联数据层**（`src/utils/songMv.js`）：上游没有「按歌曲查 MV」的接口，关联字段就是歌曲对象自带的
+   `mv`（0 = 无）。实测覆盖并不均匀：`/playlist/track/all`、`/album`、`/artist/top/song`、`/cloudsearch`、
+   `/recommend/songs` 都带；`/search`（旧）、`/personal_fm`、`/personal/fm/mode` 不带（老结构）。
+   因此分两路：能直接读 `song.mv` 的走同步；缺字段的用 `/song/detail?ids=` 补一次，按歌曲 id 缓存。
+   只认纯数字 id（hex 视频走 `/mv/*` 会 502，和 `mvPlay` 的守卫保持一致）。
+2. **失效负缓存**：`song.mv != 0` 不等于还能播——周杰伦《叶惠美》的 154071 / 506024 / 507015、
+   《彩虹》的 5293415 实测 `/mv/detail` 直接 404（版权下架）。把 404 的 id 写进
+   `mvState`（`Vue.observable` + localStorage，7 天 TTL），列表徽标、播放条角标会当场消失，不会让人反复点进空页。
+3. **入口**（按「随时」程度排序）：
+   - 播放条红心右侧的 `MV` 小胶囊（`PlayerCore`）。`barLeft` 固定 230px，为了让 7 字歌名不出现省略号，
+     把红心内边距 5→4px、胶囊 5→4px 并把胶囊外边距设成 -4px（实测 1440 下歌名完整、无重叠）；
+     窗口 ≤1024 时整颗隐藏——那时 `barLeft` 只剩 180px，再放胶囊歌名只剩三四个字，大播放器与列表页仍有入口
+   - 歌曲行歌名后的 `MV` 标签（`TracksLayout`）。一次覆盖歌单 / 专辑 / 歌手热门 50 / 歌手全部歌曲 /
+     每日推荐 / 搜索的歌曲、歌词、声音共 8 个页面。**没有恢复成 v1.0.0 那种独立整列**：
+     实测约 4~6 成歌曲有 MV，固定列会整片留白
+   - 全屏播放页操作区「看 MV」按钮（`MusicPlayer`）。跳转前必须先 `isExpand = false`，
+     否则全屏遮罩会把 MV 页盖在下面（和「查看专辑」同一个坑）
+   - 播放队列每行的 MV 图标（`plOps`，和「下一首播放 / 移除」同排）
+   - 歌曲信息面板新增 MV 卡片：封面 + 名称 + 播放量/时长，点击直接播（懒加载，只在该 tab 打开时请求）
+4. **音频互斥**：`PlayerCore` 是全站常驻的，路由切到 `/mv` 不会停歌，而 xgplayer 有自己的音轨——
+   现在进 MV / 视频页会在 `activated` 里发 `pause-song`，`PlayerCore` 收到后暂停。
+   放在页面钩子而不是各个入口，是为了让直接打开 `/mv?id=` 的深链也覆盖。
+5. **持久化补字段**：`_saveState` 的 lite 结构原来不存 `mv`，刷新后播放条角标和队列入口要等一次补拉。
+   现在 `song` / `playlist` / 恢复时的 `currentSong` 都带上 `mv`（老存档默认 0，仍走补拉兜底）。
+6. **图标**：`icon.js` 新增 `mv`（屏幕 + 播放三角），和 `disc`（唱片）区分「看」与「听」。
+
+### 修改文件
+- `src/utils/songMv.js`（新增）
+- `src/mixins/songMvMixin.js`（新增）
+- `src/config/icon.js`（新增 mv 图标）
+- `src/components/layout/TracksLayout.vue` / `src/assets/scss/tracksLayout.scss`（歌名行 + MV 标签）
+- `src/components/musicPlayer/PlayerCore.vue`（红心旁 MV 胶囊、队列图标、pause-song、持久化 mv）
+- `src/components/musicPlayer/MusicPlayer.vue`（操作区「看 MV」）
+- `src/components/musicPlayer/SongInfoPanel.vue`（MV 卡片）
+- `src/pages/mvPlay.vue` / `src/pages/VideoPlay.vue`（进入即暂停歌曲、404 记负缓存）
+
+### 修改原因
+「这首歌有没有 MV」是听歌时的高频好奇点，但站内原来只能先知道歌名、再去搜索框里搜 MV，
+链路长且容易搜到翻唱 / 现场版。`song.mv` 字段一直都在，MV 详情、播放地址、`/mv` 页面也都现成，
+缺的只是入口。实测抽样：热歌榜 top100 44% 有 MV、每日推荐 18/30、邓紫棋 top50 82%、
+陈奕迅 44%、周杰伦 40%，所以入口必须「有才显示」，且要能优雅处理下架。
+
+### 测试结果
+- `yarn lint` ✅
+- `yarn build` ✅
+- 浏览器手动核查：✅
+  - 歌单详情页（热歌榜）：50 行里 24 行出现 MV 标签，长标题仍正常省略（`scrollWidth > clientWidth` 的行数为 0）
+  - 播放条：刷新后用 localStorage 恢复歌曲，红心右侧 MV 胶囊正常出现（lite 结构 → `/song/detail` 补拉生效）；1440 下 7 字歌名完整不截断，1024 / 900 下胶囊自动隐藏
+  - 全屏播放页：操作区为「喜欢 / 看 MV / 下载」，点击后遮罩关闭、`body.overflow` 复原、跳到 `/mv?id=10988049`
+  - 播放中（真实鼠标点击起播）点 MV 胶囊 → 跳到 `/mv?id=10988049`，播放条变 `paused`，不再双音轨
+  - 播放队列：每行 3 个操作（播放 MV / 下一首 / 移除）
+  - 歌曲信息面板：MV 卡片显示「这个冬天不太冷 / 8178 次播放 · 05:26」
+  - 失效 MV（`/mv?id=5293415`）：页面给「视频详情加载失败」，`acmusic_mv_dead` 写入该 id
+
+### 注意事项
+- 入口出现率取决于曲库：约 4~6 成歌曲有 MV，没有时整条入口不渲染，不做灰显
+- 列表行只读 `song.mv`，不为每一行发请求（50 行 × 1 请求会打爆网关）；私人 FM 等不带字段的列表因此没有行内标签
+- 负缓存 7 天后自动重试，曲库回补时能恢复
+- 回滚：删掉两处 `mv` 模板与 `utils/songMv.js` 即可，持久化里多出的 `mv` 字段对老代码无影响
+
+
 ### 2026-10-30 — UI(user) 个人主页排版重构：并排数据区 / 歌单统一网格 / 关注头像墙 / 锚点吸顶
 
 ### 修改内容
@@ -3399,3 +3504,60 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 提交拆分（按项目规范不混提）：`feat(player): 播放详情页新增歌曲信息标签页`（`src/api/Tracks.js`、`src/utils/songInfo.js`、`SongInfoPanel.vue`、`MusicPlayer.vue`、`scripts/shot-readme.mjs`）→ `docs: 记录歌曲信息标签页与查看专辑收起播放器`（`CHANGELOG_AI.md`、`DEVLOG.md`）→ `chore(release): v1.3.0`（版本号 + `CHANGELOG.md` + 生成物）→ `docs: 刷新提交清单至 v1.3.0`（`yarn devlog` 产物）。
 - 验收：`yarn lint` ✅ `yarn build` ✅；撤回剪枝后复测《如果的事》简介与上游原文一致（7104 字，代码表完整保留），《海阔天空》《孤勇者》不受影响。
 - 注意：annotated tag `v1.3.0` 打在 `chore(release)` 提交上，不指向后续的 devlog 提交；tag 不触发部署，部署由 `push master` 的路径过滤决定（`.github/workflows/deploy.yml`）。
+
+### 2026-11-12 — 修复：歌词串歌 / 长句被截断 / 空格键被聚焦按钮吃掉（随 v1.4.0 发布）
+
+- 现象（用户反馈）：`1)` `/artistDetail?id=1048031` 上「歌词渲染异常」；`2)` 有时焦点落在「下一首」图标上，按空格不是暂停而是继续切歌。
+- 空格键根因：`MusicPlayer` 的 `.controlsRow` / `.actionsRow` 挂着 `@keydown.space.stop`（1.0 视觉重做时加的），事件在组件内被就地截停，`PlayerCore._onGlobalKeydown` 收不到 → 没有 `preventDefault` → 浏览器按 `<button>` 默认行为把空格当成"再点一次这个按钮"。用户点过下一首后焦点留在那个按钮上，于是"想暂停却一直切歌"。处理：`1)` 去掉两处 `space.stop`（保留左右方向键的 `.stop`）；`2)` `_onGlobalKeydown` 的空格分支显式 `preventDefault` 取消按钮默认激活再 `togglePlay()`；`3)` 弹窗里的按钮（`.el-dialog__wrapper` / `.el-message-box__wrapper` / `.comment-overlay` / `[role=dialog]`）不接管，空格仍是"确认"，避免写评论时误触播放。回车激活按钮的行为保留（无头 Edge 实测聚焦下一首按回车仍切歌）。
+- 歌词「串歌」根因：`getLyric()` 没有请求守卫。快速切歌时先发的 `/lyric/new` 可能后到，把上一首的词直接写进面板；对照组实测（人为把第一个请求拖 5s、第二个 100ms）当前播《左眼皮跳跳》而面板是《花衬衫和油泼面》的「作词: 姚烨 / 累了一天 喝个冰峰」。处理：`lyricSeq` 序号 + 只认最后一次响应；换歌（`lyricSongId` 变化）才清空。
+- 另外两处会让人以为"渲染坏了"的地方：`1)` 换歌后没有把 `.lyricsScroll` 归零，第一句在十几秒后才出现的歌会一直停在上一首滚到的位置（`needUpdate` 只在行变化时滚，`lastActiveIdx === -1` 时不会触发）→ 在歌词落位后 `scrollTop = 0`；`2)` 清空 + 等接口期间面板会闪一下「纯音乐，请欣赏」→ 改为 7 行 shimmer 占位（复用 `skeleton-shimmer`），不再闪空态。
+- 长句被截断：`.lyricsScroll p` 原来是 `white-space: nowrap` + `text-overflow: ellipsis`，居中文本溢出是**两头都切**，英文歌与带长制作名单的歌最明显（无头 Edge 实测 72 行里 16 行超宽，最宽 1202px / 容器 635px）。改为 `white-space: normal` + `overflow-wrap: anywhere`（`word-break` 从 `keep-all` 改 `normal`，否则中文整行断不开）；`p span { white-space: nowrap }` 收窄成 `p .lyricWord`——原规则把整行文本和翻译行也锁成 nowrap，折行会失效。修完同样 72 行，超宽行 0。
+- 翻译丢失：`parseLyricData` 原来用 `t.toFixed(2)` 做键精确匹配，而 yrc 行首是毫秒值、翻译是 `mm:ss.xx`，几十毫秒的差就整行丢翻译。改成取时间上最近的一行（容差 `TR_MATCH_TOL = 0.35s`，双指针，O(n)）。200 首真实样本对比：命中行数 1274 → 1388（+9%）。
+- 顺带：`parseLrcLines` 支持一行多时间戳（`[00:10.00][01:20.00]副歌` 原来只保留最后一个时间戳，重复副歌在时间轴上少一次），`parseLrcLine` 保留旧语义。
+- 验证：`yarn lint` ✅ `yarn build` ✅；无头 Edge + CDP 实测——聚焦下一首/上一首/喜欢后按空格均为播放暂停（歌曲不变），回车仍能激活按钮；搜索框内空格正常输入且不改播放态；人为制造的歌词竞态下歌词跟随当前歌曲；换歌时骨架出现、无「纯音乐」闪现、加载完 `scrollTop = 0`；临时脚本的 6 项解析断言全过（多时间戳展开 / 翻译精确与容差匹配 / 相邻两句不串行），脚本未入库。
+- 注意：`getLyric` 的序号守卫与 `SongInfoPanel` 的 `reqSeq` 是同一套思路，日后再加"按歌取数"的面板照此写；`TR_MATCH_TOL` 若遇到语速极快、两句间隔 <0.35s 的歌可能串行，必要时按行序二次校验。本次未改 `PlayerCore` 的取流/队列/播放状态机。
+
+### 2026-11-12 — 路由地址统一：小写 + 资源名，旧的挂 redirect（v1.4.0）
+
+- 背景：用户提出「路由地址命名」按规划收敛。盘完现状是历史叠加出的三套风格：驼峰（`/listDetail` `/artistAllSongs` `/search/albumRes`）、连字符（`/user-detail` `/daily-songs`）、单词小写（`/mv` `/video` `/annual`）；URL 里混着 Detail / All / Res 这类页面角色词。用户拍板**方案 A**：`/me` 作为「我的」，`/user?uid=` 改作用户详情。
+- 新表（route name 一律不动，站内跳转全走 `{name}`，name 收敛留到下一批）：`/playlist` `/album` `/artist` `/artist/songs` `/artist/albums` `/mv` `/video`；发现 `explore/playlists/all|boutique` `explore/leaderboard` `explore/artists` `explore/mvs` `explore/videos`；搜索 `search/{albums,artists,lyrics,mvs,playlists,tracks,users,videos,voices}`（`/search` 本身 redirect 到 `tracks`）；`/me`、`/user`、`/daily`、`/annual`。
+- 顺带修掉三处结构问题：`1)` `/explore`、`/search` 这类带子路由的父级原来没有默认子级，直接访问只渲染一排空 tab → 加 `redirect`；`2)` `/explore/playlist` 那层纯 `<router-view>` 容器拍平后 `src/pages/Playlist.vue` 已无引用，直接删；`3)` `/search/` 的尾斜杠去掉。
+- 兼容：文件末尾新增「兼容旧地址」区，14 条 redirect（`/listDetail`、`/albumDetail`、`/artistDetail`、`/artistAllSongs`、`/artistAllAlbums`、`/user-detail`、`/daily-songs`、`/explore/leaderBoard|mvList|videoList`、`/explore/playlist[/all|/boutique]`，以及九个 `/search/*Res` 由数组 map 生成），全部写成 `to => ({name, query: to.query})` 以保留 query。`beforeEach` 再加一条 canonical 校验：按命中的 name 反查规范路径，不一致就 `replace` 一次——vue-router 默认大小写不敏感且 `strict:false`，`/explore/leaderBoard`、`/ME`、`/search/`、`/user/?uid=` 都会命中但地址栏保留原样，不归一就会出现同页多 URL。`notFound` 不参与（`*` 没有规范路径，参与会死循环）。
+- 业务侧只改了 6 处硬编码路径：`App.vue` 的两个 nav（`/explore/playlists/all`、`/me`）与 `goUserPage`、`AnnualReport.vue` 的「去登录」、`ListDetail.vue` 删歌后回「我的」、`VideoPlayerLayout.goTag`（`/explore/videos`）。另外同步了三处注释里的旧路径，文档更新 `PROJECT_CONTEXT`（路由表 + 结构树删 `Playlist.vue`）、`ARCHITECTURE_DECISIONS` 决策 4 的示例 path、`AI_RULES` / `DEVELOPMENT_WORKFLOW` 里「打开 /listDetail 测试」的步骤。
+- 验证：`yarn lint` ✅ `yarn build` ✅；另外把 `router/index.js` 转成 CJS、页面组件换成空壳、`mode: 'abstract'` 在 Node 里跑真实路由表，44 条用例全过——覆盖全部新地址、14 条旧地址、query 透传、大小写/尾斜杠归一、`/user` 无 uid 回落 `/me`、未知路径仍落 `notFound`（无重定向环）。无头浏览器方案不可用：本机 Edge 已在运行，`msedge.exe --headless=new` 会直接 handoff 给现有实例并立即退出。
+- 注意：`1)` redirect 区是可删的临时兼容层，确认外链/书签不用了再整块删；`2)` name 仍是旧名（`listDetail`/`mvPlay`/`trackList`），下一批若要收敛，改 `{name}` 约 20 处 + `SearchResult.tabList`、`ExplorePage.sort` 两张表；`3)` 没动「id 放 query」的决策 4；`4)` nginx 无需改动，`try_files … /index.html` 对新路径一样兜底。
+
+### 2026-11-12 — 新增：歌手「全部 MV」独立页（与全部歌曲 / 专辑对齐）
+
+- 需求：歌手详情页的 MV「更多」原来是**就地展开并自动续拉**（点一次把几十上百个 MV 全拉完，整页越滚越长），用户要求跟「热门歌曲 · 全部」「专辑 · 更多」一样跳独立二级页。
+- 新页 `src/pages/artist/ArtistAllMvs.vue`：照 `ArtistAllAlbums.vue` 的骨架写（同一套 `artistSubPage.scss` 页头 + `LoadMore` 触底续拉 + `loadedId` 让 keep-alive 回来不重复拉）。数据源 `/artist/mv?id&limit&offset` → `{ mvs, hasMore }`，每页 30 个，`hasMore` 缺省时按"本页是否满页"兜底。卡片复用 `MvLayout`（`pic-name="imgurl16v9"`），列宽单独放宽到 `minmax(260px, 1fr)`（16:9 比专辑封面宽）。
+- 头部计数：接口**不给总数**，`arBasicInfo.mvSize` 也不可信（周杰伦实测 9、实际几百），所以只显示「已加载 N 个」，到底后改成「共 N 个」，不编造总数。
+- 歌手页：删掉 `mvToggleable` / `toggleMvs` / `loadRestMvs` / `mvPaging` / `MV_PAGE`，`expanded` 里去掉 `mvs`（只留 `simi`），MV 区固定渲染 `CARD_PREVIEW` 个；【更多】的显隐改由 `hasMoreMvs = mvMore || mvs.length > 8` 决定，点击发 `arAmClk` 由 App 跳转（与 `arAsClk`/`arAlClk` 同一套总线约定）。
+- 路由：`/artist/mvs`（name `artistAllMvs`，level 2，title 全部MV，chunk `page-artist-mvs`），落在 `/artist/albums` 之后，符合"归属用嵌套"的命名约定；`App.vue` 加 `arAmClk` 监听 + `artistAllMvsClick`。
+- 文档：`PROJECT_CONTEXT` 补页面树 / 路由表 / `$bus` 事件表（顺带补上此前漏记的 `arAlClk`），`CHANGELOG.md` 1.4.0 加一条「新增」，应用内日志重新生成。版本仍为未发布的 1.4.0。
+- 验证：`yarn lint` ✅ `yarn build` ✅；Node 里用 abstract 模式跑真实路由表，`/artist/mvs?id=1` 解析为 `name=artistAllMvs`（避免 App 里 `{name:'artistAllMvs'}` 拼错成运行时静默失败）。
+- 注意：`/artist/mv` 的 `mvSize` 不可信这点别在别处再踩；如果以后要给「共 N 个」，得先确认上游有没有可靠的 total 字段。
+
+### 2026-11-12 — 修复：焦点在空白处时空格失效（被别的脚本先 preventDefault）
+
+- 现象（用户反馈）：只有先点一下 tab / 按钮让焦点落到元素上，空格才能暂停；点空白让焦点回到 `body` 后按空格没有任何反应。
+- 根因：`_onGlobalKeydown` 开头是 `if (e.defaultPrevented) return`。浏览器扩展（平滑滚动、Vim 类按键插件）和部分页面脚本会在**捕获阶段**先把空格的 `preventDefault()` 掉去做自己的事（滚动页面），我们的监听在冒泡阶段、于是直接 return，空格就被"吃掉"了。焦点在按钮/链接上时那些扩展通常不介入，所以表现为"点一下 tab 才能用"。
+- 复现（headless Chromium 157 + CDP 真实按键）：在 `document` 上挂一个只对 `code === 'Space'` 调 `preventDefault()` 的捕获监听（就是扩展的典型做法），body 聚焦时按空格 → `isPlay` 保持不变；去掉监听 → 正常翻转。
+- 处理：把空格分支挪到 `defaultPrevented` 判断**之前**，空格不再受"事件已被处理"约束（输入框 / 文本域 / 内容可编辑 / slider 的守卫仍在更前面，弹窗按钮例外也保留）；其余快捷键（←→）继续尊重已有处理。代码里留了注释说明为什么不看 `defaultPrevented`。
+- 验证：`yarn lint` ✅ `yarn build` ✅；headless Chromium 实测——body 聚焦空格 false→true→false 正常；挂上模拟扩展后仍能接管（true）；输入框里 `a` + 空格得到 `"a "` 且播放态不变；展开播放器聚焦「下一首」按空格只切换播放、不切歌。
+- 注意：这是"宁可重复也不要吞掉"的取舍——如果哪天某个页面真的需要空格做别的事（比如视频播放器），要在那个容器上加 `stopPropagation` 或单独拦截，而不是重新引入 `defaultPrevented` 短路。
+
+### 2026-11-12 — 修复：唱过的歌词行残留"花字"（逐字状态没归一）
+
+- 现象（用户截图）：已经唱过的歌词行里，个别字比同行其他字亮，看起来像唱过的词也有深浅。
+- 根因：逐字高亮的状态 `wcur` 只在**当前行**上更新（`needUpdate` 里只算 active line 的 `findActiveWord`）。行切走的瞬间，它保留的是那一刻的进度；而 yrc 的字时间经常越过下一行的行首，最后几个字永远等不到点亮 → 那一行永久停在"半行亮半行暗"。CSS 又是 `.lyricWord{opacity:.45}` + `.on{opacity:1}`，于是差异被直接画出来。
+- 修法：`1)` 数据侧归一——行切换时把唱过的行 `wcur` 直接置成"整行唱完"、还没到的行置 `-1`，当前行继续实时算；`2)` 样式侧收口——`.lyricWord` 默认满不透明度，只有 `p.active` 里才做"唱到 / 没唱到"的 0.45 / 1 区分。两层都做，是为了让数据模型（唱过的行=整行唱完）和视觉规则（只有当前行有逐字）各自说得通。
+- 验证：headless Chromium 实测《左眼皮跳跳》（有 yrc）——当前行逐字 opacities 仍是 `1 / 1 / 0.45` 的渐变；上方唱过的两行、下方未到的两行 `opacities` 都只剩 `["1"]`，截图确认不再花。
+- 注意：非当前行现在统一一个灰度，只靠整行颜色（muted）和当前行（`--player-menu-text` + 放大加粗）区分层级，不再表达"过去比未来亮"。如果要恢复那个层级，得给 `p` 加 past/future 类，而不是回到逐字透明度。
+
+### 2026-11-12 — 改进：歌词区恢复"唱过的行更亮"的层级
+
+- 上一条把非当前行统一成一个灰度后，过去行和未来行完全同亮，只剩当前行能区分，层级反而变平。用户要求保留"唱过的行比未到的行亮一点"。
+- 实现：`.lyricsScroll p.active ~ p { opacity: .58 }` —— 用**兄弟选择器**表达"当前行之后的所有行都是未到"，不给每行加 past/future 类。歌词是按时间顺序渲染的，当前行后面必然是未到的部分，省掉一份需要跟 `lastActiveIdx` 同步的状态；`p` 上原有的 `transition: all 400ms` 会把切换带成渐变，不需要额外动画。
+- 验证：headless Chromium 实测《左眼皮跳跳》——已唱行 `opacity: 1 / #b0b9c8 / 21.9px`，当前行 `1 / #edf1f7 / 30px`，未到行 `0.58 / #b0b9c8 / 21.9px`；截图层级自然，未到行仍可读。
+- 注意：文案区（`p.active ~ p` 也会命中 spacer 空行）不受影响；如果以后要"过去/未来/当前"三档以上，再考虑给行加类，不要叠加逐字透明度。
