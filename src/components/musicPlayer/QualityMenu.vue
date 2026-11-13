@@ -12,7 +12,7 @@
           <span class="qm-short">解灰</span>
           <span class="qm-info">
             <span class="qm-label">解灰源<span class="qm-tag">第三方</span></span>
-            <span class="qm-desc">第三方音源 · 音质固定</span>
+            <span class="qm-desc">{{ unblockDetail || '第三方音源 · 音质固定' }}</span>
           </span>
         </span>
       </div>
@@ -55,7 +55,9 @@ export default {
      */
     levels: { type: Array, default: () => [] },
     /** 当前播放的是不是解灰源：是的话只显示一条"音质固定"的说明，不列官方档位 */
-    unblock: { type: Boolean, default: false }
+    unblock: { type: Boolean, default: false },
+    /** 解灰源的具体信息（`波点音乐 · 320kbps · 10.3 MB`），后端没返回时为空串 */
+    unblockDetail: { type: String, default: '' }
   },
   computed: {
     options() {

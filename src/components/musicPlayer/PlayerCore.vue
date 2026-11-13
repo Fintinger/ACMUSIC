@@ -151,7 +151,7 @@
           <button ref="qualityBtn" class="qualityBtn" :class="{ 'is-unblock': currentQuality.isUnblock }" :title="qualityTitle" @click.stop="showQualityMenu = !showQualityMenu">
             {{ currentQualityShort }}
           </button>
-          <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="qualityMenuSelected" :levels="songLevels" :unblock="currentQuality.isUnblock && !currentQuality.byChoice" @select="onQualitySelect"/>
+          <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="qualityMenuSelected" :levels="songLevels" :unblock="currentQuality.isUnblock && !currentQuality.byChoice" :unblock-detail="unblockDetailText" @select="onQualitySelect"/>
         </div>
         <div class="barItem chorusWrap">
           <el-dropdown trigger="click" placement="top" @command="setTrackForm" @visible-change="onChorusDropdown">
@@ -303,6 +303,7 @@ import * as userApi from "@/api/User";
 import * as authApi from "@/api/auth";
 import { toHttpsUrl, imgParam } from "@/utils/filters";
 import { mvIdOf, isMvDead } from "@/utils/songMv";
+import { unblockBrief, unblockDetail } from "@/utils/audioSource";
 import { songMvMixin } from "@/mixins/songMvMixin";
 
 // 打卡门槛：播满 30 秒或过半（先到者）。
@@ -738,9 +739,11 @@ export default {
     qualityTitle() {
       const q = this.currentQuality || {}
       if (q.isUnblock) {
-        return q.byChoice
-          ? '当前为解灰源（按你选的档位请求的第三方音源，实际音质以文件为准）'
-          : '当前为解灰源（第三方音源，音质与版本不可控）'
+        const detail = unblockDetail(q)
+        const head = q.byChoice
+          ? '按你选的档位请求的第三方音源，实际音质以文件为准'
+          : '第三方音源，音质与版本不可控'
+        return detail ? `解灰源：${detail}（${head}）` : `当前为解灰源（${head}）`
       }
       const opts = config.player.qualityOptions || []
       const f = opts.find(o => o.key === (q.actual || this.currentLevel))
@@ -750,6 +753,11 @@ export default {
         return `已选「${reqLabel}」，当前实际为「${f.label}」（${f.bitrate || ''}）`
       }
       return `当前音质：${f.label}`
+    },
+    /** 音质菜单里那行"解灰源"的副标题：`波点音乐 · 320kbps · 10.3 MB`，取不到时为空串 */
+    unblockDetailText() {
+      const q = this.currentQuality || {}
+      return q.isUnblock ? unblockDetail(q) : ''
     },
   },
   watch: {
@@ -1413,9 +1421,12 @@ export default {
     },
     /**
      * 解灰兜底（第三方源：酷我/酷狗/QQ 等）。
-     * 该接口返回的是 { code, data: "<url 字符串>", proxyUrl }，
+     * 该接口返回的是 { code, data: "<url 字符串>", proxyUrl, source, br, size }，
      * data 不是数组 —— 历史实现按 data[0].url 取值，导致这层一直是死的。
      * 解灰源音质/版本不可控，成功后把 isUnblock 置 true，播放器上会标"解灰"。
+     *
+     * source/br/size 是后端新增的字段（旧后端不返回，取值会得到空，文案自动退回"第三方源"），
+     * 有了它们界面上才能写清"从哪个源拿的、多大码率"，而不是笼统的"第三方源"。
      */
     requestMatchSongUrl(id, requestId) {
       if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
@@ -1423,8 +1434,12 @@ export default {
       console.log('%c▶ 解灰兜底 %c/song/url/match?id=%s', 'background:#dc2626;color:#fff;padding:2px 6px', '', id)
       const cached = this.urlCache.get(ck)
       if (cached && Date.now() < cached.expire) {
-        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true, byChoice: !!this._matchByChoice }
-        this.setSourceStatus('解灰源（缓存）', 'ok')
+        this.currentQuality = {
+          requested: config.player.level, actual: 'match', isUnblock: true,
+          byChoice: !!this._matchByChoice,
+          source: cached.provider || '', br: cached.br || 0, size: cached.size || 0
+        }
+        this.setSourceStatus(`解灰完成 · ${unblockBrief(this.currentQuality)}`, 'ok')
         this.clearSourceStatusSoon(4000)
         return Promise.resolve({ data: { data: [{ url: cached.url }] }, source: 'match' })
       }
@@ -1436,11 +1451,21 @@ export default {
           : (payload.data && payload.data.url)
         const matchUrl = toHttpsUrl(raw)
         if (!matchUrl) return Promise.reject(new Error('NO_RESOURCE'))
-        this.urlCache.set(ck, { url: matchUrl, level: 'match', source: 'match', expire: Date.now() + 10 * 60 * 1000 })
-        this.currentQuality = { requested: config.player.level, actual: 'match', isUnblock: true, byChoice: !!this._matchByChoice }
-        console.log('%c  ✳ 解灰成功 %c%s', 'color:#dc2626', '', matchUrl.slice(0, 70))
-        // 结论留 6 秒：够用户看清"这首是从第三方源来的"，之后让位给封面/歌名
-        this.setSourceStatus('解灰完成 · 第三方源', 'ok')
+        // provider 存平台名（bodian/qq…），与 source:'match'（表示"这是解灰档"）不是一回事
+        const provider = payload.source || ''
+        const br = Number(payload.br) || 0
+        const size = Number(payload.size) || 0
+        this.urlCache.set(ck, {
+          url: matchUrl, level: 'match', source: 'match', provider, br, size,
+          expire: Date.now() + 10 * 60 * 1000
+        })
+        this.currentQuality = {
+          requested: config.player.level, actual: 'match', isUnblock: true,
+          byChoice: !!this._matchByChoice, source: provider, br, size
+        }
+        console.log('%c  ✳ 解灰成功 %c%s ← %s', 'color:#dc2626', '', matchUrl.slice(0, 70), unblockBrief(this.currentQuality))
+        // 结论留 6 秒：够用户看清"这首是从哪个源来的"，之后让位给封面/歌名
+        this.setSourceStatus(`解灰完成 · ${unblockBrief(this.currentQuality)}`, 'ok')
         this.clearSourceStatusSoon(6000)
         return { data: { data: [{ url: matchUrl }] }, source: 'match' }
       }).catch(err => {
