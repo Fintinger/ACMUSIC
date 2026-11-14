@@ -214,10 +214,44 @@ export function detail(ids) {
 }
 
 /**
- * 每日推荐歌曲
+ * 每日推荐歌曲（老接口）
  */
 export function recommendSongs() {
     return request('/recommend/songs')
+}
+
+/**
+ * 每日推荐歌曲 v1（新版）
+ * 返回结构与老接口一致（data.dailySongs），但每首多带 reason / recommendReason，
+ * 顶层还有 recommendReasons 可做推荐理由展示。
+ */
+export function recommendSongsV1() {
+    return request('/recommend/songs/v1')
+}
+
+/**
+ * 歌曲红心数量（全站喜欢总数）
+ * 返回 { count, countDesc }，countDesc 是官方缩写（如 "100w+"）
+ * @param id 歌曲 id
+ */
+export function songRedCount(id) {
+    return request('/song/red/count', { params: { id } })
+}
+
+/**
+ * 插播相似歌曲（播放器工具栏推荐位，返回的是多组资源位而非纯歌曲列表）
+ * @param id 歌曲 id
+ */
+export function songSimiGet(id) {
+    return request('/song/simi/get', { params: { id } })
+}
+
+/**
+ * 歌曲百科（新版结构：blocks + 区块排序，比 /song/wiki/summary 多分区信息）
+ * @param id 歌曲 id
+ */
+export function songWikiInfo(id) {
+    return request('/song/wiki/info', { params: { id } })
 }
 
 /**

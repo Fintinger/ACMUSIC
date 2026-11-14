@@ -69,3 +69,21 @@ export function unblockDetail(info) {
   ]
   return parts.filter(Boolean).join(' · ')
 }
+
+/**
+ * 解灰源只有一档固定音质，按钮上写"解灰"其实没有告诉用户任何信息。
+ * 按后端返回的 br 反推实际档位，短到能塞进按钮：
+ *   ≥700k → SQ（第三方给的 flac，基本都是 CD 级无损）
+ *   ≥300k → 320k
+ *   ≥180k → 192k
+ *   其余   → 按实际码率写（如 128k）
+ * br 缺失（老后端 / 某些源不报）返回空串，由调用方退回"解灰"。
+ */
+export function qualityTierShort(br) {
+  const value = Number(br)
+  if (!value || value <= 0) return ''
+  if (value >= 700000) return 'SQ'
+  if (value >= 300000) return '320k'
+  if (value >= 180000) return '192k'
+  return `${Math.round(value / 1000)}k`
+}

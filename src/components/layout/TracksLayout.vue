@@ -85,6 +85,11 @@ export default {
     showActions: {
       type: Boolean,
       default: false
+    },
+    // 是否把「推荐理由」当作额外一列（每日推荐 v1 的 reason，如"超77%人播放"）
+    showReason: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -94,9 +99,10 @@ export default {
   },
   computed: {
     hasExtra() {
-      return this.list.some(t => t.recordPlayCount != null || t.fileSize != null)
+      return this.showReason || this.list.some(t => t.recordPlayCount != null || t.fileSize != null)
     },
     extraLabel() {
+      if (this.showReason) return '推荐理由'
       return this.list.some(t => t.recordPlayCount != null) ? '播放次数' : '文件大小'
     },
     /** 当前播放曲目 id：PlayerCore 切歌时给队列项打 curSong 标记（见 PlayerCore.vue:739） */
@@ -108,6 +114,7 @@ export default {
   },
   methods: {
     extraOf(t) {
+      if (this.showReason) return t.reason || '—'
       if (this.extraLabel === '播放次数') return t.recordPlayCount != null ? `${t.recordPlayCount} 次` : '—'
       return t.fileSize != null ? `${(t.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'
     },

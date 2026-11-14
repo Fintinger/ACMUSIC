@@ -37,6 +37,11 @@
           <BaseIcon name="check" :size="16"/>
         </span>
       </button>
+      <!-- 用户主动要的会员档被压级后会转去解灰：这时仍要保留官方档位，
+           否则他没法退回 320k / 标准。用一行说明代替高亮，避免"高亮 HD、实际 320k" -->
+      <p v-if="!unblock && unblockNote" class="qm-note" role="note">
+        当前为解灰源 · {{ unblockNote }}，选上面的档位会切回官方音源
+      </p>
     </div>
   </transition>
 </template>
@@ -57,7 +62,12 @@ export default {
     /** 当前播放的是不是解灰源：是的话只显示一条"音质固定"的说明，不列官方档位 */
     unblock: { type: Boolean, default: false },
     /** 解灰源的具体信息（`波点音乐 · 320kbps · 10.3 MB`），后端没返回时为空串 */
-    unblockDetail: { type: String, default: '' }
+    unblockDetail: { type: String, default: '' },
+    /**
+     * 当前在放解灰源、但官方档位仍然可选（用户主动要的会员档被压级）。
+     * 非空时在档位列表下方补一行说明，不隐藏档位。
+     */
+    unblockNote: { type: String, default: '' }
   },
   computed: {
     options() {
@@ -118,7 +128,6 @@ export default {
   text-transform: uppercase;
   letter-spacing: .8px;
   padding: 6px 12px 8px;
-
   // 「本曲 N 档」：解释为什么列表比平时短
   .qm-scope {
     font-size: 10px;
@@ -128,6 +137,18 @@ export default {
     color: var(--player-menu-muted);
     opacity: .8;
   }
+}
+
+// 解灰态但档位仍可选时的说明行：不参与点击，只解释"现在听到的是什么"
+.qm-note {
+  margin: 6px 4px 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(240, 198, 116, 0.1);
+  border: 1px solid rgba(240, 198, 116, 0.18);
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(240, 198, 116, 0.9);
 }
 
 .qm-item {

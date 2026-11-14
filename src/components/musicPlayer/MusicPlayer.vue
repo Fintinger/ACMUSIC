@@ -19,9 +19,35 @@
             </div>
           </div>
           <div class="songMeta">
-            <h1 class="songTitle">{{ songName }}</h1>
-            <p class="songArtist" @click="arClick">{{ artistNames }}</p>
-            <p v-if="albumName" class="songAlbum" @click="alClick">{{ albumName }}</p>
+            <div class="songTitleRow">
+              <h1 class="songTitle">{{ songName }}</h1>
+              <!-- MV 入口做成歌名旁的方标：比独占一行按钮省空间，也比纯图标更好认 -->
+              <button
+                  v-if="currentMvId && !isMvDead(currentMvId)"
+                  type="button"
+                  class="mvTag"
+                  :title="'播放《' + songName + '》的 MV'"
+                  @click="openMv"
+              >MV</button>
+              <button
+                  type="button"
+                  class="likeBtn"
+                  :class="{ 'is-on': isLiked }"
+                  :aria-pressed="isLiked"
+                  :title="isLiked ? '取消喜欢' : '喜欢'"
+                  @click="toggleLike"
+              >
+                <BaseIcon :name="isLiked ? 'likeFill' : 'like'" :size="22"/>
+                <span v-if="likedTotalText" class="likeCount">{{ likedTotalText }}</span>
+              </button>
+            </div>
+            <p class="songSub">
+              <span class="songArtist" @click="arClick">{{ artistNames }}</span>
+              <template v-if="albumName">
+                <span class="subSep">·</span>
+                <span class="songAlbum" @click="alClick">{{ albumName }}</span>
+              </template>
+            </p>
           </div>
           <div class="progressSection" ref="progressPanel">
             <div class="progressTrack" @click="progressClk">
@@ -31,7 +57,6 @@
             </div>
             <div class="progressTimes"><span>{{ formatTime(timeNow) }}</span><span>{{ formatTime(duration) }}</span></div>
           </div>
-          <p v-if="expandedHint" class="expandedHint" role="status">{{ expandedHint }}</p>
           <div class="controlsRow" @keydown.left.stop @keydown.right.stop>
             <button type="button"
                 class="modeBtn"
@@ -39,21 +64,26 @@
                 :title="playMode === 'order' ? '列表循环' : playMode === 'sequence' ? '顺序播放' : playMode === 'random' ? '随机播放' : '单曲循环'"
                 @click="togglePlayMode"
             >
-              <BaseIcon v-if="playMode === 'order'" name="loopList" :size="20"/>
-              <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="20"/>
-              <BaseIcon v-else-if="playMode === 'sequence'" name="sequence" :size="20"/>
-              <BaseIcon v-else name="loopOne" :size="20"/>
+              <BaseIcon v-if="playMode === 'order'" name="loopList" :size="24"/>
+              <BaseIcon v-else-if="playMode === 'random'" name="shuffle" :size="24"/>
+              <BaseIcon v-else-if="playMode === 'sequence'" name="sequence" :size="24"/>
+              <BaseIcon v-else name="loopOne" :size="24"/>
             </button>
-            <button type="button" aria-label="上一首" class="trackBtn prevBtn" @click="prevTrack"><BaseIcon name="prev" :size="20"/></button>
-            <button type="button" class="playBtn" :aria-label="isPlaying ? '暂停' : '播放'" @click="togglePlay"><i v-if="isLoading" class="player-loading-spinner"></i><BaseIcon v-else-if="!isPlaying" name="play"/><BaseIcon v-else name="pause"/></button>
-            <button type="button" aria-label="下一首" class="trackBtn nextBtn" @click="nextTrack"><BaseIcon name="next" :size="20"/></button>
-            <span class="modeBtn mode-spacer" aria-hidden="true"></span>
-          </div>
-          <div class="actionsRow">
-            <button class="actionBtn" :aria-pressed="isLiked" :class="{ active: isLiked }" @click="toggleLike"><BaseIcon :name="isLiked ? 'likeFill' : 'like'"/><span>喜欢</span></button>
-            <button v-if="currentMvId && !isMvDead(currentMvId)" class="actionBtn" @click="openMv"><BaseIcon name="mv"/><span>看 MV</span></button>
-            <button class="actionBtn" :disabled="downloading" @click="downloadSong"><BaseIcon name="download"/><span>{{ downloading ? '获取中' : '下载' }}</span></button>
-
+            <button type="button" aria-label="上一首" class="trackBtn prevBtn" @click="prevTrack"><BaseIcon name="prev" :size="24"/></button>
+            <button type="button" class="playBtn" :aria-label="isPlaying ? '暂停' : '播放'" @click="togglePlay">
+              <!-- 不加 mode：两个图标在同一个网格格里重叠，交接时交叉淡入淡出，
+                   不会出现 out-in 那种"先空一帧再出现"的闪烁 -->
+              <transition name="play-swap">
+                <i v-if="isLoading" key="loading" class="player-loading-spinner"></i>
+                <BaseIcon v-else-if="!isPlaying" key="play" name="play"/>
+                <BaseIcon v-else key="pause" name="pause"/>
+              </transition>
+            </button>
+            <button type="button" aria-label="下一首" class="trackBtn nextBtn" @click="nextTrack"><BaseIcon name="next" :size="24"/></button>
+            <button type="button" class="iconBtn" :disabled="downloading"
+                    :title="downloading ? '获取中' : '下载'" aria-label="下载" @click="downloadSong">
+              <BaseIcon name="download" :size="24"/>
+            </button>
           </div>
         </div>
         <div class="heroRight">
@@ -126,6 +156,7 @@ import config from "@/config";
 import * as tracksApi from "@/api/Tracks";
 import { isLoggedIn } from "@/utils/auth";
 import { songMvMixin } from "@/mixins/songMvMixin";
+import { collectSongs } from "@/utils/songList";
 
 export default {
   name: "MusicPlayer",
@@ -160,16 +191,12 @@ export default {
       wheelAccum: 0,
       transitioning: false,
       colorSongId: null,
+      // 当前歌曲的全站红心总数（/song/red/count），0 表示还没取到
+      likedTotal: 0,
     }
   },
   computed: {
     chorusBand() { return this.coreReady ? this.$refs.pgPanel.chorusStyle : null },
-    // 全屏态看不到播放条，取源/解灰进度接到这里播报，否则全屏里这段是黑箱
-    expandedHint() {
-      if (!this.coreReady) return ''
-      const core = this.$refs.pgPanel
-      return core.hintText || (core.sourceStatus && core.sourceStatus.text) || ''
-    },
     coverUrl() {
       const s = this.currentSong
       return (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || ''
@@ -195,13 +222,24 @@ export default {
     bufferPercent() { return this.duration ? (this.bufferedTime / this.duration) * 100 : 0 },
     // 直接订阅 Core 的响应式状态，乐观更新与失败回滚同步显示。
     isLiked() { return this.coreReady ? this.$refs.pgPanel.isLiked : false },
+    /** 红心旁的数字：`227w+`（万以下直接给原数）。
+     *  不用接口的 countDesc —— 它是粗分档，682 万会被描述成 "100w+"。 */
+    likedTotalText() {
+      const n = this.likedTotal
+      if (!n) return ''
+      return n < 10000 ? String(n) : `${Math.floor(n / 10000)}w+`
+    },
   },
   watch: {
     isExpand(val) {
       val ? this.expanded() : this.minified()
       this._rememberUi()
     },
-    'currentSong.id'(id) { if (id) this.resolveSongMv(this.currentSong) },
+    'currentSong.id'(id) {
+      if (!id) return
+      this.resolveSongMv(this.currentSong)
+      this.fetchLikedTotal(id)
+    },
     timeNow(val) { this.needUpdate(val) },
     rightTab() { this._rememberUi() },
     coverUrl(url) { if (url) this.$nextTick(() => this.updateBackground()) },
@@ -443,7 +481,27 @@ export default {
         if (line.wcur !== wi) line.wcur = wi
       }
     },
-    getSimiTracks(id) { return tracksApi.simiTracks(id) },
+    /**
+     * 相似歌曲：先用新版 /song/simi/get（插播相似歌曲，官方"工具栏推荐"那套，
+     * 返回的是多个资源位而不是纯 songs 数组），取不到歌再退回经典 /simi/song。
+     *
+     * 旧接口对一部分曲目是空的（实测《晴天》直接返回 songs: []），
+     * 新接口是补充而不是替换：任何一边失败都不影响另一条路径。
+     */
+    getSimiTracks(id) {
+      const legacy = () => tracksApi.simiTracks(id)
+      return tracksApi.songSimiGet(id)
+          .then(res => {
+            const songs = collectSongs(res && res.data && res.data.data)
+            if (songs.length) {
+              console.log('[Simi]', { songId: id, via: 'simi/get', count: songs.length })
+              return { data: { songs } }
+            }
+            console.log('[Simi]', { songId: id, via: 'simi/get', count: 0, action: 'fallback' })
+            return legacy()
+          })
+          .catch(() => legacy())
+    },
     getSimiPlaylist(id) { return tracksApi.simiPlaylist(id) },
     concurrentRequestsGetSimi(id) {
       this.$axios.all([this.getSimiTracks(id), this.getSimiPlaylist(id)])
@@ -459,6 +517,23 @@ export default {
     toggleLike() {
       // 委托给 PlayerCore（单一数据源，含 likePending 锁 + API 调用 + 失败回滚）
       if (this.$refs.pgPanel) this.$refs.pgPanel.toggleLike()
+    },
+    /**
+     * 全站红心总数：/song/red/count 返回 { count, countDesc }。
+     * 失败就不显示（不影响播放），换歌时先清零避免上一首的数字闪一下。
+     */
+    fetchLikedTotal(id) {
+      this.likedTotal = 0
+      if (!id) return
+      const reqId = String(id)
+      tracksApi.songRedCount(id)
+          .then(res => {
+            // 竞态：慢响应回来时可能已经换歌了
+            if (String(this.currentSong.id) !== reqId) return
+            const data = res && res.data && res.data.data
+            this.likedTotal = Number(data && data.count) || 0
+          })
+          .catch(() => { /* 静默：喜欢数只是锦上添花 */ })
     },
     /**
      * 下载当前歌曲。
@@ -655,18 +730,75 @@ export default {
   }
 
   .coverWrapper {
-    position: relative; width: 260px; height: 260px; flex-shrink: 0;
+    // 封面撑满左栏：歌词区/标题/控制行的左右边缘都跟它对齐
+    position: relative; width: 100%; aspect-ratio: 1 / 1; flex-shrink: 0;
   .coverGlow { position: absolute; inset: -30px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%); filter: blur(50px); pointer-events: none; }
   .coverArt { position: relative; width: 100%; height: 100%; border-radius: 16px; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.35); img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s ease, opacity .3s ease; } }
   .coverArt img { transform: scale(1); opacity: 1; }
   }
 
   .songMeta {
-    text-align: center; width: 100%;
-    .songTitle { text-align: center; }
-    .songTitle { font-size: 24px; font-weight: 700; color: rgba(255,255,255,0.92); line-height: 1.3; margin: 0 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 8px; }
-    .songArtist { font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.5); cursor: pointer; margin: 0 0 3px; &:hover { color: var(--c-accent); } }
-    .songAlbum { font-size: 13px; color: rgba(255,255,255,0.32); cursor: pointer; margin: 0; &:hover { color: rgba(255,255,255,0.5); } }
+    text-align: left; width: 100%;
+    // 歌名 + MV 方标 + 红心同一行；红心推到最右，和封面右边缘对齐
+    .songTitleRow {
+      display: flex; align-items: center; gap: 10px;
+      margin: 0 0 6px;
+    }
+    .songTitle {
+      font-size: 24px; font-weight: 700; color: rgba(255,255,255,0.92); line-height: 1.3;
+      margin: 0; padding: 0; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    // MV 方标：比独占一行的按钮省地方，也比纯图标好认
+    .mvTag {
+      flex: 0 0 auto;
+      height: 20px; padding: 0 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: transparent;
+      color: rgba(255,255,255,0.55);
+      font-size: 11px; font-weight: 600; line-height: 18px; letter-spacing: .5px;
+      font-family: inherit; cursor: pointer;
+      transition: color 180ms ease, border-color 180ms ease;
+      &:hover { color: #fff; border-color: rgba(255,255,255,0.42); }
+    }
+    .likeBtn {
+      // 预留右侧 40px 给角标：按钮右边缘与封面右边缘对齐，
+      // 红心落在左边，数字压在它右上角
+      position: relative;
+      flex: 0 0 auto; margin-left: auto;
+      display: inline-flex; align-items: center; justify-content: flex-start;
+      width: 64px; height: 32px; padding: 0;
+      border: none; background: transparent;
+      color: rgba(255,255,255,0.72);
+      cursor: pointer;
+      transition: color 180ms ease;
+      &:hover { color: #fff; }
+      &.is-on { color: $player-danger; }
+      // 角标：绝对定位到红心右上角，纯文字不加底色
+      .likeCount {
+        position: absolute; left: 19px; top: 0;
+        padding: 0;
+        font-size: 9px; font-weight: 600; line-height: 1.2;
+        font-variant-numeric: tabular-nums; letter-spacing: .2px;
+        color: rgba(255,255,255,0.8);
+        white-space: nowrap; pointer-events: none;
+      }
+    }
+    // 歌手 · 专辑 合并一行，左边缘与封面一致
+    .songSub {
+      display: flex; align-items: center; gap: 6px;
+      margin: 0; min-width: 0;
+      font-size: 14px;
+      color: rgba(255,255,255,0.45);
+      .songArtist, .songAlbum {
+        min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        cursor: pointer;
+        transition: color 180ms ease;
+        &:hover { color: rgba(255,255,255,0.8); }
+      }
+      .subSep { flex: 0 0 auto; opacity: .5; }
+    }
   }
 
   .progressSection {
@@ -682,10 +814,13 @@ export default {
   }
 
   .controlsRow {
-    display: flex; align-items: center; justify-content: center; gap: 18px; color: rgba(255,255,255,0.85);
+    // 五个控件平均铺满整行：播放键落在正中，下载贴最右（与红心、封面右边缘对齐）
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; gap: 8px;
+    color: rgba(255,255,255,0.85);
     .trackBtn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 36px; height: 36px; border-radius: 50%;
+      width: 46px; height: 46px; border-radius: 50%;
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.08);
       cursor: pointer;
@@ -696,7 +831,7 @@ export default {
     // 与切歌按钮同尺寸、但不给底色：模式是次级控件，悬停才浮出背景
     .modeBtn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 36px; height: 36px; border-radius: 50%;
+      width: 46px; height: 46px; border-radius: 50%;
       border: 1px solid transparent;
       cursor: pointer;
       color: rgba(255,255,255,0.42);
@@ -708,34 +843,34 @@ export default {
         border-color: rgba(255,255,255,0.06);
       }
       &.mode-random:hover, &.mode-loop:hover { color: var(--c-accent); }
-      &.mode-spacer { pointer-events: none; border-color: transparent; background: none; }
     }
-    .playBtn { width: 44px; height: 44px; border-radius: 50%; background: var(--c-accent); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(var(--theme-accent-rgb), 0.35); transition: all 220ms ease; i { font-size: 20px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(var(--theme-accent-rgb), 0.5); } &:active { transform: scale(0.95); } }
-  }
-
-  .actionsRow {
-    display: flex; align-items: center; justify-content: center; gap: 10px;
-    .actionBtn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      height: 32px; padding: 0 16px;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(255,255,255,0.04);
-      color: rgba(255,255,255,0.5);
-      font-size: 12px; line-height: 1;
-      font-family: inherit;
+    // 喜欢 / 下载：与切歌键同尺寸的透明圆钮，只有 hover 才浮出背景
+    .iconBtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 1px solid transparent;
+      background: transparent;
+      color: rgba(255,255,255,0.42);
       cursor: pointer;
+      padding: 0;
       transition: all 180ms ease;
-      i { font-size: 15px; }
-      &:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.82); border-color: rgba(255,255,255,0.16); }
-      &:disabled { opacity: 0.5; cursor: not-allowed; }
-      &.active {
-        color: rgba(255,255,255,0.92);
-        border-color: rgba(var(--theme-accent-rgb), 0.3);
-        background: rgba(var(--theme-accent-rgb), 0.12);
-        i { color: #ef4444; }
-      }
+      &:hover { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.07); }
+      &:active { transform: scale(0.94); }
+      &:disabled { opacity: .45; cursor: default; }
+      // 已喜欢：红心实心 + 淡底
+      &.is-on { color: $player-danger; background: rgba(255,255,255,0.06); }
     }
+    .playBtn { width: 44px; height: 44px; border-radius: 50%; background: var(--c-accent); color: #fff; display: grid; grid-template: 1fr / 1fr; place-items: center; cursor: pointer; box-shadow: 0 4px 20px rgba(var(--theme-accent-rgb), 0.35); transition: all 220ms ease; i { font-size: 20px; } .player-loading-spinner { display: block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: player-loading-spin .8s linear infinite; } &:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(var(--theme-accent-rgb), 0.5); } &:active { transform: scale(0.95); } }
+    // 播放/暂停图标切换：两个图标叠在同一个网格格里交叉淡入淡出。
+    // 用 out-in 会先空一帧再出现，看起来就是"闪一下"；不加 mode 让旧的一边淡出、
+    // 新的一边淡入，全程至少有一个图标可见。
+    .playBtn > * { grid-area: 1 / 1; }
+    .play-swap-enter-active,
+    .play-swap-leave-active {
+      transition: opacity 180ms ease;
+    }
+    .play-swap-enter,
+    .play-swap-leave-to { opacity: 0; }
   }
 
   .heroRight { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; }
@@ -747,8 +882,7 @@ export default {
 
   // 详情页右栏：上留 20px 接标题、下留 70px 收尾，左右贴边（歌词/卡片自己已有内边距）
   .rightContent { flex: 1; min-height: 0; overflow: hidden; padding: 20px 0 70px; }
-  .tabPanel { height: 100%; overflow: hidden; }
-
+  .tabPanel { position: relative; height: 100%; overflow: hidden; }
   .lyricsScroll {
     max-height: calc(70vh - 120px); height: calc(70vh - 120px);
     overflow-y: auto; position: relative;
@@ -828,7 +962,12 @@ export default {
   .playerWrapper.expandWindow {
     .heroSection { gap: 3%; padding: 60px 4% 60px 5%; }
     .heroLeft { flex: 0 0 30%; min-width: 240px; }
-    .coverWrapper { width: 220px; height: 220px; }
+    .coverWrapper { width: 100%; }
+    // 五个控件（模式/上一首/播放/下一首/下载）在 240px 里排得下，
+    // 只把间距收到 8px；尺寸略缩，避免贴着边框
+    .controlsRow { gap: 8px; }
+    .controlsRow .trackBtn, .controlsRow .modeBtn, .controlsRow .iconBtn { width: 40px; height: 40px; }
+    .controlsRow .playBtn { width: 56px; height: 56px; }
     .lyricsScroll { max-height: calc(70vh - 140px); height: calc(70vh - 140px); p { font-size: 14px; &.active { font-size: 22px; } } }
     .musicCard { flex: 0 0 130px; width: 130px; .cardCover { width: 130px; height: 130px; } }
     .commentsSection { padding: 80px 5% 100px; }
@@ -839,7 +978,7 @@ export default {
   .playerWrapper.expandWindow {
     .heroSection { flex-direction: column; gap: 32px; min-height: auto; padding: 100px 32px 60px; }
     .heroLeft { flex: 0 0 auto; width: 100%; max-width: 280px; }
-    .coverWrapper { width: 200px; height: 200px; }
+    .coverWrapper { width: 100%; }
     .heroRight { width: 100%; min-height: 50vh; }
     .lyricsScroll { max-height: calc(60vh - 100px); height: calc(60vh - 100px); .lyricsInner { padding: 20vh 0; } }
     .musicCard { flex: 0 0 120px; width: 120px; .cardCover { width: 120px; height: 120px; } }
@@ -856,29 +995,27 @@ export default {
   .playerAtmosphere { position: fixed; inset: -10%; background-size: cover; background-position: center; filter: blur(100px); opacity: .16; pointer-events: none; }
   .heroSection { position: relative; display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.35fr); gap: clamp(40px, 6vw, 100px); min-height: 100vh; padding: 80px 6% 100px; }
   .heroLeft { position: relative; width: 100%; min-width: 0; max-width: 420px; justify-self: center; gap: $sp-5; }
-  .coverWrapper { width: clamp(220px, 25vw, 340px); height: auto; aspect-ratio: 1; }
+  .coverWrapper { width: 100%; height: auto; aspect-ratio: 1; }
   .coverWrapper .coverArt { border-radius: $player-radius-xl; box-shadow: $player-shadow-lg; }
-  .songMeta .songTitle { text-align: center; font-size: clamp(24px, 2.2vw, 32px); }
+  .songMeta .songTitle { text-align: left; font-size: clamp(24px, 2.2vw, 32px); }
   .songMeta .songArtist { color: var(--player-menu-secondary); }
-  .songMeta .songAlbum { color: var(--player-menu-muted); margin-top: $sp-1; }
-  .progressSection { max-width: 380px; }
+  .songMeta .songAlbum { color: var(--player-menu-muted); }
+  .progressSection { max-width: none; width: 100%; }
   .progressSection .progressTrack { height: 6px; isolation: isolate; }
   .expandedChorusBand { position: absolute; top: -3px; height: 12px; background: var(--player-menu-accent); opacity: .38; border-radius: $radius-pill; pointer-events: none; }
   .progressSection .progressTimes { color: var(--player-menu-muted); }
-  .expandedHint { color: var(--player-menu-accent); font-size: $fs-aux; text-align: center; line-height: 1.5; margin: 0; }
   .controlsRow button { padding: 0; font: inherit; color: inherit; }
   // 大播放页按钮放大到 58px 后图标仍是基础尺寸 20px（占 34%），比 mini 条的
   // 18/32（56%）明显偏小；这里按同一比例补到 34px（可见三角高约 21px），
   // 加载圈同步放大
   .controlsRow .playBtn {
-    width: 58px; height: 58px; border: none;
-    i { font-size: 34px; }
-    .player-loading-spinner { width: 22px; height: 22px; border-width: 2.5px; }
+    width: 64px; height: 64px; border: none;
+    i { font-size: 38px; }
+    .player-loading-spinner { width: 24px; height: 24px; border-width: 2.5px; }
   }
   .controlsRow .modeBtn { background: transparent; color: var(--player-menu-secondary); }
-  .actionsRow .actionBtn.active { background: var(--player-menu-soft); border-color: var(--player-menu-accent); color: var(--player-menu-text); }
-  .actionsRow .actionBtn.active .ac-icon { color: $player-danger; }
-  .actionsRow .actionBtn.active svg path { fill: currentColor; }
+  .controlsRow .iconBtn { color: var(--player-menu-secondary); }
+  .controlsRow .iconBtn.is-on { color: $player-danger; }
   .heroRight { align-self: center; width: 100%; min-width: 0; height: clamp(440px, 72vh, 760px); }
   .rightTabs { justify-content: center; span { color: var(--player-menu-muted); padding: $sp-3 $sp-4; } }
   .rightContent { padding: 20px 0 70px; min-height: 0; flex: 1; }
@@ -908,7 +1045,7 @@ export default {
     .heroSection { grid-template-columns: minmax(0, 1fr); padding: 80px $sp-5 100px; gap: $sp-6; }
     .heroLeft { max-width: 360px; }
     .heroRight { min-height: 0; height: 58vh; }
-    .coverWrapper { width: 240px; }
+    .coverWrapper { width: 100%; }
     .lyricsScroll { height: 50vh; min-height: 300px; .lyricsInner { padding: 20vh 0; } }
   }
 }

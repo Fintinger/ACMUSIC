@@ -151,7 +151,7 @@
           <button ref="qualityBtn" class="qualityBtn" :class="{ 'is-unblock': currentQuality.isUnblock }" :title="qualityTitle" @click.stop="showQualityMenu = !showQualityMenu">
             {{ currentQualityShort }}
           </button>
-          <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="qualityMenuSelected" :levels="songLevels" :unblock="currentQuality.isUnblock && !currentQuality.byChoice" :unblock-detail="unblockDetailText" @select="onQualitySelect"/>
+          <QualityMenu ref="qualityMenu" :visible="showQualityMenu" :selected="qualityMenuSelected" :levels="songLevels" :unblock="currentQuality.isUnblock && !currentQuality.byChoice" :unblock-detail="unblockDetailText" :unblock-note="unblockNoteText" @select="onQualitySelect"/>
         </div>
         <div class="barItem chorusWrap">
           <el-dropdown trigger="click" placement="top" @command="setTrackForm" @visible-change="onChorusDropdown">
@@ -303,7 +303,7 @@ import * as userApi from "@/api/User";
 import * as authApi from "@/api/auth";
 import { toHttpsUrl, imgParam } from "@/utils/filters";
 import { mvIdOf, isMvDead } from "@/utils/songMv";
-import { unblockBrief, unblockDetail } from "@/utils/audioSource";
+import { unblockBrief, unblockDetail, qualityTierShort } from "@/utils/audioSource";
 import { songMvMixin } from "@/mixins/songMvMixin";
 
 // 打卡门槛：播满 30 秒或过半（先到者）。
@@ -706,6 +706,9 @@ export default {
     qualityMenuSelected() {
       const avail = this.songLevels || []
       const q = this.currentQuality || {}
+      // 解灰态下没有任何官方档位在生效：一档都不高亮。
+      // 以前这里会退回 config.player.level，于是出现"菜单高亮 HD、按钮写着 320k"的自相矛盾。
+      if (q.isUnblock) return ''
       const cfg = config.player.level
       const actual = q.actual && q.actual !== 'match' ? q.actual : ''
       if (actual && (!avail.length || avail.indexOf(actual) !== -1)) return actual
@@ -714,8 +717,9 @@ export default {
     },
     /**
      * 显示"实际拿到的音质"，而不是用户选的档位。
-     * 上游会把超权限的请求压级（非会员选 lossless 实际给 exhigh），
-     * 解灰源则质量不可控，单独标'解灰'。
+     * 上游会把超权限的请求压级（非会员选 lossless 实际给 exhigh）；
+     * 解灰源只有一档固定音质，按返回的 br 反推实际档位（琥珀色另行标识第三方），
+     * 取不到码率时才退回"解灰"。
      * 还没起播时用 qualityMenuSelected 兜底：这首歌没有所选档位的话，
      * 别让按钮先亮一个它给不了的标（等播完再改口更奇怪）。
      */
@@ -723,13 +727,9 @@ export default {
       const q = this.currentQuality || {}
       const actual = q.actual
       if (actual === 'match') {
-        // 用户主动要的会员档：按钮上继续标他选的那一档（琥珀色已经说明是解灰源），
-        // 只有"被迫解灰"（曲目本身没货/仅试听）才写"解灰"
-        if (q.byChoice) {
-          const f = (config.player.qualityOptions || []).find(o => o.key === config.player.level)
-          if (f) return f.short
-        }
-        return '解灰'
+        // 写"解灰"等于没说：用户既不知道听的是什么质量，也没法和官方档位对比。
+        // 只有老后端不返回 br 时才退回这个兜底文案。
+        return qualityTierShort(q.br) || '解灰'
       }
       const opts = config.player.qualityOptions || []
       const key = actual || this.qualityMenuSelected || this.currentLevel
@@ -739,11 +739,9 @@ export default {
     qualityTitle() {
       const q = this.currentQuality || {}
       if (q.isUnblock) {
-        const detail = unblockDetail(q)
-        const head = q.byChoice
-          ? '按你选的档位请求的第三方音源，实际音质以文件为准'
-          : '第三方音源，音质与版本不可控'
-        return detail ? `解灰源：${detail}（${head}）` : `当前为解灰源（${head}）`
+        // 只留"谁给的、多少码率、多大"，不再堆解释性文案：
+        // 解灰这件事在菜单里已经有一行说明，tooltip 再重复一遍又长又吵。
+        return unblockDetail(q) || '音质选择'
       }
       const opts = config.player.qualityOptions || []
       const f = opts.find(o => o.key === (q.actual || this.currentLevel))
@@ -758,6 +756,14 @@ export default {
     unblockDetailText() {
       const q = this.currentQuality || {}
       return q.isUnblock ? unblockDetail(q) : ''
+    },
+    /**
+     * 解灰态但官方档位仍可选时（用户主动要会员档、被压级后转去解灰），
+     * 菜单下方补一行说明，而不是把档位列表整段隐藏 —— 那样用户就退不回 320k / 标准了。
+     */
+    unblockNoteText() {
+      const q = this.currentQuality || {}
+      return q.isUnblock && q.byChoice ? unblockBrief(q) : ''
     },
   },
   watch: {
@@ -1275,7 +1281,19 @@ export default {
       const cachedUrl = getAudioCache(id, preferred)
       if (cachedUrl) {
         if (requestId !== this.playRequestId) return Promise.resolve({ cancelled: true })
-        this.currentQuality = { requested: preferred, actual: preferred, isUnblock: false }
+        /**
+         * 缓存里躺着的可能是解灰地址（预取或上一轮解灰留下的），
+         * 直接当官方档位返回会让按钮显示成默认音质、实际放的却是第三方文件。
+         * 同一个 url 在 match 缓存里也有记录时，按解灰源还原状态。
+         */
+        const matchHit = this.urlCache.get(id + '_match')
+        const fromMatch = !!(matchHit && matchHit.url === cachedUrl)
+        this.currentQuality = fromMatch
+          ? {
+            requested: preferred, actual: 'match', isUnblock: true,
+            source: matchHit.provider || '', br: matchHit.br || 0, size: matchHit.size || 0
+          }
+          : { requested: preferred, actual: preferred, isUnblock: false }
         // 缓存命中是瞬时的，上一首残留的状态行顺手清掉
         this.clearSourceStatusSoon()
         return Promise.resolve({ data: { data: [{ url: cachedUrl }] } })
@@ -3267,9 +3285,16 @@ export default {
     },
     _preloadNext() {
       if (this.currentSongSource !== 'playlist') return
-      if (this.playMode === 'random') return
-      const nextIdx = this.curIndex + 1
-      if (nextIdx >= this.currentPlaylist.length) return
+      // random：下一首是随机的，预取大概率白打一次请求
+      // loop：单曲循环会重播当前这首，根本没有"下一首"
+      if (this.playMode === 'random' || this.playMode === 'loop') return
+      let nextIdx = this.curIndex + 1
+      if (nextIdx >= this.currentPlaylist.length) {
+        // 列表循环（order）播完最后一首会回到第一首；顺序播放（sequence）则停在这里
+        if (this.playMode !== 'order') return
+        nextIdx = 0
+      }
+      if (nextIdx === this.curIndex) return
       const nextSong = this.currentPlaylist[nextIdx]
       if (!nextSong || !nextSong.id) return
       console.log('[AudioPreload]', { action: 'start', songId: nextSong.id })
@@ -3280,9 +3305,60 @@ export default {
         return this.$axios('/song/url/v1', { params: { id: nextSong.id, level, timestamp: Date.now() } })
           .then(res => {
             const d = res && res.data && res.data.data && res.data.data[0]
-            return d && d.url ? toHttpsUrl(d.url) : null
+            if (!d || !d.url) return null
+            /**
+             * 试听片段不能当正常音源缓存。
+             * VIP 独占用未登录/非会员身份请求时，url 有值、能播，但只有 30 秒左右
+             * （freeTrialInfo 非空）。一旦被写进 audioCache，下一首真正播放时
+             * getSongUrl 第一行就命中缓存直接返回：既不会进解灰链路，音质按钮还会
+             * 显示成默认档位（currentQuality 被置成 actual=preferred），
+             * 要等用户手动切一次音质（会先 removeAudioCache）才恢复正常。
+             */
+            if (d.freeTrialInfo) {
+              console.log('[AudioPreload]', { action: 'skip_trial', songId: nextSong.id })
+              return null
+            }
+            return toHttpsUrl(d.url)
           })
-      }, level).catch(() => { /* silent */ })
+      }, level)
+          .then(url => {
+            // 官方一档都没取到 → 这首多半是灰的（版权/会员），顺手把解灰地址也预取掉，
+            // 切歌时就不用再等那零点几秒（解灰链路本身约 0.4~0.6s）。
+            if (!url) return this._preloadMatch(nextSong.id)
+            return null
+          })
+          .catch(() => { /* silent */ })
+    },
+    /**
+     * 预解灰：只写 urlCache，不碰 currentQuality 和状态条。
+     *
+     * 真正播放时由 requestMatchSongUrl 命中缓存，UI 那边照常显示"解灰完成 · 波点音乐 320k"。
+     * 缓存 key 与 requestMatchSongUrl 保持一致（id + '_match'），TTL 也用 10 分钟：
+     * 第三方直链本身有时效，放太久反而会把过期地址塞给播放器。
+     */
+    _preloadMatch(id) {
+      const cacheKey = id + '_match'
+      const hit = this.urlCache.get(cacheKey)
+      if (hit && Date.now() < hit.expire) return Promise.resolve(null)
+      return this.$axios('/song/url/match', { params: { id } })
+          .then(res => {
+            const payload = (res && res.data) || {}
+            const raw = typeof payload.data === 'string'
+              ? payload.data
+              : (payload.data && payload.data.url)
+            const url = toHttpsUrl(raw)
+            if (!url) return null
+            this.urlCache.set(cacheKey, {
+              url, level: 'match', source: 'match',
+              provider: payload.source || '',
+              br: Number(payload.br) || 0,
+              size: Number(payload.size) || 0,
+              expire: Date.now() + 10 * 60 * 1000
+            })
+            console.log('[AudioPreload]', { action: 'match_ready', songId: id, source: payload.source || '-' })
+            return url
+          })
+          .catch(() => null)
     },
     _restoreState() {
       try {
@@ -3915,13 +3991,21 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 }
 
 .barRight {
-  flex: 0 0 236px; width: 236px; display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+  // 不再写死 236px。音质按钮的文案会随状态变长（解灰源显示 320k / SQ，
+  // 官方档位是 HQ / SQ / 192），固定宽度下多出几像素就会把"完整""定时"
+  // 挤成两行竖排。改成由内容决定宽度，让中间进度列（flex:1，min-width:200）让位。
+  flex: 0 0 auto; width: auto; min-width: 236px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 7px;
   .barItem {
     position: relative; cursor: pointer; color: $text-sec; display: flex; align-items: center;
+    // 子项一律不参与压缩：否则任何一处文案变长都会挤压邻居，而不是撑开容器
+    flex: 0 0 auto;
     transition: color 160ms cubic-bezier(0.22,0.61,0.36,1);
     i { font-size: 16px; }
     &:hover { color: $text; }
   }
+  // 三枚 chip 的文案长度都是动态的（完整/副歌、定时、320k/SQ），统一禁止折行
+  .qualityBtn, .chorusTrigger, .sleepTrigger { white-space: nowrap; }
   .volumeWrap .volumeSlider {
     position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
@@ -4040,7 +4124,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   .barLeft { flex: 0 0 180px; width: 180px; }
   // 180px 里再放一颗 MV 胶囊，歌名只剩三四个字，不如不给（列表页/大播放器仍有入口）
   .barLeft .mvBtn { display: none; }
-  .barRight { flex: 0 0 188px; width: 188px; }
+  .barRight { flex: 0 0 auto; width: auto; min-width: 188px; }
   // 窄屏只留图标+箭头，避免右侧挤出可用区
   .barRight .chorusWrap .chorusTrigger .chorusLabel { display: none; }
   .barRight .sleepWrap .sleepTrigger:not(.on) .sleepLabel { display: none; }
