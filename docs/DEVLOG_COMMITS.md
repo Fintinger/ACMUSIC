@@ -3,10 +3,16 @@
 > 由 `scripts/build-devlog.mjs` 从 git 历史生成，**请勿手改**。
 > 重新生成：`yarn devlog`。阶段与意图的叙述见 `docs/DEVLOG.md`。
 
-共 188 个提交，时间跨度 2022-04-12 ~ 2026-11-12。
+共 194 个提交，时间跨度 2022-04-12 ~ 2026-11-16。
 
-## 2026-11（23 个提交）
+## 2026-11（29 个提交）
 
+- `bc4d5cd` perf(user): 个人主页首屏拆骨架、去串行、按需取数
+- `34f427c` chore(release): v1.5.0 　`v1.5.0`
+- `6d81133` feat: 每日推荐风格筛选、全屏播放页改版、解灰预取
+- `4c7f98f` feat(player): 解灰源显示具体音源与码率
+- `421e41a` docs(ops): 记录 api-enhanced 升级到 v4.41.1 与解灰加速 patch
+- `6674e5a` docs: 刷新提交清单至 v1.4.0
 - `2df6663` chore(release): v1.4.0 　`v1.4.0`
 - `aabf6e1` feat(router,artist): 地址统一为小写资源名，歌手页补「全部 MV」
 - `de3189c` feat(player): 接入歌曲 MV 入口，并修一批歌词与键盘问题
@@ -219,9 +225,11 @@
 
 ## 标签索引
 
+- `backup/mobile-pre-merge` → `1218a71`
 - `stage/2026-08-player` → `7d946ab`
 - `stage/2026-09-cleanup` → `896e202`
 - `stage/2026-10-refactor` → `497a97c`
+- `stage/2026-11-mobile-shell` → `8014a49`
 - `v0.1.0` → `c5b72a1`
 - `v0.2.0` → `9c4e962`
 - `v1.0-api-upgrade` → `b080df7`
@@ -238,3 +246,4 @@
 - `v1.3.0` → `96c4b91`
 - `v1.3.0-motion-design` → `a906439`
 - `v1.4.0` → `2df6663`
+- `v1.5.0` → `34f427c`
