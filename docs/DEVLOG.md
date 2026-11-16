@@ -168,6 +168,14 @@ this.sel.addEventListener('canplay', this._durationTime)
 
 - **11-12** MV / 视频页右栏「相关推荐」改成与左栏 `video-main` 严格等高：原先靠 JS 量 `headH` 下移、`playerH` 限高，标题与播放器异步出现时首帧量到 0 且不再重算，条目一多就比左栏高出一截。现在用「侧栏 `align-self: stretch` + 卡片绝对定位铺满」把高度完全交给左栏，条目超出走内部滚动；顺带删掉 `sidebarStyle` / `observeLayout` 那套测量代码
 
+### 第十三波：个人主页首屏提速（11-16）
+
+- **11-16** 定位：`/me` 的 `pageLoading` 由 8 个 promise（12 个请求）的 `allSettled` 决定，最慢的一个才放开整页骨架；`/api/ip-location` 冷查 912ms、云盘 200 条、听歌排行双份、`/login/status` 两次，全都在同一条阻塞链上。此外 uid 要等 `/login/status` 才知道 → 串行一跳；hero 头像用原图同时当 `<img>`、CSS 背景和亮度采样
+- **11-16** 处理：首屏只等 `/user/detail`（121ms），其余分区各自 loading；uid 先用 `localStorage` 里的 userId；ip-location 加 sessionStorage 缓存 + 并发去重；排行/云盘/收藏按 tab 懒加载；头像改 `?param=` 缩略图
+- **11-16** 顺带修掉整页刷新 `/me` 内容区空白：`IS_LOGIN` 初值 false 导致 `beforeMount` 跳过取 uid
+- **11-16** 第二轮：保留毛玻璃，hero 背滤 30→20px、卡片 30→12px；入场过渡 350ms 位移 → 180ms 只淡入；歌单区改窗口化渲染（首批 36 行，滚动触底追加）
+- 首次进页接口数 15 → 7，最大单笔响应 604KB → 一页上限
+
 ---
 
 ## 版本线

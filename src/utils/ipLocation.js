@@ -10,25 +10,60 @@
  */
 
 const cache = {}
+// 同一 IP 的并发请求只发一次：主页的「上次登录」和登录态初始化会同时来要同一个结果，
+// 不去重就会打两个一模一样的请求，而且首屏是等这两个一起回来的
+const inflight = {}
+const SS_PREFIX = 'acmusic_iploc:'
+
+function readSession(ip) {
+  try {
+    return sessionStorage.getItem(SS_PREFIX + ip) || ''
+  } catch (e) {
+    return ''
+  }
+}
+
+function writeSession(ip, loc) {
+  try {
+    sessionStorage.setItem(SS_PREFIX + ip, loc)
+  } catch (e) { /* 隐私模式 / 配额满：忽略，只影响下次是否要再查 */ }
+}
 
 export async function getIpLocation(ip) {
   if (!ip || typeof ip !== 'string') return ''
   if (cache[ip]) return cache[ip]
-
-  try {
-    // 不能 encodeURIComponent：IPv6 的冒号会被编成 %3A，而 3001 端口的辅助服务
-    // 不对 query 参数做 decode，拿到 "240e%3A..." 后查库失败，静默返回空
-    // location，页面上就只剩打码 IP（2026-11 实测定位的线上 bug）。
-    // IP 的合法字符集（数字 / a-fA-F / '.' / ':'）本身就是 URL 安全字符，原样拼接。
-    const res = await fetch(`/api/ip-location?ip=${ip}`)
-    const json = await res.json()
-    const loc = (json && json.ok && json.location) || ''
-    if (loc) cache[ip] = loc
-    return loc
-  } catch (e) {
-    // 展示用信息，失败静默
-    return ''
+  // 跨页面导航复用：sessionStorage 比内存缓存活得久（同一标签页内切页不必重查）
+  const stored = readSession(ip)
+  if (stored) {
+    cache[ip] = stored
+    return stored
   }
+  if (inflight[ip]) return inflight[ip]
+
+  const task = (async () => {
+    try {
+      // 不能 encodeURIComponent：IPv6 的冒号会被编成 %3A，而 3001 端口的辅助服务
+      // 不对 query 参数做 decode，拿到 "240e%3A..." 后查库失败，静默返回空
+      // location，页面上就只剩打码 IP（2026-11 实测定位的线上 bug）。
+      // IP 的合法字符集（数字 / a-fA-F / '.' / ':'）本身就是 URL 安全字符，原样拼接。
+      const res = await fetch(`/api/ip-location?ip=${ip}`)
+      const json = await res.json()
+      const loc = (json && json.ok && json.location) || ''
+      if (loc) {
+        cache[ip] = loc
+        writeSession(ip, loc)
+      }
+      return loc
+    } catch (e) {
+      // 展示用信息，失败静默
+      return ''
+    } finally {
+      delete inflight[ip]
+    }
+  })()
+
+  inflight[ip] = task
+  return task
 }
 
 /**

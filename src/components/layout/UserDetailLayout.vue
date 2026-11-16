@@ -8,9 +8,9 @@
       <EmptyState v-else-if="pageError" key="error" title="用户主页加载失败" desc="请检查用户链接或网络后重试" action-text="重新加载" @action="loadPage"/>
       <div v-else key="content" class="ud-content">
         <EmptyState v-if="partialLoadError" compact title="部分主页内容暂时不可用" desc="可能受网络或可见性限制，已加载内容仍可查看" action-text="重试" @action="loadPage"/>
-        <div class="user-hero" v-if="profile" :class="{ 'dark-bg': profile.avatarUrl && !isLightCover(profile.avatarUrl) }">
-          <div class="hero-blur-bg" v-if="profile.avatarUrl" :style="{ backgroundImage: 'url(' + profile.avatarUrl + ')' }"></div>
-          <div class="hero-avatar"><cover-image :src="profile.avatarUrl" :alt="profile.nickname + '的头像'"/></div>
+        <div class="user-hero" v-if="profile" :class="{ 'dark-bg': profile.avatarUrl && !isLightCover(heroBlur) }">
+          <div class="hero-blur-bg" v-if="profile.avatarUrl" :style="{ backgroundImage: 'url(' + heroBlur + ')' }"></div>
+          <div class="hero-avatar"><cover-image :src="heroThumb" :alt="profile.nickname + '的头像'" eager/></div>
           <div class="hero-info">
             <h1 class="hero-name">{{ profile.nickname }}<BaseIcon v-if="profile.gender===1" class="el-icon-male" name="male"/><BaseIcon v-if="profile.gender===2" class="el-icon-female" name="female"/><VipBadge :uid="uid" :is-self="isSelf"/></h1>
             <p class="hero-sig" v-if="profile.signature" :title="profile.signature">{{ profile.signature }}</p>
@@ -53,13 +53,15 @@
         <div class="ud-duo" :class="{ 'is-solo': !isSelf }">
           <section ref="secRank" class="ud-section ud-card ud-sec">
             <h2>听歌排行</h2>
-            <el-tabs v-if="weekTracksData.length||allTracksData.length" v-model="listenedAcName">
+            <div v-if="rankLoading" class="sec-skel"><i v-for="n in 4" :key="n"></i></div>
+            <el-tabs v-else-if="weekTracksData.length||allTracksData.length" v-model="listenedAcName" @tab-click="onRankTabClick">
               <el-tab-pane label="最近一周" name="week">
                 <RankList v-if="weekTracksData.length" :list="weekTracksData"/>
                 <EmptyState v-else  compact title="最近一周还没有听歌记录（只有在本站播放超过 30 秒的歌才会被统计）"/>
               </el-tab-pane>
               <el-tab-pane label="所有时间" name="all">
-                <RankList v-if="allTracksData.length" :list="allTracksData"/>
+                <div v-if="allLoading" class="sec-skel"><i v-for="n in 4" :key="n"></i></div>
+                <RankList v-else-if="allTracksData.length" :list="allTracksData"/>
                 <EmptyState v-else  compact title="还没有听歌记录"/>
               </el-tab-pane>
             </el-tabs>
@@ -68,15 +70,19 @@
           </section>
           <section v-if="isSelf" ref="secFavors" class="ud-section ud-card ud-sec">
             <h2>云盘与收藏</h2>
-            <el-tabs v-model="favorsAcName">
+            <el-tabs v-model="favorsAcName" @tab-click="onFavorsTabClick">
               <el-tab-pane label="云盘" name="cloud">
-                <p v-if="cloudTracks.length" class="cloudCount">共 {{ cloudTracks.length }} 个文件</p>
-                <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size" downloadable/>
-                <EmptyState v-else  compact title="云盘还是空的"/>
+                <div v-if="cloudLoading" class="sec-skel"><i v-for="n in 3" :key="n"></i></div>
+                <template v-else>
+                  <p v-if="cloudTracks.length" class="cloudCount">共 {{ cloudTotal }} 个文件<em v-if="cloudTruncated" class="cloudMore">（仅显示最近 {{ cloudTracks.length }} 个）</em></p>
+                  <RankList v-if="cloudTracks.length" :list="cloudTracks" :show-rank="false" meta="size" downloadable/>
+                  <EmptyState v-else  compact title="云盘还是空的"/>
+                </template>
               </el-tab-pane>
               <!-- 专辑/歌手改成小图标行：卡片很窄，大封面网格放不下两张 -->
               <el-tab-pane label="专辑" name="album">
-                <ul v-if="(favors.albums||[]).length" class="miniRows">
+                <div v-if="favorsSubLoading" class="sec-skel"><i v-for="n in 3" :key="n"></i></div>
+                <ul v-else-if="(favors.albums||[]).length" class="miniRows">
                   <li v-for="a in favors.albums" :key="a.id" class="miniRow" @click="openAlbum(a.id)">
                     <img class="miniCover" :src="albumCover(a) | imgParam('80y80')" :alt="a.name + '的封面'" loading="lazy">
                     <div class="miniMain">
@@ -88,7 +94,8 @@
                 <EmptyState v-else  compact title="还没有收藏专辑"/>
               </el-tab-pane>
               <el-tab-pane label="歌手" name="artists">
-                <ul v-if="(favors.artists||[]).length" class="miniRows">
+                <div v-if="favorsSubLoading" class="sec-skel"><i v-for="n in 3" :key="n"></i></div>
+                <ul v-else-if="(favors.artists||[]).length" class="miniRows">
                   <li v-for="ar in favors.artists" :key="ar.id" class="miniRow" @click="openArtist(ar.id)">
                     <img class="miniCover miniCover--round" :src="artistAvatar(ar) | imgParam('80y80')"
                          :alt="ar.name + '的头像'" loading="lazy">
@@ -100,7 +107,10 @@
                 </ul>
                 <EmptyState v-else  compact title="还没有关注歌手"/>
               </el-tab-pane>
-              <el-tab-pane label="视频" name="videos"><VideoLayout :list="favors.vids"/></el-tab-pane>
+              <el-tab-pane label="视频" name="videos">
+                <div v-if="favorsSubLoading" class="sec-skel"><i v-for="n in 2" :key="n"></i></div>
+                <VideoLayout v-else :list="favors.vids"/>
+              </el-tab-pane>
             </el-tabs>
           </section>
         </div>
@@ -125,9 +135,11 @@
                网格在本页内私有实现（plGrid），不改公共的 PlaylistLayout -->
           <!-- 横向排布：小封面在左、文字在右。歌单多了之后比大封面网格省一半高度；
                外层 plScroll 限定最大高度，避免歌单过多把页面拉长 -->
-          <div v-if="filteredPlaylists.length" class="plScroll">
+          <div v-if="playlistLoading" class="sec-skel sec-skel--rows"><i v-for="n in 5" :key="n"></i></div>
+          <template v-else>
+          <div v-if="filteredPlaylists.length" ref="plScroll" class="plScroll" @scroll.passive="onPlScroll">
             <ul class="plRows">
-              <li v-for="p in filteredPlaylists" :key="p.id" class="plRow" @click="openPl(p.id)">
+              <li v-for="p in visiblePlaylists" :key="p.id" class="plRow" @click="openPl(p.id)">
                 <img class="plCover" :src="p.coverImgUrl | imgParam('120y120')" :alt="p.name + '的封面'"
                      loading="lazy" decoding="async">
                 <div class="plMain">
@@ -141,14 +153,21 @@
                   </p>
                 </div>
               </li>
-              <li v-if="isSelf && plFilter !== 'sub'" class="plRow plRowNew" @click="importVisible = true">
+              <!-- 「新建 / 导入」放在真正的末尾：还有未渲染的歌单时先不插进来，
+                   否则它会出现在列表中间 -->
+              <li v-if="isSelf && plFilter !== 'sub' && !hasMorePlaylists" class="plRow plRowNew" @click="importVisible = true">
                 <span class="plNewPlus">+</span>
                 <span class="plNewText">新建 / 导入歌单</span>
               </li>
             </ul>
+            <p v-if="hasMorePlaylists" class="plScrollHint">
+              继续滚动加载剩余 {{ filteredPlaylists.length - plRenderCount }} 个
+            </p>
           </div>
           <EmptyState v-else-if="allPlaylists.length"  compact title="这个分类下还没有歌单"/>
           <EmptyState v-else  compact title="未公开"/>
+          <p v-if="playlistMore" class="plMoreHint">歌单较多，仅加载了前 {{ allPlaylists.length }} 个</p>
+          </template>
         </section>
         <section ref="secSocial" class="ud-section ud-card ud-sec">
           <h2>关注与粉丝</h2>
@@ -260,7 +279,7 @@ import * as User from "@/api/User";
 import * as userDetailApi from "@/api/UserDetail";
 import * as authApi from "@/api/auth";
 import { getAreaName, getCityName } from "@/utils/areaCode";
-import { formatMs, followSpanText } from "@/utils/filters";
+import { formatMs, followSpanText, imgParam } from "@/utils/filters";
 import { getIpLocation, maskIP, isUnlocatableIp } from "@/utils/ipLocation";
 import { isLoggedIn } from "@/utils/auth";
 import coverLight from "@/mixins/coverLight";
@@ -269,6 +288,14 @@ import coverLight from "@/mixins/coverLight";
 const SOCIAL_PAGE_SIZE = 30;
 // /user/follow/mixed 每页数量（游标分页，翻页用返回的 page.cursor）
 const MIXED_PAGE_SIZE = 30;
+// 歌单一次取多少：接口上限 2000，但它是本页最大的一笔响应（实测某账号 604KB / gzip 159KB），
+// UI 又只是一个限高滚动的小列表。500 足够覆盖绝大多数账号，超出的用 res.data.more 提示
+const PLAYLIST_PAGE_SIZE = 500;
+// 云盘首屏取多少：/user/cloud 的 limit 最大 200，一次全取在慢网下明显拖时间
+const CLOUD_PAGE_SIZE = 100;
+// 歌单区一次渲染多少行：滚动容器高 420px，36 行（≈3 列 × 12 排）早就超出可视区，
+// 首批只渲染这些，剩下的滚到底再补 —— 500 行一次性进 DOM 时，切分类/切页的 patch 很贵
+const PLAYLIST_BATCH = 36;
 
 /** 关注/粉丝两个 tab 各自的初始分页状态（loadPage 复用时需要能整体复位） */
 function createSocialState() {
@@ -295,6 +322,15 @@ export default {
       // 听歌排行拉取失败标记：与「未公开」区分开，否则接口挂了也提示"未公开"（误导）
       recordErr: false,
       cloudTracks: [], favors: { vids: [], artists: [], albums: [] },
+      /**
+       * 分区加载态：pageLoading 现在只表示「hero 还没到」（唯一阻塞首屏的请求），
+       * 榜单/云盘/收藏/歌单各自有自己的 loading，谁先回来谁先渲染。
+       */
+      rankLoading: false, allLoading: false,
+      cloudLoading: false, cloudLoaded: false, favorsSubLoading: false, favorsLoaded: false,
+      playlistLoading: false, playlistMore: false,
+      // 云盘总数（接口给了 count 就用它，否则退回已取条数）；超出一页时提示只显示了最近 N 个
+      cloudTotal: 0, cloudTruncated: false,
       locationName: '', pageLoading: true, pageError: false, partialLoadError: false,
       lastLoginInfo: { time: "", IP: "", location: "" },
       // 当前登录用户的收藏计数（/user/subcount，仅本人可见）
@@ -319,12 +355,23 @@ export default {
       denseLimit: 12,
       // 歌单分类标签当前选中项：all / favor / create / sub
       plFilter: 'all',
+      // 歌单区当前已渲染到第几行（滚动到底再补一批，避免 500 行一次性进 DOM）
+      plRenderCount: PLAYLIST_BATCH,
+      plLoadingMore: false,
       // 登录态：mounted 时读一次 cookie（不使用会被永久缓存的 getter）
       loggedIn: false,
     }
   },
   computed: {
     profile() { return this.userInfo.profile },
+    /**
+     * hero 头像的缩略图 / 模糊底图。
+     * 原来两处都直接用 avatarUrl 原图：用户自己传的头像原图可能有几百 KB，
+     * 而它只显示成 132px 的圆，模糊层更是只取一个色块；coverLight 还会用 CORS 再拉一份。
+     * 200y200 喂圆形头像，40y40 喂模糊层 + 亮度采样，三处共用同一张小图。
+     */
+    heroThumb() { return imgParam(this.profile && this.profile.avatarUrl, '200y200') },
+    heroBlur() { return imgParam(this.profile && this.profile.avatarUrl, '40y40') },
     /**
      * 登录用户信息：state 优先，localStorage 兜底。
      * 两条都要 —— 只读 state 会让首屏（refreshLogin 未完成）拿不到 userId；
@@ -428,6 +475,9 @@ export default {
         ? this.allPlaylists
         : this.allPlaylists.filter(p => p._kind === this.plFilter)
     },
+    /** 歌单区实际渲染的行：只渲染可视区附近这一窗，滚到底再扩 */
+    visiblePlaylists() { return this.filteredPlaylists.slice(0, this.plRenderCount) },
+    hasMorePlaylists() { return this.plRenderCount < this.filteredPlaylists.length },
     /**
      * 头像墙数据：把两种列表（混排 records / 用户列表）归一成 {key,id,name,avatar,tag}。
      * 只在本页渲染收起态；展开后交给公共卡片组件（FollowMixedLayout / UserListLayout），
@@ -551,7 +601,7 @@ export default {
         .then(() => this.setFollow(0))
         .catch(() => { /* 继续关注 */ })
     },
-    getPlaylist(uid) { return userDetailApi.playlists(uid, 2000) },
+    getPlaylist(uid) { return userDetailApi.playlists(uid, PLAYLIST_PAGE_SIZE) },
     /**
      * 只重拉歌单区（导入完成后调用）：
      * loadPage 是「push 不 clear」的写法，直接复用会渲染出重复歌单，所以这里先清空三个数组
@@ -568,6 +618,7 @@ export default {
           else this.subList.push(pl)
         })
         if (list[0]) this.favorTracks.push(list[0])
+        this.playlistMore = !!(res.data && res.data.more)
       } catch (e) {
         // 拉取失败保持空列表：下次进页面 loadPage 会重新拉一次，这里不弹错打断导入流程
       }
@@ -702,6 +753,29 @@ export default {
       this.expand[kind] = true
     },
     /**
+     * 歌单区滚动加载：距底不到 240px 时补一批，而不是等真滚到底。
+     * 监听用 passive；没有剩余时不读任何布局属性，滚动本身几乎零开销。
+     */
+    onPlScroll(e) {
+      const el = e && e.target
+      if (!el || this.plLoadingMore || !this.hasMorePlaylists) return
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) this.loadMorePlaylists()
+    },
+    loadMorePlaylists() {
+      if (!this.hasMorePlaylists) return
+      this.plLoadingMore = true
+      // 让出一帧再 patch：滚动回调里直接插几十个节点容易掉帧
+      requestAnimationFrame(() => {
+        this.plRenderCount = Math.min(this.plRenderCount + PLAYLIST_BATCH, this.filteredPlaylists.length)
+        this.plLoadingMore = false
+      })
+    },
+    /** 切分类 / 数据重载时把窗口收回第一批 */
+    resetPlaylistWindow() {
+      this.plRenderCount = PLAYLIST_BATCH
+      this.plLoadingMore = false
+    },
+    /**
      * 别处删了歌单（歌单详情页）：本人主页要重拉，他人主页不涉及。
      * 只重拉歌单区而不是 loadPage —— 排行榜/云盘/关注都没变，没必要全量重取
      */
@@ -716,11 +790,54 @@ export default {
         target.push(l.song)
       })
     },
+    /**
+     * 首屏只等 /user/detail（实测 ~120ms）——hero 出现之后才谈得上「页面打开了」。
+     * 其余分区各自请求、各自 loading，谁也不许再拖住整页。
+     *
+     * 之前是 Promise.allSettled 八个 promise（歌单、双份听歌排行、云盘 200 条、
+     * 收藏计数、关注列表、登录状态 + 那次 900ms 的 IP 归属地查询），
+     * pageLoading 要等最慢的一个才放开 —— hero 100ms 就绪，用户却要盯着全页骨架一秒多。
+     */
     async loadPage() {
       this.pageLoading = true; this.pageError = false; this.partialLoadError = false
-      this.createList = []; this.subList = []; this.favorTracks = []; this.cloudTracks = []
-      this.favors = { vids: [], artists: [], albums: [] }; this.userInfo = {}
+      this.resetSections()
       const uid = this.uid
+      const isSelf = this.isSelf
+      try {
+        await this.getUserInfo(uid)
+      } catch (e) {
+        // hero 挂了才算整页失败；其它分区失败走各自 catch，只标「部分内容不可用」
+      }
+      if (!this.userInfo || !this.userInfo.profile) {
+        this.pageError = true
+        this.pageLoading = false
+        return
+      }
+      this.pageLoading = false
+      // 以下互不等待，谁先回来谁先渲染
+      this.loadPlaylists(uid)
+      this.loadRank(uid, isSelf)
+      this.loadSocialFirst(isSelf)
+      if (!isSelf) return
+      this.loadCloud()
+      this.loadSubcount()
+      this.loadLastLogin()
+    },
+    /** 分区状态复位（组件被复用 / 重试时，上一轮的数据和 loading 都不能留着） */
+    resetSections() {
+      this.createList = []; this.subList = []; this.favorTracks = []; this.cloudTracks = []
+      this.favors = { vids: [], artists: [], albums: [] }
+      this.userInfo = {}
+      this.subcount = {}
+      this.lastLoginInfo = { time: "", IP: "", location: "" }
+      this.weekTracksData = []; this.allTracksData = []; this.recordErr = false
+      this.rankLoading = false; this.allLoading = false
+      this.cloudLoading = false; this.cloudLoaded = false
+      this.favorsSubLoading = false; this.favorsLoaded = false
+      this.playlistLoading = false; this.playlistMore = false
+      this.resetPlaylistWindow()
+      this.cloudTotal = 0; this.cloudTruncated = false
+      this.favorsAcName = 'cloud'
       // 关注/粉丝状态复位（loadPage 可能因复用组件被二次触发）
       this.socialAcName = 'follows'
       this.social = createSocialState()
@@ -728,84 +845,161 @@ export default {
       this.mixed = createMixedState()
       this.mixedSeq++
       this.expand = { follows: false, followeds: false }
-      const p1 = this.getPlaylist(uid).then(res => {
-        if (!res.data || !Array.isArray(res.data.playlist)) throw new Error('Invalid playlists')
-        res.data.playlist.forEach((pl) => {
-          if (pl.creator && pl.creator.userId*1 === uid*1) this.createList.push(pl)
+    },
+    loadPlaylists(uid) {
+      this.playlistLoading = true
+      return this.getPlaylist(uid).then(res => {
+        const data = (res && res.data) || {}
+        if (!Array.isArray(data.playlist)) throw new Error('Invalid playlists')
+        data.playlist.forEach((pl) => {
+          if (pl.creator && pl.creator.userId * 1 === uid * 1) this.createList.push(pl)
           else this.subList.push(pl)
         })
-        if (res.data.playlist[0]) this.favorTracks.push(res.data.playlist[0])
+        if (data.playlist[0]) this.favorTracks.push(data.playlist[0])
+        // 超过一页时提示一下，别让人以为歌单只有这么多
+        this.playlistMore = !!data.more
+      }).catch(() => {
+        this.partialLoadError = true
+      }).finally(() => {
+        this.playlistLoading = false
       })
-      const isSelf = this.isSelf
-      // 本人: 补充最近登录信息(IP→位置, 时间戳→日期)
-      const p5 = isSelf
-        ? authApi.loginStatus().then(res => {
-            const pf = res.data.data && res.data.data.profile
-            if (pf && pf.lastLoginIP) {
-              this.lastLoginInfo.IP = pf.lastLoginIP
-              this.lastLoginInfo.time = pf.lastLoginTime
-              return getIpLocation(pf.lastLoginIP).then(loc => { this.lastLoginInfo.location = loc })
-            }
-          }).catch(() => {})
-        : Promise.resolve()
+    },
+    loadRank(uid, isSelf) {
       // 听歌排行仅本人可看(他人 record 接口返回 400), 非本人跳过请求, 显示"未公开"
-      // 先复位：组件被复用于另一个 uid 时，上一页的排行不能留在这里
       this.weekTracksData = []
       this.allTracksData = []
       this.recordErr = false
-      const p2 = isSelf
-        ? Promise.all([
-            this.getRecentTracks(uid), this.getRecentTracks(uid, 0)
-          ]).then(([week, all]) => {
-            // type=1 只回 weekData、type=0 只回 allData，字段缺失按空数组处理
-            this.handleThisTracksData(week.data && week.data.weekData, this.weekTracksData)
-            this.handleThisTracksData(all.data && all.data.allData, this.allTracksData)
-            this.recordErr = false
-          }).catch(() => {
-            this.weekTracksData = []
-            this.allTracksData = []
-            this.recordErr = true
-          })
-        : Promise.resolve()
-      const p3 = isSelf
-        ? User.getCloud().then(res => {
-            const list = res.data.data || []
-            list.forEach(val => {
-              const song = val.simpleSong || {}
-              song.fileSize = val.fileSize
-              /**
-               * 云盘里是自己上传的文件：网易云不给关联歌手，ar 可能为空、
-               * 可能只有 {id: 0, name}、甚至 name 为 null（只在最外层给个 artist 文本）。
-               * 这里统一补成 [{id, name}]，先保证「点得动」——
-               * id 缺失/为 0 时由 App 按名字反查（utils/artistLink.js）。
-               */
-              if (!Array.isArray(song.ar)) song.ar = []
-              if (!song.ar.some(a => a && a.name) && val.artist) {
-                const firstId = (song.ar[0] && Number(song.ar[0].id)) || 0
-                song.ar = [{ id: firstId, name: val.artist }]
-              }
-              this.cloudTracks.push(song)
-            })
-          }).catch(() => { this.cloudTracks = []; this.partialLoadError = true })
-        : Promise.resolve()
-      const p4 = isSelf
-        ? Promise.all([User.subArtistList(), User.subAlbumList(), User.subMvList()])
-            .then(([artists, albums, mvs]) => {
-              this.favors.artists = artists.data.data; this.favors.albums = albums.data.data; this.favors.vids = mvs.data.data
-            })
-            .catch(() => { this.favors = { vids: [], artists: [], albums: [] }; this.partialLoadError = true })
-        : Promise.resolve()
+      if (!isSelf) return Promise.resolve()
+      this.rankLoading = true
+      return this.getRecentTracks(uid, 1).then(res => {
+        this.handleThisTracksData(res.data && res.data.weekData, this.weekTracksData)
+        // 最近一周没记录但历史有：tab 栏只在有数据时渲染，这里补拉一次「所有时间」，
+        // 否则这个用户会看不到 tab、也就永远看不到自己的历史排行（懒加载带来的边界）
+        if (!this.weekTracksData.length) this.loadAllRank()
+      }).catch(() => {
+        this.recordErr = true
+      }).finally(() => {
+        this.rankLoading = false
+      })
+    },
+    /** 「所有时间」榜：首次切到该 tab 才请求（原来和最近一周一起并发，白拉 100 首） */
+    loadAllRank() {
+      if (this.allTracksData.length || this.allLoading || !this.isSelf) return Promise.resolve()
+      this.allLoading = true
+      return this.getRecentTracks(this.uid, 0).then(res => {
+        this.handleThisTracksData(res.data && res.data.allData, this.allTracksData)
+        this.recordErr = false
+      }).catch(() => {
+        this.recordErr = true
+      }).finally(() => {
+        this.allLoading = false
+      })
+    },
+    onRankTabClick(tab) {
+      if (tab && tab.name === 'all') this.loadAllRank()
+    },
+    loadCloud() {
+      if (!this.isSelf) return Promise.resolve()
+      this.cloudLoading = true
+      return User.getCloud(CLOUD_PAGE_SIZE).then(res => {
+        const body = (res && res.data) || {}
+        const list = body.data || []
+        this.cloudTotal = body.count != null ? Number(body.count) : list.length
+        this.cloudTruncated = list.length < this.cloudTotal
+        list.forEach(val => {
+          const song = val.simpleSong || {}
+          song.fileSize = val.fileSize
+          /**
+           * 云盘里是自己上传的文件：网易云不给关联歌手，ar 可能为空、
+           * 可能只有 {id: 0, name}、甚至 name 为 null（只在最外层给个 artist 文本）。
+           * 这里统一补成 [{id, name}]，先保证「点得动」——
+           * id 缺失/为 0 时由 App 按名字反查（utils/artistLink.js）。
+           */
+          if (!Array.isArray(song.ar)) song.ar = []
+          if (!song.ar.some(a => a && a.name) && val.artist) {
+            const firstId = (song.ar[0] && Number(song.ar[0].id)) || 0
+            song.ar = [{ id: firstId, name: val.artist }]
+          }
+          this.cloudTracks.push(song)
+        })
+      }).catch(() => {
+        this.cloudTracks = []
+        this.partialLoadError = true
+      }).finally(() => {
+        this.cloudLoading = false
+        this.cloudLoaded = true
+      })
+    },
+    /** 收藏的专辑/歌手/MV：三个 tab 都不是默认项，切到任一个时才一次取回 */
+    onFavorsTabClick(tab) {
+      const name = tab && tab.name
+      if (name === 'cloud') {
+        if (!this.cloudLoaded && !this.cloudLoading) this.loadCloud()
+        return
+      }
+      this.ensureFavorsSub()
+    },
+    ensureFavorsSub() {
+      if (!this.isSelf || this.favorsLoaded || this.favorsSubLoading) return Promise.resolve()
+      this.favorsLoaded = true
+      this.favorsSubLoading = true
+      return Promise.all([User.subArtistList(), User.subAlbumList(), User.subMvList()])
+        .then(([artists, albums, mvs]) => {
+          this.favors = { artists: artists.data.data, albums: albums.data.data, vids: mvs.data.data }
+        })
+        .catch(() => {
+          // 失败允许下次切 tab 重试
+          this.favorsLoaded = false
+          this.partialLoadError = true
+        })
+        .finally(() => {
+          this.favorsSubLoading = false
+        })
+    },
+    loadSubcount() {
       // 收藏计数只有本人能取（接口不带 uid，取的是当前登录态）
-      const p6 = isSelf
-        ? User.subcount().then(res => { this.subcount = res.data || {} }).catch(() => { this.subcount = {} })
-        : Promise.resolve()
-      // 关注列表先取第一页（默认 tab）：本人走混排接口（带分类），他人走 /user/follows
-      const p7 = this.useMixedFollow ? this.loadMixed() : this.loadSocial('follows')
-      const results = await Promise.allSettled([this.getUserInfo(uid), p1, p2, p3, p4, p5, p6, p7])
-      this.pageError = results[0].status === 'rejected' || !this.userInfo.profile
-      this.partialLoadError = this.partialLoadError || results.slice(1).some(result => result.status === 'rejected')
-      this.pageLoading = false
+      if (!this.isSelf) return Promise.resolve()
+      return User.subcount().then(res => {
+        this.subcount = res.data || {}
+      }).catch(() => { this.subcount = {} })
+    },
+    /**
+     * 「上次登录」只读本地 profile：
+     * /login/status 的 profile 在 UserPage 里已经写进 store + localStorage（initProfileInfo），
+     * 这里为了同样的两个字段再请求一次纯属重复。只有老会话（没有这份 profile）才补一次网络请求。
+     * IP → 城市同样是异步补，且 getIpLocation 内部有 sessionStorage 缓存 + 并发去重。
+     */
+    loadLastLogin() {
+      if (!this.isSelf) return Promise.resolve()
+      const apply = (pf) => {
+        if (!pf || !pf.lastLoginIP) return false
+        this.lastLoginInfo.IP = pf.lastLoginIP
+        this.lastLoginInfo.time = pf.lastLoginTime
+        getIpLocation(pf.lastLoginIP).then(loc => { this.lastLoginInfo.location = loc })
+        return true
+      }
+      if (apply(this.loginInfo)) return Promise.resolve()
+      return authApi.loginStatus().then(res => {
+        const pf = res.data && res.data.data && res.data.data.profile
+        apply(pf)
+      }).catch(() => {})
+    },
+    /** 关注列表首屏：本人走混排接口（带分类），他人走 /user/follows */
+    loadSocialFirst(isSelf) {
+      return isSelf ? this.loadMixed() : this.loadSocial('follows')
     }
+  },
+  watch: {
+    /**
+     * 组件不会因为 uid 变化而重建（同一路由只改 prop），换个人看主页时要重跑。
+     * 用字符串比较：缓存里拿到的 uid 是 string，接口回的是 number，同一个人不该触发重载。
+     */
+    uid(next, prev) {
+      if (next && String(next) !== String(prev)) this.loadPage()
+    },
+    // 切分类、歌单数据重载 → 渲染窗口收回第一批（否则窗口停留在上一份列表的长度上）
+    plFilter() { this.resetPlaylistWindow() },
+    filteredPlaylists() { this.resetPlaylistWindow() }
   },
   mounted() {
     // 登录态在这里取一次：cookie 是同步可读的，且这个组件每次进详情页都会重新挂载
@@ -840,8 +1034,10 @@ export default {
   margin-bottom: 28px;
   border-radius: 24px;
   background: var(--c-glass);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
+  // 毛玻璃保留，半径 30px → 20px：hero 是全页视觉锚点，值得这一份开销；
+  // 半径越小，每帧要采样的背景范围越小（滚动时差异最明显）
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--c-border-strong);
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
   overflow: hidden;
@@ -1451,8 +1647,10 @@ $tag-bg: var(--c-bg-elevated);
   padding: 28px 32px;
   border-radius: 24px;
   background: var(--c-glass);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
+  // 四张卡片并排在同一屏里，30px 的背滤在滚动时每帧都要重算一遍整块背景。
+  // 收到 12px：视觉上仍是磨砂玻璃，但采样半径小了一半多，滚动和切 tab 明显更跟手
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--c-border-strong);
   box-shadow: 0 12px 40px rgba(0,0,0,.06);
 }
@@ -1473,9 +1671,26 @@ $tag-bg: var(--c-bg-elevated);
 .skel-card-img { aspect-ratio: 1; background: var(--c-bg-sunken); }
 .skel-card-line { height: 12px; border-radius: 6px; margin: 10px 8px; width: 70%; background: var(--c-bg-sunken); }
 
+/* 分区骨架：hero 一到就撤掉整页骨架，剩下的区块各自用它占位，互不等待 */
+.sec-skel { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.sec-skel i { display: block; height: 44px; border-radius: 10px; background: var(--c-bg-sunken); }
+.sec-skel--rows i { height: 56px; }
+
+.cloudMore { margin-left: 6px; font-style: normal; opacity: .7; }
+.plMoreHint { margin: 10px 0 0; font-size: 12px; color: $font-black-2; }
+.plScrollHint {
+  margin: 10px 0 2px;
+  text-align: center;
+  font-size: 12px;
+  color: $font-black-2;
+}
+
 /* transitions */
-.detail-fade-enter-active, .detail-fade-leave-active { transition: opacity .35s ease, transform .35s ease; }
-.detail-fade-enter, .detail-fade-leave-to { opacity: 0; transform: translateY(16px); }
+/* 骨架 → 内容的切换：只淡入、180ms。
+   整棵内容子树里有 5 块 backdrop-filter，原来 350ms 的「淡入 + 位移」会让它们每帧重算一次背滤，
+   观感就是「内容已经出来了，却还在发飘」；去掉位移也就不必再逐帧重栅格化 */
+.detail-fade-enter-active, .detail-fade-leave-active { transition: opacity .18s ease; }
+.detail-fade-enter, .detail-fade-leave-to { opacity: 0; }
 /* 社交主 Tab 与下方内容分层，避免两排细小胶囊挤在左角。 */
 .ud-sec ::v-deep .social-tabs > .el-tabs__header {
   padding-bottom: $sp-3; margin-bottom: $sp-4; border-bottom: 1px solid var(--c-border);

@@ -35,6 +35,78 @@
 
 ## 历史记录
 
+### 2026-11-16 — PERF-user-page 第二轮：毛玻璃调参 + 歌单区窗口化渲染
+
+### 修改内容
+
+- **保留毛玻璃，改采样半径**：`.user-hero` 30px → 20px，`.ud-card` 30px → 12px。四张卡片同屏，30px 背滤在滚动时每帧都要重采样整块背景，半径减半后视觉仍是磨砂玻璃，代价小一截
+- **入场过渡收窄**：`.detail-fade` 从「350ms 淡入 + 16px 位移」改成「180ms 只淡入」。整棵内容子树里有 5 块 `backdrop-filter`，位移会让它们逐帧重新栅格化
+- **歌单区窗口化渲染**：新增 `visiblePlaylists` / `plRenderCount`，首批只渲染 36 行，滚动到距底 240px 时追加一批（`@scroll.passive` + `requestAnimationFrame` 让出一帧再 patch）。切分类、数据重载、重试都会把窗口收回第一批
+- 「新建 / 导入歌单」那一行改为**只在全部渲染完时**出现，避免它插在窗口中间；区块标题右侧本来就有「导入外部歌单」按钮，功能没丢
+- 滚动容器底部在还有剩余时显示「继续滚动加载剩余 N 个」
+
+### 修改文件
+
+- `src/components/layout/UserDetailLayout.vue`
+
+### 修改原因
+
+上一轮把「等多久看见内容」压下去了，但内容出现后的渲染成本没动：5 块 30px 背滤 + 350ms 位移过渡，在中低端设备上滚动和切 tab 仍然发涩；歌单区把 500 行一次性塞进 DOM，切分类时要在上千个节点上 patch。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（样式产物 `css/311.*.css` 里 `blur(12px)`×2 + `blur(20px)`×2 + `transition:opacity .18s`，`page-user` chunk 9.22 KiB / 3.56 KiB gzip 不变）
+- `yarn serve` ✅（HMR 三次编译均 400-450ms 通过）
+- 浏览器手动核查：❌ 未做（需登录态）。核查点：滚动歌单区时 `document.querySelectorAll('.plRow').length` 应从 36 起按批增长；切「创建 / 收藏」后回到 36；列表不足 36 时「新建 / 导入歌单」照常出现在末尾
+
+### 注意事项
+
+- 窗口化是「按数量追加」，不是真正的虚拟滚动：真虚拟滚动要固定行高 + 绝对定位占位，会破坏现有 `auto-fill minmax(280px,1fr)` 的自适应列数，收益与风险不划算
+- `PLAYLIST_BATCH = 36` 是「一屏（420px）的 5 倍左右」，可按实际手感调小；调太小会让追加过于频繁，调太大则首批 DOM 变重
+- 若以后给歌单区加搜索/排序，记得同步 `resetPlaylistWindow()`
+
+### 2026-11-16 — PERF-user-page 个人主页首屏：拆骨架 / 去串行 / 按需取数
+
+### 修改内容
+
+- **全页骨架改成 hero 骨架**：`pageLoading` 原来由 `Promise.allSettled` 的 8 个 promise（内含 12 个请求）决定，最慢的一个才放开整页；现在只有 `/user/detail`（实测 121ms）阻塞首屏，其余分区各自 `xxxLoading` + 分区骨架，谁先回来谁先渲染
+- **uid 本地优先**：`/me` 先读 `localStorage.user-profile.userId` 立即挂载主页，`/login/status` 降级为后台校验；此前必须等它回来才知道 uid，是一段纯串行（实测 TTFB 约 230-290ms）
+- **去掉重复请求**：`/login/status` 由 2 次降到 1 次（「上次登录」直接读 UserPage 已写入 store/localStorage 的 profile）；`/api/ip-location` 加 `sessionStorage` 缓存 + 同 IP 并发去重
+- **按需取数**：听歌排行先只取 `type=1`，「所有时间」首次点 tab 才请求；云盘 `limit` 200 → 100（用接口 `count` 显示总数）；收藏的专辑/歌手/MV 三个接口挪到 tab 首次点击；歌单 `limit` 2000 → 500，超出用 `more` 提示
+- **hero 图片**：头像与模糊底图改用 `imgParam` 缩略（200y200 / 40y40），不再拿原图既当 `<img>` 又当 CSS 背景，`coverLight` 也改用 40y40 那张采样
+- 顺带修掉「整页刷新 `/me` 内容区空白」：`IS_LOGIN` 初值为 false，`beforeMount` 里 `if (this.isLogin)` 必然跳过 → 永远拿不到 uid；改为用 cookie（`isLoggedIn()`）判断，`isLogin` 计算属性也补上 cookie 兜底，避免先闪一下登录表单；再给「登录态成立但 uid 未到」的窗口加一块轻量占位
+
+### 修改文件
+
+- `src/pages/UserPage.vue`
+- `src/components/layout/UserDetailLayout.vue`
+- `src/utils/ipLocation.js`
+
+### 修改原因
+
+线上实测（curl，非登录态）给出的耗时分布：`/user/detail` 121ms、`/user/playlist` 174ms（某账号原始 604KB / gzip 159KB）、`/user/follows` 293ms、`/user/subcount` 227ms、`/vip/info/v2` 241ms、`/api/ip-location` **冷查 912ms**（热 104ms）。这些请求被 `allSettled` 绑成一个整体，等于让「44 字节的城市名」和「200 条云盘」决定整页什么时候出现；叠加首屏 367KB gzip 的 JS（Element UI 全量引入）与 hero 原图，主观感受就是「点开个人页要等一会儿」。
+
+拆开后：阻塞首屏的请求从 12 个降到 1 个，首次进页的接口数从 15 个降到 7 个（detail / playlist / record×1 / follows / cloud / subcount / ip-location），最大单笔响应从 604KB 降到一页上限。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`page-user` chunk 9.20 → 9.22 KiB，gzip 3.56 KiB；`app` 65.01 KiB gzip，与改前同量级）
+- 浏览器手动核查：❌ 未做（本轮无法登录，且本机无可用的 headless 实例）。建议人工过一遍：
+  - `/me` 硬刷新：hero 应明显早于下方分区出现；内容区不应空白；登录表单不应闪现
+  - 听歌排行「所有时间」首次点击才发请求；最近一周为空时应自动补拉
+  - 云盘「共 N 个文件（仅显示最近 100 个）」文案；切到专辑/歌手/视频 tab 才发那三个收藏接口
+  - 歌单超过 500 个时的「仅加载了前 500 个」提示
+  - `/user?uid=<他人>`：不请求云盘/排行/收藏计数，「未公开」文案不变
+
+### 注意事项
+
+- `PLAYLIST_PAGE_SIZE` / `CLOUD_PAGE_SIZE` 是「一页上限」而非固定条数，绝大多数账号的响应体积不变；只有歌单/云盘特别多的账号会看到截断提示
+- `/user/cloud` 的 `count` / `more` 字段缺失时会退回「已取条数」，此时截断提示不会出现（不会误报）
+- `loadPage` 不再 `await` 分区请求，`partialLoadError` 横幅可能晚于 hero 一两百毫秒才出现，属预期
+- 回滚：三处改动相互独立，可按文件回退；`UserDetailLayout.vue` 的 `loadPage` / `resetSections` / `load*` 是一组，需整体回退
+
 ### 2026-11-12 — FIX-video-sidebar-height 相关推荐侧栏与 video-main 严格等高
 
 ### 修改内容

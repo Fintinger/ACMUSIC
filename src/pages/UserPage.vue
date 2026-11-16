@@ -2,6 +2,13 @@
   <div class="user-page">
     <template v-if="isLogin">
       <UserDetailLayout v-if="uid" ref="userDetail" :uid="uid"/>
+      <!-- 登录态成立但 uid 还没到位（老会话本地没有 profile，要等 /login/status 那 200-300ms）：
+           给一块轻量占位，别让内容区空着 -->
+      <div v-else class="user-page-skel">
+        <div class="ups-hero"></div>
+        <div class="ups-card"></div>
+        <div class="ups-card"></div>
+      </div>
     </template>
 
     <div v-else class="login-wrap">
@@ -36,6 +43,7 @@ import qrcodeLogin from "@/components/userPage/qrcodeLogin";
 import UserDetailLayout from "@/components/layout/UserDetailLayout";
 import { formatMs } from "@/utils/filters";
 import { getIpLocation } from "@/utils/ipLocation";
+import { getLogin, isLoggedIn } from "@/utils/auth";
 import Cookies from "js-cookie"
 import * as authApi from "@/api/auth";
 
@@ -58,7 +66,12 @@ export default {
   components: {phoneLogin, qrcodeLogin, UserDetailLayout},
   computed: {
     isLogin() {
-      return this.$store.state.UserAbout.IS_LOGIN
+      /**
+       * store 的 IS_LOGIN 要等启动期异步流程（refreshLogin / getLoginStatus）才置 true，
+       * 只读它会让「已登录用户整页刷新 /me」先闪一下登录表单再切到主页。
+       * cookie 是同步可读的，两者取或：既立刻正确，又保留 store 的响应性（登录/登出后会重算）。
+       */
+      return this.$store.state.UserAbout.IS_LOGIN || isLoggedIn()
     },
     loginTimeText() {
       return this.lastLoginInfo.time ? formatMs(this.lastLoginInfo.time, 'YYYY年MM月DD日 HH:mm') : ''
@@ -134,8 +147,24 @@ export default {
       })
     }
   },
+  created() {
+    /**
+     * uid 本地优先：localStorage 里的 user-profile 已经有 userId，
+     * 没必要为了拿它先等一次 /login/status 再挂载主页（那是 200-300ms 的纯串行等待）。
+     * 这里只用于「先把主页壳挂起来」，登录态是否有效仍由 getLoginStatus() 校验。
+     */
+    if (!isLoggedIn()) return
+    const cached = getLogin() || {}
+    if (cached.userId) this.uid = String(cached.userId)
+  },
   beforeMount() {
-    if (this.isLogin) {
+    /**
+     * 判据从 store 的 IS_LOGIN 换成 cookie（isLoggedIn）。
+     * 原来写 `if (this.isLogin)`：IS_LOGIN 初值是 false，只有 setLogin 才会置 true，
+     * 所以整页硬刷新 /me 时这里必然跳过 → uid 永远是空 → 内容区空白。
+     * cookie 是同步可读的，不依赖任何启动期异步流程。
+     */
+    if (isLoggedIn()) {
       this.getLoginStatus()
     }
   },
@@ -190,6 +219,12 @@ export default {
   }
 
   .login-tabs { margin-bottom: 28px; }
+}
+
+/* 等 uid 期间的轻量占位（尺寸与真实 hero / 卡片接近，避免出现再塌陷） */
+.user-page-skel {
+  .ups-hero { height: 208px; border-radius: 24px; background: var(--c-bg-sunken); margin-bottom: 28px; }
+  .ups-card { height: 240px; border-radius: 24px; background: var(--c-bg-sunken); margin-bottom: 28px; }
 }
 
 .glass-panel {
