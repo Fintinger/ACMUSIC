@@ -782,6 +782,26 @@ export default {
     onPlaylistDeleted() {
       if (this.isSelf) this.reloadPlaylists()
     },
+    /**
+     * 别处收藏 / 取消收藏了歌单：本人主页的「收藏」分组和「收藏歌单」计数都要跟着变。
+     * 只重拉歌单区 + 计数，不动排行榜/云盘（与 onPlaylistDeleted 同一思路）。
+     */
+    onPlaylistSubscribed() {
+      if (!this.isSelf) return
+      this.reloadPlaylists()
+      this.loadSubcount()
+    },
+    /**
+     * 别处往某张歌单里加了歌：本页歌单卡上的曲目数是缓存值，就地加上即可，
+     * 不必为了一个数字把整个歌单区重拉一遍。
+     */
+    onPlaylistTracksAdded(payload) {
+      const id = payload && payload.id
+      const count = Number(payload && payload.count) || 0
+      if (!id || count <= 0) return
+      const target = this.createList.concat(this.subList).find(p => String(p.id) === String(id))
+      if (target) target.trackCount = (Number(target.trackCount) || 0) + count
+    },
     handleThisTracksData(tracks, target) {
       // 上游偶有缺 song 的空壳条目，直接跳过，别让一条脏数据把整个排行榜打空
       (tracks || []).forEach(l => {
@@ -1011,9 +1031,14 @@ export default {
     })
     // 歌单详情页删歌单后广播：本页被 keep-alive 缓存，返回时不会重新 mounted，只能靠事件刷新
     this.$bus.$on('playlistDeleted', this.onPlaylistDeleted)
+    // 收藏歌单 / 歌单加歌：同样来自详情页与全局弹窗，本页缓存需要跟着更新
+    this.$bus.$on('playlistSubscribed', this.onPlaylistSubscribed)
+    this.$bus.$on('playlistTracksAdded', this.onPlaylistTracksAdded)
   },
   beforeDestroy() {
     this.$bus.$off('playlistDeleted', this.onPlaylistDeleted)
+    this.$bus.$off('playlistSubscribed', this.onPlaylistSubscribed)
+    this.$bus.$off('playlistTracksAdded', this.onPlaylistTracksAdded)
   }
 }
 </script>

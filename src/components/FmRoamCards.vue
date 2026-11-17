@@ -15,7 +15,7 @@
             v-for="c in cards"
             :key="c.key"
             class="roam-card"
-            :class="{ active: isSelected(c) }"
+            :class="{ active: isPlaying(c) }"
             @click="pick(c)"
         >
           <div class="card-media" :style="{ background: c.grad }">
@@ -247,6 +247,9 @@ export default {
      * 必须排掉心动模式——两套内容来源互斥，心动接管后 FM 已经不在队列里了，
      * 漫游卡再亮就是"两个都在播"。之前这里只看 fmMode，于是出现
      * 「私人漫游 播放中」和「心动模式 播放中」同屏的 BUG。
+     *
+     * 注意：这里只管"模式选的是哪张"，不判断 FM 是否在放 —— 高亮（紫色描边）
+     * 走的是下面的 isPlaying，见那里的说明。
      */
     isSelected(c) {
       if (this.heartMode) return false
@@ -256,8 +259,11 @@ export default {
     },
     /**
      * 播放中 = 选中 + FM 真的在放。
-     * 分两层是因为 fmMode 会被持久化：用户选了「运动」之后去听普通歌单，
-     * 卡片可以保留"选中"提示，但不该声称自己在放歌。
+     *
+     * 这一条同时决定卡片的紫色描边和「播放中」角标：fmMode 是持久化偏好，
+     * 用户切到普通歌单后 FM 已经停了，边框不该继续亮着（用户反馈：
+     * 停掉之后"播放中"没了、紫框还在，像是还在播）。所以高亮 = isPlaying，
+     * 而不是 isSelected。
      */
     isPlaying(c) {
       return this.fmActive && this.isSelected(c)

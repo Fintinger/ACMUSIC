@@ -24,7 +24,21 @@
             </el-row>
             <div class="detail-play-actions">
               <button type="button" class="detail-play-all" :disabled="initialLoading || !songs.length" @click="$refs.songTracks.playAllTracks(songs)"><BaseIcon name="play"/> 播放全部</button>
-              <button type="button" class="detail-queue-all" :disabled="!songs.length" @click="$refs.songTracks.pushAllTracks(songs)"><BaseIcon name="listPlus"/> 加入列表</button>
+              <button type="button" class="detail-queue-all" :disabled="!songs.length" @click="$refs.songTracks.pushAllToQueue()"><BaseIcon name="listPlus"/> 加入列表</button>
+              <!-- 收藏：自己的歌单 / 系统歌单（我喜欢的音乐、榜单）不显示，服务端本来也不允许 -->
+              <button
+                  v-if="canSubscribe"
+                  type="button"
+                  class="detail-subscribe"
+                  :class="{ 'is-on': isSubscribed }"
+                  :disabled="subPending"
+                  :title="isSubscribed ? '取消收藏这个歌单' : '收藏这个歌单'"
+                  @click="toggleSubscribe"
+              >
+                <BaseIcon :name="isSubscribed ? 'starFill' : 'star'" :size="16"/>
+                {{ isSubscribed ? '已收藏' : '收藏' }}
+                <span v-if="listInfo.subscribedCount != null" class="subCount">{{ listInfo.subscribedCount | Div1w(listInfo.subscribedCount) }}</span>
+              </button>
             </div>
             <!-- 只有歌单创建者能编辑：订阅来的歌单改不了 -->
             <el-row v-if="isOwner" class="ownerActions">
@@ -106,6 +120,8 @@ import TrackListSkeleton from "@/components/Skeleton/TrackListSkeleton";
 import scoText from "@/components/scoText";
 import CoverImage from "@/components/common/CoverImage";
 import * as playlistApi from "@/api/Playlist";
+import { isLoggedIn } from "@/utils/auth";
+import { parseWriteResult } from "@/utils/writeResult";
 
 export default {
   name: "listDetail",
@@ -137,6 +153,8 @@ export default {
       saving: false,
       // 删除歌单单独一个 loading：删除成功会跳走，不能和 saving 混用
       deleting: false,
+      // 收藏/取消收藏的并发锁：连点会一收一取，最后状态取决于谁后回来
+      subPending: false,
       editForm: { name: '', desc: '' },
     }
   },
@@ -178,6 +196,20 @@ export default {
     allLoaded() {
       const total = this.listInfo && this.listInfo.trackCount
       return total != null && Number.isFinite(Number(total)) && Number(total) >= 0 && !this.infoError && this.songs.length >= Number(total)
+    },
+    /** 是否已收藏（/playlist/detail 在登录态下返回 subscribed） */
+    isSubscribed() {
+      return !!(this.listInfo && this.listInfo.subscribed)
+    },
+    /**
+     * 收藏按钮是否出现。
+     *  - 自己的歌单：服务端不允许收藏自己的歌单；
+     *  - specialType 非 0：系统歌单。实测 5=我喜欢的音乐、10=榜单，
+     *    这两类都订阅不了，显示出来只会让用户点了报错。
+     */
+    canSubscribe() {
+      const st = Number(this.listInfo && this.listInfo.specialType) || 0
+      return !!this.listInfo.id && !this.isOwner && st === 0
     }
   },
   methods: {
@@ -234,17 +266,49 @@ export default {
     uClk(uid) {
       this.$bus.$emit('uClk', uid)
     },
+    // ---------- 收藏歌单 ----------
+    /**
+     * 收藏 / 取消收藏。
+     * 乐观更新 + 失败回滚：写接口是 GET 往返，点了不立刻变样会让人以为没点上；
+     * 但 `subscribed` 以服务端为准，失败必须整块退回去（包括收藏数）。
+     */
+    toggleSubscribe() {
+      if (this.subPending) return
+      const id = this.id || this.listInfo.id
+      if (!id) return
+      if (!isLoggedIn()) {
+        this.$toast.warning('收藏歌单需要先登录')
+        return
+      }
+      const next = !this.isSubscribed
+      const before = Number(this.listInfo.subscribedCount) || 0
+      this.subPending = true
+      // $set：游客访问时 subscribed 可能压根不在响应里，直接赋值不会触发视图更新
+      this.$set(this.listInfo, 'subscribed', next)
+      this.$set(this.listInfo, 'subscribedCount', Math.max(0, before + (next ? 1 : -1)))
+      playlistApi.subscribe(next ? 1 : 2, id)
+        .then(res => {
+          const r = parseWriteResult(res, next ? '收藏失败' : '取消收藏失败')
+          if (!r.ok) throw new Error(r.message)
+          this.$toast.success(next ? '已收藏歌单' : '已取消收藏')
+          // 「我的」页的收藏分组 + 收藏计数都是 keep-alive 的，不广播就不会更新
+          this.$bus.$emit('playlistSubscribed', { id, subscribed: next })
+        })
+        .catch(e => {
+          this.listInfo.subscribed = !next
+          this.listInfo.subscribedCount = before
+          this.$toast.error((next ? '收藏失败：' : '取消收藏失败：') + (e.message || '请稍后重试'))
+        })
+        .finally(() => { this.subPending = false })
+    },
     // ---------- 歌单管理（仅创建者入口）----------
     /**
-     * 统一解析写接口结果：上游写接口有 {code:200} 和 {status:200} 两种形态，
-     * 没有 code/status 字段时按 HTTP 成功处理，避免把成功误判成失败。
+     * 统一解析写接口结果（实现见 utils/writeResult.js）。
+     * 上游有 {code:200} / {status:200} / {status:200, body:{code:400}} 三种形态，
+     * 只看前两层会把第三种判成成功。
      */
     _writeResult(res, fallback) {
-      const d = (res && res.data) || {}
-      const code = d.code !== undefined ? d.code : d.status
-      if (code === undefined || code === null || Number(code) === 200) return {ok: true}
-      const msg = d.message || d.msg || (d.data && d.data.message) || fallback
-      return {ok: false, message: msg}
+      return parseWriteResult(res, fallback)
     },
     openEdit() {
       this.editForm.name = this.listInfo.name || ''
@@ -368,9 +432,25 @@ export default {
       } finally {
         this.saving = false
       }
+    },
+    /**
+     * 全局「加入歌单」弹窗写完之后的通知：加的正好是当前这张歌单就整体重载。
+     * 不做局部 append —— 队列里的歌可能是刷新恢复出来的 lite 结构（没有专辑/封面），
+     * 直接塞进列表会是一行残缺数据。
+     */
+    onTracksAdded(payload) {
+      if (!payload || String(payload.id) !== String(this.id)) return
+      this.initialize()
     }
   },
-  beforeDestroy() { this.requestVersion++ },
+  mounted() {
+    // 本页被 keep-alive 缓存，返回时不会重新 mounted；目标歌单被改只能靠事件通知
+    this.$bus.$on('playlistTracksAdded', this.onTracksAdded)
+  },
+  beforeDestroy() {
+    this.requestVersion++
+    this.$bus.$off('playlistTracksAdded', this.onTracksAdded)
+  },
   activated() { this.initialize() }
 }
 </script>
@@ -478,6 +558,25 @@ export default {
   button { display: inline-flex; align-items: center; gap: $sp-2; border-radius: $radius-pill; padding: $sp-3 $sp-5; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--c-border-strong); }
   .detail-play-all { background: var(--c-button-primary); border-color: var(--c-button-primary); color: var(--c-text-on-accent); }
   .detail-queue-all { background: var(--c-bg-sunken); color: var(--c-text-primary); }
+  // 收藏：常态是描边按钮，已收藏时整颗变主题色（与红心同一套语义）
+  .detail-subscribe {
+    background: transparent;
+    color: var(--c-text-secondary);
+
+    &.is-on {
+      border-color: var(--c-accent);
+      color: var(--c-accent);
+    }
+
+    .subCount {
+      font-size: .72rem;
+      font-weight: 500;
+      color: var(--c-text-tertiary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    &.is-on .subCount { color: inherit; opacity: .8; }
+  }
   button:disabled { opacity: .5; cursor: default; }
 }
 </style>

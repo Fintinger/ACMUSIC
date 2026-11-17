@@ -302,9 +302,10 @@ normalizeTrack(t) {
 **问题**：如何统一图标？
 
 **最终方案**：BaseIcon 组件 + 单一 config 注册表：
-- `type: 'font'` — 使用字体图标 class
-- `type: 'svg'` — 内联 SVG path
+- `type: 'svg'` — 内联 SVG path（**现在只剩这一种**）
 - `type: 'fallback'` — BaseIcon 自动降级到占位灰块
+
+**2026-11 补充**：`type: 'font'` 与 `src/assets/ac-font/`（iconfont.cn 导出的 10 字形字体 + 其 css/js/json）已删除。注册表里早就是 0 条字体条目，`iconfont.css` 只是在 `App.vue` 里被 import 却渲染不出任何图标，属纯死代码。现在 BaseIcon 只认 `icon.path`，`type` 字段保留仅作说明。
 
 **影响范围**：所有页面 / 组件。
 

@@ -30,7 +30,7 @@ No test runner exists.
 - `js-cookie` + `localStorage` for login persistence
 - 9 search result sub-views share `searchMixin` in `src/mixins/searchMixin.js`
 - Reusable layout components in `src/components/layout/` (emit events via $bus)
-- Icons: `BaseIcon` + `src/config/icon.js` (font classes + inline SVG paths); font files in `src/assets/ac-font/` (`iconfont.css` is the one actually imported — `iconfont.js` is unreferenced)
+- Icons: `BaseIcon` + `src/config/icon.js` — **all inline SVG** (24×24 grid, 1.8px round stroke; state glyphs are filled). The old iconfont bundle (`src/assets/ac-font/`) was deleted in 2026-11; `type: 'font'` entries and font classes are gone, don't reintroduce them
 
 ## API
 

@@ -205,9 +205,9 @@ export default {
     playCard(item, evt) {
       // 阻止冒泡到外层 wrapper 的 playPersonalFM
       if (evt) evt.stopPropagation()
-      // dispatch 先：playAllTracks 内部会重置 isPersonalFM = false
-      this.$store.dispatch('TracksAbout/playAllTracks', [item])
-      // 重新设回 true，保持 FM 模式（isPersonalFM 已下沉到 PlayerCore，通过 $bus 通知）
+      // keepStream：这批歌就是 FM 自己的流，换队不能把 FM 模式退掉（见 playAllTracks）
+      this.$store.dispatch('TracksAbout/playAllTracks', { list: [item], keepStream: true })
+      // 兜底再声明一次来源（点卡片时 FM 可能是关着的，这里负责打开）
       this.$bus.$emit('fm-mode', true)
       const idx = this.currentList.findIndex(s => s.id === item.id)
       if (idx >= 0) this.activeIndex = idx
@@ -236,7 +236,7 @@ export default {
     },
     playAllFM() {
       if (!this.currentList.length) return
-      this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
+      this.$store.dispatch('TracksAbout/playAllTracks', { list: this.currentList, keepStream: true })
       // FM 模式标志（已下沉到 PlayerCore，通过 $bus 通知）
       this.$bus.$emit('fm-mode', true)
     },
@@ -260,7 +260,7 @@ export default {
           this.$toast.warning('这个模式暂时没拉到内容，已保持原样')
           return
         }
-        this.$store.dispatch('TracksAbout/playAllTracks', batch)
+        this.$store.dispatch('TracksAbout/playAllTracks', { list: batch, keepStream: true })
         this.$bus.$emit('fm-mode', true)
         this._applyBatch(batch)
       })
@@ -279,6 +279,13 @@ export default {
         // 若 reactive 期间正在在等待，则 fetch 完成后立即应用
         if (this.fmPendingApply) {
           this.fmPendingApply = false
+          /**
+           * 迟到的批次（60 秒重试 / 慢请求）不能无条件应用：这期间用户可能已经
+           * 换到别的歌单（FM 被关掉），此时 REPLACE 会把人家刚换上的队列顶掉。
+           * fmActive 是 PlayerCore 单向镜像过来的"FM 真的在放"，用它兜住；
+           * 真被关掉的话批次留在 fmStagedBatch 里，下次进 FM 还能直接用。
+           */
+          if (!this.$store.state.TracksAbout.fmActive) return
           this._applyBatch(batch)
         }
       })
@@ -301,7 +308,15 @@ export default {
         return
       }
       this._doFetch().then(batch => {
-        if (batch) this._applyBatch(batch)
+        if (batch) { this._applyBatch(batch); return }
+        /**
+         * 这一轮没拿到新歌（多半是撞上同一个 2 分钟时间窗，全被 excludeIds 过滤了）。
+         * 以前这里是静默 return —— 听感上就是"播到最后一首就没声了，也不取新歌"。
+         * 现在：① 打一条提示；② 置 fmPendingApply，让 _doFetch 里安排的 60 秒重试
+         * 拿到新批后自动接上（否则那批只会躺在 fmStagedBatch 里，用户还得再点一次下一首）。
+         */
+        this.fmPendingApply = true
+        this.$toast.warning('私人 FM 暂时没有新歌，稍后会自动接上')
       })
     },
     /**
@@ -321,7 +336,12 @@ export default {
       const opts = currentFmFetchOptions(this.$store.state.TracksAbout)
       return fetchFmBatch(3, 4, excludeIds, opts)
         .then(songs => {
-          if (!Array.isArray(songs) || !songs.length) return null
+          if (!Array.isArray(songs) || !songs.length) {
+            // 一首新的都没拉到（同一时间窗被 excludeIds 全过滤掉了）：
+            // 也得排一次 60 秒重试，否则"稍后自动接上"就是空头支票
+            this._scheduleStaleRetry()
+            return null
+          }
           this.fmLastFetchAt = Date.now()
           /**
            * 拿回来的跟当前这批一模一样：说明撞上了同一个时间窗（上游约 2 分钟一轮），
@@ -377,7 +397,7 @@ export default {
     this.$bus.$on('fm-roam', this.startRoam)
     this.$on('initPlay', () => {
       if (this.currentList.length) {
-        this.$store.dispatch('TracksAbout/playAllTracks', this.currentList)
+        this.$store.dispatch('TracksAbout/playAllTracks', { list: this.currentList, keepStream: true })
         // FM 模式标志（已下沉到 PlayerCore，通过 $bus 通知）
         this.$bus.$emit('fm-mode', true)
       }

@@ -35,6 +35,541 @@
 
 ## 历史记录
 
+### 2026-11-17 — 播放器弹层配色统一：音量并入同一套 token，弹层跟随浅色主题
+
+### 修改内容
+
+- `tokens.scss`：**拆成两套变量**。
+  - `--player-menu-*` 保持「播放器本体恒深色」的语义（歌词 / 歌曲信息 / 进度 / 标签在用，MusicPlayer 与 SongInfoPanel 一行没动，歌词样式零变化）；
+  - 新增 `--player-pop-*` 专门给弹层，跟随页面主题：`:root` 给浅色一套（白底 / 深字 / #f2f2f4 输入底 / 浅描边 / 轻阴影），`html[data-theme="dark"]` 给深色一套（原值）。另有 `--player-pop-chip`（步进按钮、标签这类小控件底色）与 `--player-pop-gold(-rgb)`（VIP 金，浅色下改成 #9a6a00 保证 4.5:1）
+  - 一开始直接把 `--player-menu-*` 改成跟随主题，结果展开页的歌词/歌曲信息一起变浅色（深底上深字），所以退回成两套
+- **音量弹窗**：硬编码 `#1f202b` 换成 `--player-menu-bg / -border / -shadow`，圆角 10→12 与其它弹层一致；数值文字、滑轨、滑块、向下小三角全部走 token
+- **播放列表 / 定时 / 副歌**：面板底色、描边、hover、选中态、说明文字、步进按钮、开关全部改用 `--player-pop-*`；`.plHead / .plTitle / .plHeadBtn` 接上全局皮肤（`player-surfaces.scss` 里还是旧的 `.plHeader / .plActions`）
+- **音质 / 播放模式**：hover、标签底色、VIP 金色、输入框换成 `--player-pop-*`；根节点补 `color: var(--player-pop-text)`，避免继承到播放条的白色文字
+- `player-surfaces.scss`：去掉写死的 `color-scheme: dark`（浅色下滚动条/表单控件要按浅色渲染）
+
+### 修改文件
+
+- `src/assets/scss/base/tokens.scss`
+- `src/assets/scss/base/player-surfaces.scss`
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/QualityMenu.vue`
+- `src/components/musicPlayer/ModeMenu.vue`
+
+### 修改原因
+
+两个诉求：① 音量弹窗底色要和播放列表等弹窗一致；② 这批弹窗要跟随当前主题，浅色主题下需要一套浅色配色（之前 `--player-menu-*` 只有深色一套，浅色主题下照样是深底）。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- 浏览器核查（headless Edge + dev server）：
+  - 浅色：队列 / 音质 / 音量 / 定时 / 播放模式五个弹层背景 `rgb(255,255,255)`，正文 `rgb(16,16,19)`
+  - 深色：五个弹层背景 `rgb(41,49,62)`，正文 `rgb(237,241,247)`，与改动前一致
+  - 截图逐一核对：浅色下标题/次要文字/选中态/VIP 金色标签/滑块/步进按钮/开关均清晰可辨，倒三角与面板同色
+  - 回归：浅色主题下展开播放器，歌词行 `rgb(176,185,200)`、歌手/进度文字与改动前完全一致（`--player-menu-*` 未变）
+
+### 注意事项
+
+- 播放条本体仍是恒深色（`.playerWrapper` 局部变量），浅色主题下弹层是白底浮在深色条上——这是「跟随主题」的直接结果
+- 两套变量的边界：**弹层**（挂在播放条上、浮起来的那层）用 `--player-pop-*`；**播放器本体**（展开页里的歌词/信息/进度）用 `--player-menu-*`。新增弹层不要再写 `rgba(255,255,255,...)` 或 `#1c1d29` 这类硬编码
+- 改 `--player-menu-*` 前先确认 MusicPlayer / SongInfoPanel 是否也吃这套色——它们不应该跟着页面主题变
+
+### 2026-11-17 — 播放列表/歌单：修清空后不播放、面板跳动；入口位置调整
+
+### 修改内容
+
+- **清空播放列表后状态归零**：新增 `_resetIdleState()`，把 `timeNow / timeDuration / bufferedTime / isPlaying / isLoading / currentQuality` 一起清掉，并摘掉 `audio` 的 `src`（临时置 `suppressAudioError` 防误报"音源加载失败"）。此前清空后播放条会停在上一首的 `00:10 / 02:46`，点播放还会把旧歌放出来
+- **移除队里最后一首**走同一条收尾：`currentSong = {}` + `updateMiniBackground()` + `_resetIdleState()`
+- **空队列加歌立即播放**：`queue-changed` 事件带上 `{ playId, wasEmpty }`；`PlayerCore` 只在「加之前队列是空的」且当前无歌时，挑刚加的那首 `handleCommand` 起播。往已有队列里加歌不打断当前播放
+- **`playSong` 兜底**：队列空且无当前曲时直接返回并提示"播放列表为空"，不再让旧 `src` 复活
+- **队列面板顶部操作条**：合并为单行吸顶——左侧「播放列表 + 数量」，右侧「收藏全部 / 清空」，列表在 `.plItems` 内独立滚动；两个按钮换成 `BaseIcon` + 文字的轻量按钮（`playlistPlus` / `delete`）
+- **修面板高度跳动**：`.plItems` 显式 `overflow-x: hidden`，并去掉行 hover 的 `translateX(3px)`——正是这个位移让 `overflow-y:auto` 顺带算出横向滚动条，面板凭空长高 15px
+- **面板宽度收到 250px**（`box-sizing: border-box`，含边框正好 250）：头部标题/按钮、行内左右内边距一起收紧，长歌名走省略号；右侧给三个悬浮操作留 82px，避免图标压字
+- **面板底边贴着 fullBar，且展开后不再移动**：`margin-bottom: 23px`（popper 是把**margin box**的底边贴到参考元素顶边的，不是 border box，所以这个值要按「触发按钮顶边到播放条上沿的距离」算）+ `_alignQueuePanel()` 兜底（容差 1.5px，正常情况是空操作）。三个坑：① 菜单挂在 body、播放条是 `fixed`，混用 `offsetTop` + `scrollY` 与 `rect` 时页面一滚动就会把面板推出视口，表现为「展开瞬间消失」——现在按 `position` 判断 offsetTop 是不是视口坐标；② rect 会被展开动画的 scaleY 影响（popper 把 transform-origin 设成 center bottom），所以用 `offsetTop/offsetHeight` 这种布局值；③ 之前 margin 取 28 时 popper 自己会差 5px，靠 120ms/300ms 两次校正补——补的那一下就是用户看到的「自动往下移动一点」，现在基础间距调准后第一次就落位，校正常常是空操作；只在面板打开时队列长度变化（高度变）才会真正生效
+- **弹层带倒三角**：播放列表面板恢复 `visible-arrow`（popper 把箭头对准参考元素中心，实测箭头中心 1367 / 图标中心 1366），为此去掉容器的 `overflow: hidden`（否则箭头被裁），底部圆角改由 `.plItems` 自己收口；音质弹窗也用 `::after` 画了同样的倒三角，圆角统一到 12px。定时/副歌本来就是这套
+- **「添加到歌单」入口搬家**：从展开播放器（`MusicPlayer` 控制行）移到 mini 播放条、下一首右侧；用绝对定位挂在 `.barControls` 右侧，不参与 flex 排布（否则会把播放键整体推左 20px）
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+- `src/components/musicPlayer/QualityMenu.vue`
+- `src/components/layout/TracksLayout.vue`
+
+### 修改原因
+
+上一轮功能自测中发现的四个问题：清空后进度残留且加歌不起播；队列面板 hover 时高度跳动并压住播放条；顶部操作区希望收成一行吸顶；「添加到歌单」在展开页与 mini 条的入口分配不合理。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- 浏览器手动核查 ✅（headless Edge + dev server）
+  - 播一首 → 清空：`currentSong` 为空、`timeNow/timeDuration` 归零、`audio.src` 已摘除、播放条显示「未选择歌曲 00:00 00:00」
+  - 空队列点列表行「加入播放列表」：队列 1 首、当前曲切到该歌、`isPlaying=true`、进度开始走（00:03 / 05:52）
+  - 队列面板 hover 行前后高度均为 104px（修复前会 +15px）
+  - 面板贴边：1 首 / 12 首 × 页面滚动 0 / 800 四种组合，缝隙 0（±0.2px）、全程可见；面板打开后 `style.top` 只出现一次赋值（popper 初始定位），不再二次移动；打开状态下继续加歌，高度 96→385 后底边仍贴住
+  - 倒三角：队列面板箭头中心 x=1367、图标中心 x=1366；音质弹窗箭头正对 SQ 按钮
+  - 顶部操作条单行显示：`播放列表 1` / `收藏全部` / `清空`
+  - mini 控制栏：下一首右侧出现小号「添加到歌单」，播放键中心仍在 722px（未偏移）
+  - 无运行时异常
+
+### 注意事项
+
+- `_resetIdleState` 会摘掉 `audio.src`：之后 `playSong` 依赖 `!sel.src` 重新取流，符合原有分支
+- 自动起播只在 `wasEmpty=true` 时发生；刷新恢复出的「有队列但没有当前曲」不会因为加歌而突然开播
+- 展开播放器不再有「添加到歌单」入口，统一走 mini 控制栏
+
+### 2026-11-17 — 播放列表与歌单操作：单曲加入队列 / 收藏歌单 / 加歌到歌单
+
+### 修改内容
+
+- **单曲加入当前播放列表**：`TracksLayout` 每行 hover 出现两个按钮（加入播放列表 / 加入歌单），覆盖歌单详情、专辑、歌手全部歌曲、歌手详情、每日推荐、搜索单曲、搜索歌词 7 个页面；声音（电台节目 `isVoice`）行不渲染入口，也无音源可加
+- **FM / 心动下禁用**：`queueAddBlocked` 读 store 的 `heartMode` / `heartBusy` / `fmActive`（不能用 `fmMode`，那是长期偏好），按钮置灰 + 点击 toast 说明原因；顶部「全部加入播放列表」同一规则
+- **`TracksAbout.pushTrack`**：新 action，返回 Promise<boolean>（true=真的加入，false=已存在），供调用方给准确反馈
+- **`PUSH_PLAYLIST`**：去重口径改为 `String(id)`（兼容 number/string），批量加入改用 Set（O(n+m)）
+- **`REPLACE_PLAYLIST`**：改为 `val.slice()`，切断队列与页面数组的共享引用
+- **`_saveState` 容忍空 currentSong**：队列非空即可落盘，`song` 字段写 null；`_restoreState` 原本就有 `data.song && data.song.id` 守卫，无需改动
+- **`queue-changed` 事件**：列表行加入/批量加入后立刻保存队列，不等切歌或 5 秒 timeupdate
+- **队列面板**：头部新增「全部加入歌单」，与「清空列表」并排
+- **大播放器**：控制行新增「添加到歌单」按钮（与下载并排，FM/心动下同样可用）
+- **新增 `AddToPlaylistDialog`**（全局单例，挂 `App.vue`，`$bus 'open-add-to-playlist'` 唤起）：只列自己创建的歌单（排除 specialType=5 的红心歌单）、搜索、新建并加入、查重、分片串行写入
+- **`ListDetail`**：新增收藏/取消收藏按钮（隐藏自己的歌单与 specialType≠0 的系统歌单），乐观更新 `subscribed` + `subscribedCount`，失败回滚；监听 `playlistTracksAdded` 重载当前页
+- **`UserDetailLayout`**：监听 `playlistSubscribed` 重拉歌单区与收藏计数，监听 `playlistTracksAdded` 就地更新 trackCount
+- **新增 `utils/writeResult.js`**：同时识别 `code` / `status` / `body.code` 三层状态（`ListDetail._writeResult` 改为复用它）
+- **`config/icon.js`**：新增 `playlistPlus`、`starFill`
+
+### 修改文件
+
+- `src/store/modules/Tracks.js`
+- `src/components/layout/TracksLayout.vue`
+- `src/components/common/AddToPlaylistDialog.vue`（新增）
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+- `src/pages/ListDetail.vue`
+- `src/components/layout/UserDetailLayout.vue`
+- `src/App.vue`
+- `src/config/icon.js`
+- `src/utils/writeResult.js`（新增）
+
+### 修改原因
+
+两个功能需求；实现过程中同时修掉三个既有缺陷：
+
+1. `REPLACE_PLAYLIST` 存的是调用方数组本身，歌单详情「播放全部」后队列与 `ListDetail.songs` 是同一个数组 —— 继续下滑加载第二页会让队列静默多出 50 首，管理模式里移出一首会把它从队列一起删掉；
+2. `_saveState` 开头 `if (!s || !s.id) return`，队列里还没在播歌时永远不保存，加完歌一刷新全丢；
+3. 队列去重原来用 `===` 比较 id，接口给 number / string 两种形态时同一首歌会进两次。
+
+FM / 心动必须禁用的依据：FM 队在尾 `_applyFmBatch` 直接 REPLACE 整队、心动 `_heartExtend` 往队尾 concat 红心推荐，加进去的歌不是被冲掉就是夹在两批推荐之间。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- 浏览器手动核查 ✅（headless Edge + `yarn serve --port 8081`，真实接口、未登录）
+  - 歌单详情 50 行正常渲染，行内两个按钮 hover 出现，图标/间距正常
+  - 加入播放列表：队列 0→1、toast「已加入播放列表」、重复点击提示「这首歌已在播放列表中」
+  - 持久化：`localStorage.acmusic_player_state` → `{playlist:1, song:null}`；刷新后队列恢复 1 首、播放条显示「未选择歌曲」
+  - 伪造 `fmActive=true`：按钮 `is-blocked` 置灰，点击提示「私人 FM 播放中，不支持加入播放列表」
+  - 「播放全部」50 首 → 手动触发加载第二页（页面 68 首）→ 队列仍为 50 首（引用修复生效）
+  - 队列面板：两个按钮同排；未登录点「全部加入歌单」提示需登录
+  - 大播放器「添加到歌单」按钮存在，未登录提示需登录
+  - 弹窗版式：40×40 封面、长歌单名省略、新建行、底部说明均正常
+  - 全流程无运行时异常（`Runtime.exceptionThrown` 为空）
+
+### 注意事项
+
+- `/playlist/detail` 已在线上验证：匿名也返回 `trackIds`（全部歌曲 id）与 `subscribed`，查重不需要拉 `/playlist/track/all`
+- **真实写操作未在登录态下跑过**（没有可用的测试账号）。上线前需人工确认 4 件事：detail 的 `subscribed` 在登录态下的取值、订阅自己/隐私歌单的报错文案、重复加歌服务端是否去重、单歌单曲目上限的错误形态
+- `/playlist/tracks` 按 100 首分片且串行发送：800 首的查询串约 8KB，会撞 nginx 默认请求头缓冲；并发分片会打乱服务端 append 顺序
+- 「我喜欢的音乐」（specialType=5）不进歌单选择器：它走 `/like` 通道，直接加会让 `PlayerCore.likedSongIds` 与红心状态不同步
+- 收藏按钮对 specialType≠0 的歌单（5=我喜欢的音乐、10=榜单）不显示
+- 未改后端 / nginx；`CHANGELOG.md` 与 `package.json` 版本号未动，发版时统一处理
+
+### 2026-11-17 — 心动 / 私人FM：默认顺序播放，并放行「顺序播放」档
+
+### 修改内容
+
+- `_heartOn()`：取流成功、`heartMode = true` 之后，若 `playMode` 是 `order` / `random`，用 `setPlayMode('sequence', true)` 对齐成顺序播放；本来就是 `loop` 的保留（"这首多听几遍"是明确意图）
+- `_fmModeHandler(true)`：同样对齐，两种模式行为一致
+- 新增 `_policyBlocked(mode)`：锁定时只挡 `order`（列表循环 = 首尾相接，推荐流没有这回事）和 `random`（洗牌会打乱推荐顺序），`sequence` 与 `loop` 放行；`setPlayMode` 与 `ModeMenu.isPolicyBlocked` 共用这条规则
+- `togglePlayMode()` 锁定时：`loop` ↔ 上一档，回退默认值由 `order` 改成 `sequence`
+- `modeBtnTitle`（`PlayerCore` + `MusicPlayer`）：锁定时报「来源 · 当前档」，得到 `心动模式 · 顺序播放` / `私人FM · 顺序播放`（开循环时是 `· 单曲循环`）
+- `stackSegments`：锁定时从只报来源改为「来源 · 当前档」，组合标签同样显示 `心动模式 · 顺序播放`
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/ModeMenu.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+
+### 修改原因
+
+心动 / 私人FM 的推进方式本来就是"顺着推荐流往下走、队尾续批"，等价于顺序播放。但之前把顺序播放和列表循环、随机一起锁了，结果按钮上显示的是用户原来的列表循环、实际行为却是顺序推进——图标和 title 都在说一件不成立的事。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 悬停核查：进入心动后 title 为 `心动模式 · 顺序播放`；点模式按钮切到单曲循环 → `心动模式 · 单曲循环`，再点回到顺序播放
+- 右键四层总览：列表循环 / 随机 置灰，顺序播放 / 单曲循环 可点
+
+### 注意事项
+
+- 进入心动 / 私人FM 时对 `playMode` 的改写是**写进 localStorage 的**（不是临时值）：退出后仍是顺序播放。若希望"退出时还原用户原来的策略"，得再加一个 `_policyBeforeStream` 记住并用 force 还原
+- 两种模式下可用的策略只有顺序播放和单曲循环，所以 title 里报策略名是准确的；`列表循环` / `随机` 永远不会出现在这两个模式的 title 里
+
+### 2026-11-17 — 文案：模式按钮 title 去掉括号说明，心动 / 私人FM 补上 title
+
+### 修改内容
+
+- `PlayerCore.modeBtnTitle()` 重写为"只报状态"：`列表循环 / 顺序播放 / 单曲循环 / 随机播放`，叠加副歌形态时补 ` · 只播副歌`，全部不带括号
+- 心动 / 私人FM 接管期间不再是空 title：报 `心动模式` / `私人FM`（开着单曲循环时补 ` · 单曲循环`，副歌形态同理），同样不带括号
+- `MusicPlayer.modeBtnTitle()` 同步：`心动模式` / `私人FM` 或四档策略名
+- `stackTitle`（组合标签）一并去掉「（点击展开四层总览，可逐层修改）」，只留 `当前播放组合：…`
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+
+### 修改原因
+
+用户要求：所有模式的 title 统一删掉括号和括号里的操作说明；私人FM / 心动模式原来干脆没有 title（上一轮为避免"策略不生效"的误导把整条置空），现在要补上但同样不写括号。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 悬停核查：四档策略各显示自己的名字；心动/FM 显示来源名；副歌形态追加 `· 只播副歌`；全程无括号
+
+### 注意事项
+
+- title 里不再提示"右键打开四层总览"，这个入口只剩右键/长按本身可发现；如果想恢复引导，建议放在设置或首次使用提示里，而不是 tooltip
+- `grep "四层总览"` 现在只剩一处代码注释（讲面板随底条收起），不是 UI 文案
+
+### 2026-11-17 — 统一样式：四档播放模式图标同色
+
+### 修改内容
+
+- `PlayerCore` 迷你条 `.modeBtn` 去掉 `&.mode-random { color: $accent }` / `&.mode-loop { color: $accent }`；hover 规则与 `is-locked` 里的对应豁免一并收敛，只保留 `&.is-chorus` 用主色
+- `MusicPlayer` 大播放器同名按钮同步
+- 模板里的 `['mode-' + playMode, …]` 类名绑定删掉（已无样式消费，属死类名）
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+
+### 修改原因
+
+用户反馈："单曲循环和随机播放是紫色，顺序播放和列表循环是浅色"。查了历史，这不是设计规则而是**漏改**：
+
+- `10a8867 feat(player): add play mode (order/random/loop)`（2026-08-24）引入播放模式时只有三档，当时给 `random` / `loop` 上主色，本意是"非默认（列表循环）模式高亮"；
+- 后来加第四档 `sequence` 时没同步这条规则，于是顺序播放留在浅色 —— 规则只剩一半，看起来就没有规律了。
+
+既然模式本身已经由图标形状区分，颜色不该再兼职。统一为"四档同色（0.42 白）"，主色只留给叠加形态（副歌 / A-B）与激活态。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 四档切换时按钮颜色不再变化，只有副歌形态生效时才变主色 + 右下角小点
+
+### 注意事项
+
+- 若以后想恢复"非默认模式高亮"，正确做法是给**全部非默认档**（sequence / loop / random）统一上色，而不是只上两档
+- `mode-*` 类名从 DOM 上消失了；目前没有脚本/样式依赖它（已 grep 确认）
+
+### 2026-11-17 — 图标：四档播放模式换成 Lucide 几何
+
+### 修改内容
+
+- `loopList` → Lucide `repeat`：`M17 2l4 4-4 4 M3 11v-1a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v1a4 4 0 0 1-4 4H3`
+- `loopOne` → Lucide `repeat-1`：同上 + `M11 10h1v4`（中间那道竖线就是 "1"）
+- `shuffle` → Lucide `shuffle`（5 段 path 合并；原来只有 5 条简化直线，新版是带弧的 S 形交叉）
+- `sequence` 试过三版后定为**两支横向右箭头上下排列**：`M4 7h15 M16 4l3 3-3 3 M4 17h15 M16 14l3 3-3 3`（行高 7 / 17，箭头 15 长、45° 箭头，"一行一行往前推"）
+- 迷你条「播放列表」按钮的图标由 `play`（▶ + 数量角标）换成 `list`：那个三角的语义是"播放"，而按钮实际动作是"打开队列"
+- 合并方式：Lucide 原文里以相对 `m` 开头的子路径改写成绝对 `M...l...`，保证单 `<path>` 里多子路径的起点不被前一段的终点带偏
+- 其余 47 个图标不动
+
+### 修改文件
+
+- `src/config/icon.js`
+- `src/components/musicPlayer/PlayerCore.vue`（队列按钮的图标引用）
+
+### 修改原因
+
+用户只想换这四个"队列策略"图标，其余保持现状。选 Lucide 是因为项目现有线条本来就是 Lucide 家族（`loopList` 旧值几乎就是 `repeat` 换了半径），换过去不会和其余图标打架。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 视觉核查：18px（迷你条）与 24px（大播放器）两档都画了对照图，四个图标的重心/留白一致
+
+### 注意事项
+
+- 这四个 name 没有 `class` 钩子，SCSS 里也没有按类名选中的规则，替换只影响字形
+- `sequence` 的候选还有：`list-ordered`（列表带序号）、"三横线 + 右箭头"、`chevrons-right`（双箭头）。18px 下序号不可辨，双箭头又太像快进，最终选了"两支完整右箭头"
+- 队列按钮改用 `list` 后与「相似歌单」标签页同款字形（不同上下文，可接受）；若想要"列表 + 音符"或"三行等长"的版本，加一个新 name 即可，别直接改 `list`
+
+### 2026-11-17 — 清理：删除 iconfont 字体图标遗留
+
+### 修改内容
+
+- 删除 `src/assets/ac-font/`（`iconfont.css` / `.js` / `.json` / `.ttf` / `.woff` / `.woff2`，共 17.9KB 源文件，其中三个字体文件原本还会被打进产物并被每个访客请求）
+- `App.vue` 去掉 `@import "assets/ac-font/iconfont.css"`（连同注释掉的 alicdn 远程地址行）
+- `BaseIcon.vue` 删掉字体分支（`icon.type === 'font'`）与只服务字体的 `iconStyle` computed；现在只认 `icon.path`，占位符复用 `svgStyle`
+- 文档同步：`AGENTS.md` 图标条目、`PROJECT_CONTEXT.md` 技术栈表格与目录树、`ARCHITECTURE_DECISIONS.md` 决策 10 补 2026-11 说明
+
+### 修改文件
+
+- `src/assets/ac-font/*`（删除）
+- `src/App.vue`
+- `src/components/common/BaseIcon.vue`
+- `AGENTS.md`、`docs/PROJECT_CONTEXT.md`、`docs/ARCHITECTURE_DECISIONS.md`
+
+### 修改原因
+
+`icon.js` 里 `type: 'font'` 早已是 0 条，`iconfont.css` 只是被 import 却渲染不出任何图标；`iconfont.js` 从未被引用。这套是 iconfont.cn 导出的历史产物（10 个字形），留着只会让人以为还能加字体图标。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`），`css/app` 136.67 KiB / gzip 20.00 KiB
+- 全站图标仍由 `src/config/icon.js` 的 51 条内联 SVG 渲染，无视觉变化（删除的字体类在注册表里没有任何条目在使用）
+
+### 注意事项
+
+- `icon.js` 里 `play` / `like` / `likeFill` 三条仍带 `class: 'ac-play1' | 'ac-like' | 'ac-likefill'` —— 这些**不是**字体 class，而是 SCSS 的样式钩子（`.comment-like .like i.ac-likefill { color: danger }`、`.ac-play1 { font-size: .8rem }`），删之前要先迁走选择器
+- `BaseIcon` 不再支持 `type: 'font'`，以后加图标一律写 `path`（24×24 网格）
+
+### 2026-11-17 — 调整：心动 / 私人FM 下保留「单曲循环」
+
+> 同一天稍后按用户要求又放行了「顺序播放」并把这两种模式的默认策略对齐成 sequence，见上方最新一条。本条记录里的"只挡 order/sequence/random"已不再成立。
+
+### 修改内容
+
+- `setPlayMode(mode, forceRestore)`：只挡 `order / sequence / random` 三档，`loop` 放行；在推荐流里开 loop 时记下原策略到 `_policyBeforeLoop`；被挡时**不弹提示文字**，只留 `[PlayMode] skip_locked` 日志
+- `togglePlayMode()`：被接管时不再是"点了没反应"，而是开 / 关单曲循环（关掉时用 `forceRestore` 还原 `_policyBeforeLoop || 'order'`，全程不出提示文字）
+- `_autoNext`：去掉上一轮加的 `!policyLocked`，单曲循环分支恢复——推荐流里开循环就是循环当前这首，不再往队列里推进
+- `ModeMenu`：只有非 loop 的项 `disabled` + `locked`（压暗 + `cursor: default`，不用 `not-allowed`）；**不再插入任何说明文字**；`pickPolicy` 只挡非 loop
+- 迷你条 `modeBtn`：`is-locked` 追加 `playMode !== 'loop'` 条件（循环生效时不该看起来是禁用态），且只压暗、不换禁用光标；**被接管时 `modeBtnTitle` 返回空串**，不显示任何提示文字；`stackSegments` 在锁定 + loop 时补一段「单曲循环」
+- 大播放器 `MusicPlayer`：同款 `is-locked`（只压暗）与 `modeBtnTitle`（被接管时无 tooltip）
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/ModeMenu.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+
+### 修改原因
+
+上一轮把心动 / 私人FM 下的四档队列策略一起锁了。用户反馈：**单曲循环要保留**——它只决定"这一首放完要不要重播"，和"下一首从哪来"无关，在推荐流里仍然有意义（想把当前这首多听几遍）。
+
+同轮追加的体验要求：**不要弹提示文字、不要 `not-allowed` 光标**。所以锁定的表达只靠"置灰"（`opacity`），点击时静默挡掉；tooltip 在接管期间直接置空。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 浏览器手动核查：待用户回归
+  - 心动 / FM 下点模式按钮：直接开单曲循环（图标变 loopOne、不再压暗、tooltip 变「单曲循环（点一下关闭）」），播完确实重播当前这首
+  - 再点一下：关掉循环、还原原来的策略，播放继续跟着推荐流走
+  - 右键菜单：列表循环 / 顺序 / 随机 置灰，单曲循环可点
+
+### 注意事项
+
+- 单曲循环开着进心动模式时，第一首会一直循环、不会自动续批 —— 这是"循环"的正常语义，不是卡住；想要推荐流继续推进就先关掉循环
+- `_policyBeforeLoop` 只在"推荐流里主动开循环"时记录。进心动前本来就是循环的（`_policyBeforeLoop` 为空），关循环会退回列表循环
+
+### 2026-11-17 — 修复：心动点歌后队列混流 / 漫游卡紫框残留 / 推荐流下队列策略可点
+
+### 修改内容
+
+- **心动点歌后收队**：新增 `_collapseQueueToCurrent()`（nextTick 把队列收成 `[currentSong]` 并把 `curIndex` 归零）；`_fmModeHandler` 里原来内联的同一段逻辑改为调用它，`song` watcher 在"心动模式下外部点歌"时也调用一次（FM 那条由 `_fmModeHandler` 负责，两者不重复）
+- **漫游卡高亮跟播放状态走**：`FmRoamCards` 的 `.roam-card.active`（紫色描边）绑定从 `isSelected(c)` 改成 `isPlaying(c)`
+- **推荐流下锁队列策略**：新增 `policyLocked` computed（`heartMode || isPersonalFM`）；`setPlayMode` / `togglePlayMode` 挡掉**除单曲循环外**的三档并给提示（初版把 loop 也一起锁了，同一天按用户要求放行，见上一条记录）；`ModeMenu` 的四个策略项按"是否 loop"分别置灰；`getPrevIndex` 对心动的处理改成和 FM 一样的线性后退（队首返回 -1），`preSong` 相应简化
+- **两处 UI 同步**：迷你播放器 `modeBtn` 加 `is-locked`（压暗 + `cursor: not-allowed`），`modeBtnTitle` 与 `stackSegments` 在被接管时改报来源而不是策略（`私人FM 中，队列策略暂不生效`）；大播放器 `MusicPlayer` 的同名按钮走 Vuex 的 `heartMode` / `fmActive` 算 `modeLocked`（`$refs` 不是响应式的），样式同款
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/musicPlayer/ModeMenu.vue`
+- `src/components/musicPlayer/MusicPlayer.vue`
+- `src/components/FmRoamCards.vue`
+
+### 修改原因
+
+用户三条反馈：
+
+1. **心动模式下的队列混用**：心动播着点别的歌单里的某一首，歌被 append 到心动那 20 首后面（队列 21 首，两套内容混在一起）。上一轮只做了"退出心动"，没做"收队"。FM 早就有收队（`_fmModeHandler`），心动缺这一环。不同播放模式的队列不该混用。
+2. **漫游卡紫框残留**：`.roam-card.active` 只看 `fmMode`（持久化偏好），所以切到普通歌单、FM 已经停了之后边框还亮着，只是「播放中」角标消失了 —— 视觉上像还在播。
+3. **队列策略在推荐流下可点但无效**：心动 / 私人FM 自己决定下一首，但 UI 照样能切。现在把策略在这一层明确"失效"：UI 置灰 + 代码兜底。（初版把单曲循环也锁了、`_autoNext` 里加了 `!policyLocked`，同一天按用户要求改成"只放行单曲循环"，见上一条记录。）
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 浏览器手动核查：待用户回归
+  - 心动播着点别的歌单某一首：队列只剩这一首（`[StreamMode] exit_on_switch` + 队列 1 首），心动圆点熄灭
+  - FM 播着切到普通歌单：漫游卡紫框与「播放中」一起消失；回到 FM 播放时重新亮起
+  - 心动 / FM 模式下：三档策略（列表循环 / 顺序 / 随机）置灰；单曲循环可切、且播完确实重播当前这首
+  - 心动 + 单曲循环进心动模式：播完应继续续批（不再卡同一首）
+
+### 注意事项
+
+- `policyLocked` 只是"策略不参与运算"，不会改 `playMode`：退出心动/FM 后用户原来的设置原样生效（`playMode` 也照旧持久化）
+- `_collapseQueueToCurrent` 依赖 nextTick 时序（先等 `song` / `currentSong` watcher 把新歌入队再收），动 watcher 声明顺序前先读它的注释
+- `MusicPlayer` 里判断锁不能用 `$refs.pgPanel`（非响应式），要走 Vuex 的 `heartMode` / `fmActive`
+
+### 2026-11-17 — 修复：单曲点播退出心动 / 空队列退出两种模式 / FM 换批后不再续取
+
+### 修改内容
+
+- **单曲点播也退心动**：`PlayerCore` 的 `song` watcher（`App.vue` `songClk` 的唯一落点）开头调用 `_exitStreamModes()`，外部点歌一律退出心动 / 私人 FM
+- **空队列退模式**：`clearPlaylist` 与 `removeFromQueue` 删到空时调用 `_exitStreamModes()`；`App.clearAll` 的 `song = {}` 也会走上面那条 watcher，双保险
+- **FM 换批不再误退模式**：`TracksAbout/playAllTracks` 的 payload 支持 `{ list, keepStream, mode }`（数组写法保持兼容），`PersonalFM` 的 4 处 dispatch（卡片点播 / 播放全部 / 切漫游模式 / initPlay）改传 `keepStream: true`；`playAllSong` 只在 `!keepStream` 时调 `_exitStreamModes()`
+- **FM 静默失败可见 / 可自愈**：`applyStagedOrFetch` 拿到空批次时给 toast 并置 `fmPendingApply`；`_doFetch` 空结果也排 60 秒重试（原来只有"同批次"才重试，空结果不排）；`fetchAndStage` 应用迟到批次前检查 `fmActive`，避免 60 秒后把用户已经换上的歌单顶掉；`playFmNewBatch` 因 `!isPersonalFM` 提前返回时打 `[FmGate] skip_apply` 警告，`_fmAdvance` 入口打 `[FmGate] advance`
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+- `src/components/PersonalFM.vue`
+- `src/store/modules/Tracks.js`
+
+### 修改原因
+
+用户三条反馈：
+
+1. **私人 FM 不取新歌**。前一轮把"换台退模式"塞进 `playAllSong`，而 FM 自己的播放动作（卡片点播 / 播放全部 / 切漫游）也走 `playAllTracks` → `playAllSong`，于是换队那一刻 `isPersonalFM` 被置 false，靠组件事后补发 `$bus 'fm-mode' true` 才恢复。这个"先关再开"的窗口让 FM 的预取/续批判断在边界上看到"FM 已关"，队尾就不再取新歌；同一窗口里 `SET_FM_ACTIVE` 的镜像还会因为 Vue 的 watcher 去重被跳过（值回到 true 时 watcher 看不到变化），首页漫游卡的「播放中」也跟着失准。改为由调用方显式声明"这批就是那条流"（`keepStream`），从源头消除这个瞬态。
+2. **心动要像 FM 一样是独立播放模式**：从别的歌单点一首歌，心动必须退出，不能带着红心续批继续跑。
+3. **清空队列后仍显示"播放中"**：`clearPlaylist` 只清队列，不动 `heartMode` / `isPersonalFM`，于是心动圆点、漫游卡「播放中」都还亮着。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 浏览器手动核查：待用户回归
+  - FM 播到队尾：应出现 `[FmGate] advance` + 新一批开播；若上游这一轮没新歌，应看到 toast 而不是静音
+  - FM 卡片点播 / 播放全部 / 切漫游：`isPersonalFM` 全程为 true（不会先关再开）
+  - 心动播着点别的歌单里的某一首：心动圆点熄灭，队尾不再追加红心推荐
+  - 心动 / FM 播着清空队列：两个模式的「播放中」都应熄灭
+
+### 注意事项
+
+- `playAllTracks` 的数组写法没有改，老调用点（播放全部按钮、每日推荐等）语义不变：数组 = 换台，会退模式
+- 新增的 `keepStream` 是"这批歌属于这条流"的唯一判据，别再用"dispatch 完再补一条 `fm-mode`"来模拟它——那正是这次瞬态的成因
+- `[FmGate]` 两条日志是给后续排查留的：真机上 FM 又不续歌时，先看 `advance` 有没有打、`skip_apply` 的 reason 是什么
+
+### 2026-11-17 — 修复：FM / 心动播着的时候点别的歌单，模式没切走
+
+### 修改内容
+
+- 新增 `_exitStreamModes()`，在 `playAllSong()`（`playAllTracks` → pubsub `playAll` 的唯一落点）最前面调用：换台时退掉心动模式 / 私人 FM，并作废在途的心动取批
+- `_heartOn()` 加取批令牌 `heartRequestToken`（data 新增，换台时自增）：请求回来时令牌对不上就丢弃，避免 0.5 秒后把红心推荐 REPLACE 到刚换上的歌单
+- `_heartExtend()` 拿到结果后补一句 `if (!this.heartMode) return false`：在途续批不能 concat 到新歌单尾巴上
+- `isPersonalFM` watcher 里的 `REPLACE_PLAYLIST([currentSong])` **移走**，改由 `_fmModeHandler` 在"用户从 FM 退到点播某首歌"时显式触发（仍是 nextTick，语义不变）；顺带把清队后的 `curIndex` 归零——原来会停在"FM 批次下标 + 追加位置"的越界值上，下一次按上一首取到 `undefined` 会把 `currentSong` 写成空
+- `preSong()` 的队首守卫补状态行提示：`已经是心动推荐的第一首` / `已经是本批 FM 的第一首`（2.5s 自动消失）
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+
+### 修改原因
+
+用户反馈：私人 FM 或心动模式播着的时候点别的歌单「播放全部」，队列虽然换了，模式没退——队尾一到，心动会把红心推荐接到新歌单后面、FM 会把整份歌单 REPLACE 成下一批 FM 歌，等于用户点的那份歌单被抢走。
+
+根因有两层：
+
+1. `playAllTracks` 只负责 `REPLACE_PLAYLIST` + publish，从不碰 `isPersonalFM` / `heartMode`。FM 的退出信号 `$bus 'fm-mode' false` 只有 `App.vue` 的点播路径（`songClk`）会发，`playAll` 路径根本没有。
+2. 想在 `playAllSong` 里直接 `isPersonalFM = false` 会踩到旧 watcher 的坑：那句 `REPLACE_PLAYLIST([currentSong])`（"退出 FM 只留当前这首"）在 nextTick 跑，会把刚换上的新歌单清成一首。所以把"清队"从 watcher 挪到真正需要它的路径（`_fmModeHandler`，即 App 点播那一支），watcher 只管镜像 `SET_FM_ACTIVE`。
+
+副作用检查：`PersonalFM` 的卡片点播 / 播放全部 / 切漫游模式都是 `playAllTracks` 之后紧接着 `emit 'fm-mode' true`，同一个 tick 内 `isPersonalFM` 从 true→false→true，watcher 的值没变、回调不会跑，FM 不会被误关（`_fmModeHandler` 里也加了"同一 tick 被重新打开就别清队"的兜底）。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`）
+- 浏览器手动核查：待用户回归
+  - FM 播着 → 打开任意歌单 → 播放全部：队列应是整份歌单、漫游卡「播放中」熄灭、控制台一条 `[StreamMode] exit_on_switch`
+  - 心动播着 → 同上：心动圆点熄灭，队尾不再追加红心推荐
+  - FM 播着 → 点别的歌单里的某一首歌：队列仍应只剩这一首（`_fmModeHandler` 的清队路径没被改坏）
+  - FM 卡片点播 / 播放全部：仍应保持 FM 模式
+
+### 注意事项
+
+- 换台时不动 `playMode`（列表循环 / 顺序播放 / 随机仍是用户原设置），只退"队列来源"（FM / 心动）
+- 从 FM 退出到点播的清队仍走 nextTick，依赖"song / currentSong watcher 先把新歌塞进队列"这个时序；动 `watch` 里 watcher 的声明顺序前先读这段注释
+- 点播单曲当时只退 FM、不退心动（`App.songClick` 只发 `fm-mode`），同一天随后按用户要求补齐：单曲点播也退心动，见上一条记录
+
+### 2026-11-17 — 修复：心动模式第一首按「上一首」会跳到队尾推荐
+
+### 修改内容
+
+- `preSong()` 新增队首守卫：心动模式 / 私人 FM 在 `curIndex <= 0` 时直接 return（只留一条 `[PrevGuard] skip_stream_head` 日志），不再走 `getPrevIndex()` 的列表循环回绕
+- 命中守卫的条件是 `(heartMode || isPersonalFM) && curIndex <= 0 && (isPersonalFM || playMode !== 'random')`：FM 本来就不走 shuffle（见 `getPrevIndex`），所以它一律按线性挡；心动在 `random` 下仍然交给 shuffle（shuffle 序列本身是环，首尾都有"上一首"）
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+
+### 修改原因
+
+心动模式是一次"换台"动作：以当前歌为种子从红心歌单拉一批，`REPLACE_PLAYLIST` 后从第一首开始播，队列是**现生成的推荐流**，用户没有排序过。
+但 `preSong` 当时没有心动 / FM 分支，直接落到 `getPrevIndex` 的 `curIndex - 1 < 0 ? length - 1 : curIndex - 1`，
+于是「第一首按上一首」= 跳到队列末尾那首还没听过的推荐，主观感受就是"直接换了一首新歌"。
+回绕（列表循环首尾相接）只对用户自己排的队列有意义，推荐流在队首没有"上一首"，应当原地不动。
+
+顺带说明为什么不改 `getPrevIndex` 本身：同一个函数还被"列表循环"依赖，把回绕去掉会顺手废掉普通队列的循环语义；改动只落在 `preSong` 这一个入口上（全项目只有它调用 `getPrevIndex`）。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（`npx vue-cli-service build --no-clean`，沙箱下清 `dist/` 会被批量删除保护拦掉）
+- 浏览器手动核查：待用户回归（心动模式 → 播第一首 → 点上一首应无反应；播到第二首再点应回到第一首）
+
+### 注意事项
+
+- 队首"无反应"最初是静默的（只在控制台留 `[PrevGuard]`），同一天随后按用户要求补了状态行提示，见上一条记录
+- 心动模式在 `random` 播放模式下没有拦：此时"上一首"按 shuffle 序走。若以后要求心动一律线性（`_heartAdvance` 就是线性的），得把 `playMode === 'random'` 这个例外一起去掉
+
+### 2026-11-17 — 修复：单曲点播后「上一首」点了没反应
+
+### 修改内容
+
+- `currentSong` watcher 末尾新增来源接管：点歌落地后（无论命中队列还是被 `PUSH_PLAYLIST` 追加），把 `playlistContextId` 对齐到当前 `playContextId`，并把 `currentSongSource` 从 `'unknown'` 正式置为 `'playlist'`；`isRestoring` / `'restore'` 期间不接管
+- 删掉原 `[SourceGuard] keep_source` 那条只剩 `console.log` 的死分支（判断写的是 `inPlaylist`，索引 0 还会被判成假）
+
+### 修改文件
+
+- `src/components/musicPlayer/PlayerCore.vue`
+
+### 修改原因
+
+复现路径：列表为空 → 点歌 A（入队，idx 0）→ 点歌 B（入队，idx 1）→ 点「上一首」无反应，控制台停在
+`[PlaylistGuard] { action: 'skip_curIndex', source: 'unknown' }`。
+
+点播走的是 `App.vue` 的 `songClk` → `props.song`，`song` watcher 先把 `currentSongSource` 打成 `'unknown'`；
+`currentSong` watcher 里"歌曲已在队列/追加进队列"的两个分支只对齐 `curIndex`，**从不把 source 改回 `'playlist'`**。
+于是 `curIndex` watcher 的 `PlaylistGuard` 认为这不是队列切歌，直接 return —— `preSong` / `nextSong` / `_autoNext`
+改的 `curIndex` 全被吞掉。同一路径还会让「单曲点播播完不自动接下一首」「不预取下一首」一起失效；
+而「播放全部」链路因为 `playAllSong` 显式设了 source，不受影响，所以这个 bug 只在单曲点播后出现。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- 浏览器手动核查：待用户回归（列表空 → 点两首 → 上一首 / 播完自动接下一首）
+
+### 注意事项
+
+- `currentSongSource` 现在只有三个有效值：`'playlist'`（含点播接管）/ `'restore'`（恢复中）/ `'unknown'`（点歌瞬间的过渡态）。`'search'` / `'fm'` 文档里出现过但代码从未赋过值，别再照着写分支
+- `curIndex` watcher 的三道守卫（source、`isRestoring`、`playContextId === playlistContextId`）是历史竞态的挡板，**不要为了绕开问题放宽它们**；来源不对就该在来源那一侧修
+
 ### 2026-11-16 — PERF-user-page 第二轮：毛玻璃调参 + 歌单区窗口化渲染
 
 ### 修改内容

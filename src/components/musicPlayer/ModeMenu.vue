@@ -8,14 +8,16 @@
         v-for="opt in policies"
         :key="opt.key"
         class="mm-item"
-        :class="{ active: opt.key === layers.policy, muted: layers.fm }"
+        :class="{ active: opt.key === layers.policy, muted: isPolicyBlocked(opt), locked: isPolicyBlocked(opt) }"
         :aria-pressed="opt.key === layers.policy"
+        :disabled="isPolicyBlocked(opt)"
         @click="pickPolicy(opt.key)"
       >
         <span class="mm-label">{{ opt.label }}</span>
         <span v-if="opt.key === layers.policy" class="mm-check"><BaseIcon name="loop" :size="14"/></span>
       </button>
-      <div v-if="layers.fm" class="mm-note">私人 FM 中，队列策略暂不生效</div>
+      <!-- 心动 / 私人FM 接管"下一首从哪来"：列表循环 / 随机置灰，顺序播放与单曲循环保留
+           （前两者就是这两种模式真实的推进方式），不再配说明文字 -->
 
       <!-- B 内容来源：下一首从哪来 -->
       <div class="mm-header mm-header-gap">来源</div>
@@ -160,6 +162,7 @@ export default {
       type: Object,
       default: () => ({
         policy: 'order',
+        policyLocked: false,
         fm: false,
         heart: false,
         heartBusy: false,
@@ -187,7 +190,18 @@ export default {
     }
   },
   methods: {
+    /**
+     * 心动 / 私人FM 下哪几档不可选：列表循环（推荐流没有首尾相接）和随机（打乱推荐顺序）。
+     * 顺序播放是这两种模式真实的行为，单曲循环是"这首多听几遍"，都保留。
+     */
+    isPolicyBlocked(opt) {
+      if (!this.layers.policyLocked) return false
+      const key = opt && opt.key
+      return key !== 'sequence' && key !== 'loop'
+    },
     pickPolicy(key) {
+      // disabled 的项本来就不会触发 click，这里再挡一次
+      if (this.isPolicyBlocked({ key })) return
       this.$emit('select-policy', key)
     },
     step(kind, dir) {
@@ -215,7 +229,7 @@ export default {
 
 <style lang="scss" scoped>
 @import "src/assets/scss/base/motion";
-$accent: var(--player-menu-accent);
+$accent: var(--player-pop-accent);
 
 .mm-item, .mm-reset, .sdFade {
   width: 100%;
@@ -224,7 +238,7 @@ $accent: var(--player-menu-accent);
   background: transparent;
   text-align: left;
   font-family: inherit;
-  &:focus-visible { outline: 2px solid var(--player-menu-accent); outline-offset: -2px; }
+  &:focus-visible { outline: 2px solid var(--player-pop-accent); outline-offset: -2px; }
 }
 
 .mode-menu {
@@ -235,25 +249,26 @@ $accent: var(--player-menu-accent);
   // 四层全展开比较高，小屏上要能滚，否则顶部会被截掉且够不着
   max-height: 62vh;
   overflow-y: auto;
-  background: var(--player-menu-bg);
+  background: var(--player-pop-bg);
+  color: var(--player-pop-text);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--player-menu-border);
+  border: 1px solid var(--player-pop-border);
   border-radius: 14px;
   padding: 8px;
-  box-shadow: 0 8px 32px var(--player-menu-shadow);
+  box-shadow: 0 8px 32px var(--player-pop-shadow);
   z-index: 110;
   cursor: default;
   scrollbar-width: thin;
 
   &::-webkit-scrollbar { width: 4px; }
-  &::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: var(--player-pop-border); border-radius: 2px; }
 }
 
 .mm-header {
   font-size: 11px;
   font-weight: 500;
-  color: var(--player-menu-muted);
+  color: var(--player-pop-muted);
   letter-spacing: .8px;
   padding: 6px 10px 6px;
 
@@ -261,7 +276,7 @@ $accent: var(--player-menu-accent);
   &.mm-header-gap {
     margin-top: 4px;
     padding-top: 10px;
-    border-top: 1px solid var(--player-menu-border);
+    border-top: 1px solid var(--player-pop-border);
   }
 }
 
@@ -275,27 +290,33 @@ $accent: var(--player-menu-accent);
   cursor: pointer;
   transition: background 180ms $ease-standard;
 
-  &:hover { background: rgba(255, 255, 255, 0.06); }
-  &.active { background: var(--player-menu-soft); }
-  &.muted .mm-label { color: var(--player-menu-muted); }
+  &:hover { background: var(--player-pop-chip); }
+  &.active { background: var(--player-pop-soft); }
+  &.muted .mm-label { color: var(--player-pop-muted); }
+  // 被接管时这几项不可点：只压暗，不换成"禁用"光标（用户要求不要出现禁用手感）
+  &.locked {
+    cursor: default;
+    opacity: .55;
+    &:hover { background: transparent; }
+  }
 
-  .mm-label { font-size: 13px; font-weight: 400; color: var(--player-menu-text); }
-  &.active .mm-label { color: #fff; }
+  .mm-label { font-size: 13px; font-weight: 400; color: var(--player-pop-text); }
+  &.active .mm-label { color: var(--player-pop-text); }
 
   // 附属操作（清除 A-B）缩进一档，读起来是"上一项的子操作"
   &.mm-item-sub {
     padding-top: 4px;
     padding-bottom: 6px;
-    .mm-label { font-size: 12px; color: var(--player-menu-muted); }
+    .mm-label { font-size: 12px; color: var(--player-pop-muted); }
   }
 }
 
 .mm-check { color: $accent; display: flex; align-items: center; flex-shrink: 0; }
-.mm-busy { font-size: 10px; color: var(--player-menu-muted); flex-shrink: 0; }
+.mm-busy { font-size: 10px; color: var(--player-pop-muted); flex-shrink: 0; }
 // 行内小注（本曲无数据 / A-B 的具体区间）：太长会挤掉主文案，所以限宽
 .mm-tag {
   font-size: 10px;
-  color: var(--player-menu-muted);
+  color: var(--player-pop-muted);
   flex-shrink: 0;
   max-width: 84px;
   overflow: hidden;
@@ -305,7 +326,7 @@ $accent: var(--player-menu-accent);
 
 .mm-note {
   font-size: 10px;
-  color: var(--player-menu-muted);
+  color: var(--player-pop-muted);
   line-height: 1.5;
   padding: 0 10px 6px;
 }
@@ -317,14 +338,14 @@ $accent: var(--player-menu-accent);
   gap: 8px;
   margin-top: 6px;
   padding: 9px 10px 7px;
-  border-top: 1px solid var(--player-menu-border);
+  border-top: 1px solid var(--player-pop-border);
   font-size: 12px;
-  color: var(--player-menu-secondary);
+  color: var(--player-pop-secondary);
   cursor: pointer;
   transition: color 160ms ease;
 
-  &:hover { color: #fff; }
-  .mm-reset-note { font-size: 10px; color: var(--player-menu-muted); }
+  &:hover { color: var(--player-pop-text); }
+  .mm-reset-note { font-size: 10px; color: var(--player-pop-muted); }
 }
 
 // ---- 定时两档的可调节行：与 PlayerCore 的 .sleepDropdown 同一套视觉 ----
@@ -335,11 +356,11 @@ $accent: var(--player-menu-accent);
   padding: 7px 10px;
   border-radius: 8px;
   font-size: 13px;
-  color: var(--player-menu-secondary);
+  color: var(--player-pop-secondary);
   transition: background 160ms ease, color 160ms ease;
 
-  &:hover { background: rgba(255, 255, 255, 0.06); }
-  &.is-active { color: $accent; background: var(--player-menu-soft); font-weight: 600; }
+  &:hover { background: var(--player-pop-chip); }
+  &.is-active { color: $accent; background: var(--player-pop-soft); font-weight: 600; }
 
   .sdLabel { flex-shrink: 0; }
   .sdUnit { flex-shrink: 0; font-weight: 400; }
@@ -356,17 +377,17 @@ $accent: var(--player-menu-accent);
     border-radius: 6px;
     font-size: 14px;
     line-height: 1;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--player-menu-text);
+    background: var(--player-pop-chip);
+    color: var(--player-pop-text);
     cursor: pointer;
     user-select: none;
     transition: background 140ms ease, color 140ms ease;
 
-    &:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+    &:hover { background: var(--player-pop-hover); color: var(--player-pop-text); }
     &:active { transform: scale(0.92); }
-    &:focus-visible { outline: 2px solid var(--player-menu-accent); }
+    &:focus-visible { outline: 2px solid var(--player-pop-accent); }
     // 到边界置灰但仍占位，避免按钮消失导致行宽跳动
-    &.disabled { opacity: 0.3; cursor: not-allowed; &:hover { background: rgba(255, 255, 255, 0.08); } }
+    &.disabled { opacity: 0.3; cursor: not-allowed; &:hover { background: var(--player-pop-chip); } }
   }
 
   // 定宽而不是 flex:1 —— 撑满会把整个面板拉宽，这里只需要放下两三位数字
@@ -381,13 +402,13 @@ $accent: var(--player-menu-accent);
     font-variant-numeric: tabular-nums;
     font-family: inherit;
     color: inherit;
-    background: var(--player-menu-input);
-    border: 1px solid var(--player-menu-border);
+    background: var(--player-pop-input);
+    border: 1px solid var(--player-pop-border);
     border-radius: 6px;
     outline: none;
     transition: border-color 140ms ease, background 140ms ease;
 
-    &:focus { border-color: rgba(var(--theme-accent-rgb), 0.6); background: var(--player-menu-input); }
+    &:focus { border-color: rgba(var(--theme-accent-rgb), 0.6); background: var(--player-pop-input); }
   }
 }
 
@@ -398,13 +419,13 @@ $accent: var(--player-menu-accent);
   gap: 10px;
   margin-top: 4px;
   padding: 9px 10px 7px;
-  border-top: 1px solid var(--player-menu-border);
+  border-top: 1px solid var(--player-pop-border);
   font-size: 12px;
-  color: var(--player-menu-muted);
+  color: var(--player-pop-muted);
   cursor: pointer;
   transition: color 160ms ease;
 
-  &:hover { color: var(--player-menu-text); }
+  &:hover { color: var(--player-pop-text); }
 }
 
 .sdSwitch {
@@ -429,7 +450,7 @@ $accent: var(--player-menu-accent);
   }
 
   &.on {
-    background: var(--player-menu-soft);
+    background: var(--player-pop-soft);
     &::after { transform: translateX(12px); background: #fff; }
   }
 }

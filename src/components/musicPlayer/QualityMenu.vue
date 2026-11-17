@@ -110,21 +110,39 @@ export default {
   bottom: calc(100% + 10px);
   right: 0;
   width: 220px;
-  background: var(--player-menu-bg);
+  background: var(--player-pop-bg);
+  // 兜底：根节点给出正文色，避免任何没显式指定颜色的文本继承到播放条的白色
+  color: var(--player-pop-text);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--player-menu-border);
-  border-radius: 14px;
+  border: 1px solid var(--player-pop-border);
+  // 与定时/副歌/播放列表三个弹层统一：12px 圆角 + 一个指向触发按钮的倒三角
+  border-radius: 12px;
   padding: 8px;
-  box-shadow: 0 8px 32px var(--player-menu-shadow);
+  box-shadow: 0 8px 32px var(--player-pop-shadow);
   z-index: 110;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    // 音质按钮宽约 32px，箭头 10px → right 10 让它正对按钮中心
+    right: 10px;
+    width: 10px;
+    height: 10px;
+    background: var(--player-pop-bg);
+    border-right: 1px solid var(--player-pop-border);
+    border-bottom: 1px solid var(--player-pop-border);
+    border-bottom-right-radius: 2px;
+    transform: rotate(45deg);
+  }
 }
 
 .qm-header {
   display: flex; align-items: center; justify-content: space-between;
   font-size: 11px;
   font-weight: 600;
-  color: var(--player-menu-muted);
+  color: var(--player-pop-muted);
   text-transform: uppercase;
   letter-spacing: .8px;
   padding: 6px 12px 8px;
@@ -134,7 +152,7 @@ export default {
     font-weight: 500;
     letter-spacing: 0;
     text-transform: none;
-    color: var(--player-menu-muted);
+    color: var(--player-pop-muted);
     opacity: .8;
   }
 }
@@ -144,11 +162,11 @@ export default {
   margin: 6px 4px 2px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(240, 198, 116, 0.1);
-  border: 1px solid rgba(240, 198, 116, 0.18);
+  background: rgba(var(--player-pop-gold-rgb), 0.10);
+  border: 1px solid rgba(var(--player-pop-gold-rgb), 0.20);
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(240, 198, 116, 0.9);
+  color: var(--player-pop-gold);
 }
 
 .qm-item {
@@ -165,16 +183,16 @@ export default {
   cursor: pointer;
   transition: background 180ms $ease-standard;
 
-  &:hover { background: rgba(255, 255, 255, 0.06); }
-  &:focus-visible { outline: 2px solid var(--player-menu-accent); outline-offset: -2px; }
-  &.active { background: var(--player-menu-soft); }
+  &:hover { background: var(--player-pop-chip); }
+  &:focus-visible { outline: 2px solid var(--player-pop-accent); outline-offset: -2px; }
+  &.active { background: var(--player-pop-soft); }
   // 解灰说明行：不可点，只解释"为什么没有档位可选"
   &.is-static {
     cursor: default;
     &:hover { background: transparent; }
   }
   // 会员档位不再置灰（能选、能播），只靠 VIP 徽标说明它的出处
-  &.is-vip-tier .qm-short { color: #f0c674; }
+  &.is-vip-tier .qm-short { color: var(--player-pop-gold); }
 
   .qm-vip {
     display: inline-block;
@@ -186,9 +204,9 @@ export default {
     font-size: 10px;
     font-weight: 700;
     letter-spacing: .3px;
-    color: #f0c674;
-    background: rgba(240, 198, 116, 0.14);
-    border: 1px solid rgba(240, 198, 116, 0.28);
+    color: var(--player-pop-gold);
+    background: rgba(var(--player-pop-gold-rgb), 0.14);
+    border: 1px solid rgba(var(--player-pop-gold-rgb), 0.28);
     vertical-align: 1px;
   }
 
@@ -203,9 +221,9 @@ export default {
     font-size: 10px;
     font-weight: 600;
     letter-spacing: .3px;
-    color: rgba(255, 255, 255, 0.62);
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--player-pop-secondary);
+    background: var(--player-pop-chip);
+    border: 1px solid var(--player-pop-border);
     vertical-align: 1px;
   }
 
@@ -220,8 +238,8 @@ export default {
     width: 28px;
     height: 22px;
     border-radius: 5px;
-    background: var(--player-menu-soft);
-    color: var(--player-menu-text);
+    background: var(--player-pop-soft);
+    color: var(--player-pop-text);
     font-size: 11px;
     font-weight: 700;
     display: flex;
@@ -235,11 +253,11 @@ export default {
     flex-direction: column;
     min-width: 0;
 
-    .qm-label { font-size: 13px; font-weight: 600; color: var(--player-menu-text); line-height: 1.3; }
-    .qm-desc { font-size: 11px; color: var(--player-menu-muted); margin-top: 1px; }
+    .qm-label { font-size: 13px; font-weight: 600; color: var(--player-pop-text); line-height: 1.3; }
+    .qm-desc { font-size: 11px; color: var(--player-pop-muted); margin-top: 1px; }
   }
 
-  .qm-check { color: var(--player-menu-accent); font-size: 16px; flex-shrink: 0; }
+  .qm-check { color: var(--player-pop-accent); font-size: 16px; flex-shrink: 0; }
 }
 
 // Menu transition (reuse motion tokens)

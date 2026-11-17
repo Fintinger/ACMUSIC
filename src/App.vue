@@ -89,6 +89,8 @@
       <AccentPicker v-if="showAccentPicker"/>
     </el-dialog>
     <ChangelogDialog :visible.sync="showChangelog"/>
+    <!-- 「添加到歌单」全局弹窗：歌曲行 / 播放列表 / 大播放器都通过 $bus 唤起，只此一份 -->
+    <AddToPlaylistDialog/>
     <div v-show="showPlayer" class="player">
       <MusicPlayer :song="song"/>
     </div>
@@ -108,6 +110,7 @@ import AppFooter from "@/components/common/AppFooter";
 import MobileNotice from "@/components/common/MobileNotice";
 import AccentPicker from '@/components/common/AccentPicker';
 import ChangelogDialog from '@/components/common/ChangelogDialog';
+import AddToPlaylistDialog from '@/components/common/AddToPlaylistDialog';
 import { isChangelogUnread, markChangelogSeen } from '@/utils/changelog';
 import {watchAccent} from '@/utils/accent';
 import {doLogout} from "@/utils/auth";
@@ -118,7 +121,7 @@ import {getStoredTheme, setTheme, watchTheme} from '@/utils/theme'
 
 export default {
   name: 'App',
-  components: {MusicPlayer, DoSearch, PageBack, AppFooter, MobileNotice, AccentPicker, ChangelogDialog},
+  components: {MusicPlayer, DoSearch, PageBack, AppFooter, MobileNotice, AccentPicker, ChangelogDialog, AddToPlaylistDialog},
   data() {
     return {
       song: {},
@@ -351,9 +354,7 @@ export default {
 </script>
 
 <style lang="scss">
-//引入字体图标
-//@import url("//at.alicdn.com/t/font_3420115_om6dc2ht2eb.css");
-@import "assets/ac-font/iconfont.css";
+// 图标：只剩内联 SVG 一套（src/config/icon.js + BaseIcon），字体图标已清掉
 //基本样式
 @import "assets/scss/base/reset";
 //当前页面样式

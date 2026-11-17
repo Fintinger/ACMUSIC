@@ -87,7 +87,7 @@
           <div class="modeWrap" ref="modeWrap">
             <span
                 class="modeBtn"
-                :class="['mode-' + playMode, { 'is-chorus': effectiveForm !== 'full' }]"
+                :class="{ 'is-chorus': effectiveForm !== 'full', 'is-locked': policyLocked && playMode !== 'loop' }"
                 :title="modeBtnTitle"
                 @click="onModeClick"
                 @contextmenu.prevent="openModeMenu"
@@ -112,6 +112,13 @@
             </transition>
           </div>
           <span class="miniTrackBtn" @click="nextSong"><BaseIcon name="next" :size="18"/></span>
+          <!-- 当前歌曲加入歌单：跟着下一首走，和传输控件同一档视觉 -->
+          <span
+              class="miniTrackBtn addPlBtn"
+              title="添加到歌单"
+              aria-label="添加到歌单"
+              @click.stop="addCurrentToPlaylist"
+          ><BaseIcon name="playlistPlus" :size="16"/></span>
         </div>
         <div class="barProgress">
           <span class="barTime">{{ formatTime(timeNow) }}</span>
@@ -244,18 +251,31 @@
           </el-dropdown>
         </div>
         <div class="barItem playlistWrap">
-          <el-dropdown v-if="currentPlaylist.length" trigger="click" placement="top" @command="handleCommand" @visible-change="onDropdownToggle">
+          <el-dropdown ref="queueDropdown" v-if="currentPlaylist.length" trigger="click" placement="top" @command="handleCommand" @visible-change="onDropdownToggle">
             <span class="playlistTrigger">
-              <BaseIcon name="play"/>
+              <!-- 播放三角语义是"播放"，这里其实是"打开队列"，换成列表图标 -->
+              <BaseIcon name="list"/>
               <span class="plCount">{{ currentPlaylist.length }}</span>
             </span>
+            <!-- 和定时/副歌一致：带一个指向触发按钮的倒三角（popper 默认把箭头对准参考元素中心） -->
             <el-dropdown-menu slot="dropdown" class="playlistDropdown">
-              <div class="plHeader">
-                <span>播放列表</span>
-                <span class="plTotal">{{ currentPlaylist.length }} 首</span>
-              </div>
-              <div class="plActions">
-                <el-button size="mini" type="text" @click="clearPlaylist">清空列表</el-button>
+              <!-- 顶部操作条：固定在列表上方，列表滚动时不动 -->
+              <div class="plHead">
+                <span class="plTitle">播放列表<em class="plTotal">{{ currentPlaylist.length }}</em></span>
+                <span class="plHeadOps">
+                  <button
+                      type="button"
+                      class="plHeadBtn"
+                      title="把当前播放列表全部加入某个歌单"
+                      @click.stop="addQueueToPlaylist"
+                  ><BaseIcon name="playlistPlus" :size="13"/>收藏全部</button>
+                  <button
+                      type="button"
+                      class="plHeadBtn is-danger"
+                      title="清空播放列表"
+                      @click.stop="clearPlaylist"
+                  ><BaseIcon name="delete" :size="13"/>清空</button>
+                </span>
               </div>
               <div class="plItems">
                 <el-dropdown-item v-for="s in currentPlaylist" :key="s.id" :class="{ active: s.curSong }" :command="s">
@@ -449,6 +469,8 @@ export default {
       isPersonalFM: false,
       // 续批的 in-flight promise：并发调用要复用同一个，否则会重复拉两批
       heartExtendPromise: null,
+      // 取批令牌：换台（playAllSong）时自增，在途的心动开启请求回来时凭它作废
+      heartRequestToken: 0,
       // 无 UI 时 FM 续播的 in-flight 标记（预取 / 队尾取流各一个）
       fmPrefetching: false,
       fmFetchingSelf: false,
@@ -520,18 +542,41 @@ export default {
       return ''
     },
     config() { return config },
+    /**
+     * 模式按钮的 title：只报"当前是什么"，不带任何操作说明（不写括号）。
+     *  - 普通队列：队列策略名
+     *  - 心动 / 私人FM：来源 + 当前那一档（如 `心动模式 · 顺序播放`）——
+     *    这两种模式下能生效的只有顺序播放和单曲循环，报出来是准确的
+     * 叠加副歌形态时末尾再补一段。
+     */
     modeBtnTitle() {
-      const policy = this.modeLabel
       const form = this.effectiveForm === 'chorus' ? '只播副歌' : (this.effectiveForm === 'ab' ? 'A-B 循环' : '')
-      const src = this.heartMode ? '心动模式' : ''
-      const tail = [form, src].filter(Boolean).join(' · ')
-      return tail
-        ? `${policy} · ${tail}（右键打开四层总览）`
-        : `${policy}（右键打开四层总览）`
+      const parts = []
+      if (this.policyLocked) {
+        // 心动 / 私人FM：来源 + 当前那一档（只可能是顺序播放或单曲循环）
+        parts.push(this.heartMode ? '心动模式' : '私人FM')
+        parts.push(this.modeLabel)
+      } else {
+        parts.push(this.modeLabel)
+      }
+      if (form) parts.push(form)
+      return parts.join(' · ')
     },
     modeLabel() {
       const map = { order: '列表循环', sequence: '顺序播放', loop: '单曲循环', random: '随机播放' }
       return map[this.playMode] || '列表循环'
+    },
+    /**
+     * 队列策略是否被"接管"了。
+     *
+     * 心动模式 / 私人 FM 都是"下一首从哪来"的来源层，它们自己决定下一首，所以
+     * 列表循环（首尾相接）和随机（打乱顺序）在这两种模式下不成立，UI 置灰不可切。
+     * **顺序播放和单曲循环保留**：前者就是推荐流真实的推进方式（顺着往下走、队尾续批），
+     * 后者只决定"这一首放完要不要重播"，与来源无关。
+     * 进入这两种模式时会把列表循环 / 随机对齐成顺序播放，见 _heartOn / _fmModeHandler。
+     */
+    policyLocked() {
+      return this.heartMode || this.isPersonalFM
     },
     // ---------------- 四层播放模式的"当前组合" ----------------
     /**
@@ -545,9 +590,14 @@ export default {
      * 用户反而学不到这个标签是干什么的。
      */
     stackSegments() {
-      const seg = [this.modeLabel]
-      if (this.heartMode) seg.push('心动')
-      else if (this.isPersonalFM) seg.push('私人FM')
+      /**
+        * 第一段：策略没被接管时是队列策略（列表循环…），被接管时换成来源本身
+       * （心动模式 / 私人FM），第二段补上此时真正生效的那一档（顺序播放 / 单曲循环）。
+       * 等价关系：!policyLocked ⟺ 心动和 FM 都没开，所以原来那两段 push 可以去掉。
+       */
+      const seg = this.policyLocked
+        ? [this.heartMode ? '心动模式' : '私人FM', this.modeLabel]
+        : [this.modeLabel]
       if (this.effectiveForm === 'chorus') seg.push('副歌')
       else if (this.effectiveForm === 'ab') seg.push('A-B')
       if (this.sleepMode === 'song') seg.push('本首后停')
@@ -558,9 +608,10 @@ export default {
     // 注意：stackSegments 是 computed，取的是值不是函数，不能再加 () 调用
     stackSummary() { return this.stackSegments.join(' · ') },
     /** 只有队列策略、其余全是默认值时，标签不该抢视觉（.is-stacked 才上主题色） */
-    stacked() { return this.stackSegments.length > 1 },
+    stacked() { return this.policyLocked || this.stackSegments.length > 1 },
     stackTitle() {
-      return `当前播放组合：${this.stackSummary}（点击展开四层总览，可逐层修改）`
+      // 和模式按钮保持一致：只报状态，不写"点击/右键…"这类操作说明
+      return `当前播放组合：${this.stackSummary}`
     },
     /**
      * 总览面板要的全部状态，一次传进去（避免十几条 props）。
@@ -569,6 +620,7 @@ export default {
     modeLayers() {
       return {
         policy: this.playMode,
+        policyLocked: this.policyLocked,
         fm: this.isPersonalFM,
         heart: this.heartMode,
         heartBusy: this.heartBusy,
@@ -781,6 +833,19 @@ export default {
     song(val) {
       console.trace('[CurrentSongSet] song_watch', val && val.id)
       console.log('[SongState]', { action: 'song_watch', currentSongId: this.currentSong.id || null, playlistFirstId: this.currentPlaylist[0] && this.currentPlaylist[0].id || null, requestId: this.playRequestId })
+      /**
+       * 外部点歌（App.vue 的 songClk）也是一次"换台"，要做两件事：
+       *  ① 心动 / 私人 FM 这两种"队列来源"必须一起退掉（心动也是独立的播放模式），
+       *     否则用户从别的歌单点了首歌，队尾还在按红心歌单续批；
+       *  ② 队列跟着换：推荐流的队列不能和用户后来点的歌混在一起
+       *     （不同播放模式下的歌单不混用）。
+       *     FM 那边由 _fmModeHandler 负责收队（App 在塞 song 之前先发了 'fm-mode' false），
+       *     心动没有那条信号，在这里补：先把 wasHeart 记下来，退出后再收队。
+       *     `val` 没有 id 说明不是点歌（App.clearAll 的 song = {}），既不用收队也不用点歌。
+       */
+      const wasHeart = this.heartMode
+      this._exitStreamModes()
+      if (wasHeart && val && val.id) this._collapseQueueToCurrent()
       this.playIntentId++
       this.playContextId++
       this.currentSongSource = 'unknown'
@@ -788,6 +853,12 @@ export default {
       console.log('[SourceChange]', { to: 'unknown', songId: val && val.id, trigger: 'song_watch' })
       this.currentSong = normalizeTrack(val)
       this.updateMiniBackground()
+      /**
+       * 清空播放列表走的是 App.clearAll → `song = {}`。
+       * 这里必须把计时和音源一起归零：audio 里还留着上一首的 src 和进度，
+       * 结果就是"未选择歌曲"的播放条上挂着 00:10 / 02:46，点播放还会接着放旧歌。
+       */
+      if (!val || !val.id) this._resetIdleState()
     },
     currentSong(val, oldVal) {
       if (val.id) {
@@ -829,9 +900,6 @@ export default {
           this.pushPromise(this.checkSong(this.currentSong.id, this.playRequestId))
         }
         const inPlaylist = this.currentPlaylist.findIndex(item => item.id === val.id)
-        if (this.currentSongSource !== 'playlist' && this.currentSongSource !== 'restore' && inPlaylist) {
-          console.log('[SourceGuard]', { songId: val.id, source: this.currentSongSource, playlistContains: true, action: 'keep_source' })
-        }
         if (this.currentSongSource === 'playlist') {
           this.curIndex = inPlaylist
           if (this.curIndex === -1) this.curIndex = 0
@@ -849,6 +917,22 @@ export default {
             console.log('[PlaylistSync]', { action: 'append', songId: val.id, index: this.curIndex, source: this.currentSongSource })
           }
           this.currentPlaylist.forEach(el => { el.curSong = el.id === val.id })
+        }
+        /**
+         * 【关键修复】点歌走的是 App.vue 的 songClk → props.song 这条路，
+         * 它只会把 source 打成 'unknown'，上面两个分支只负责对齐 curIndex，
+         * source 却一直停在 'unknown'。于是之后 preSong / nextSong / _autoNext
+         * 改的 curIndex 会被 curIndex watcher 里的 PlaylistGuard 当成"非队列切歌"
+         * 整颗丢掉 —— 表现就是：依次点播两首歌（队列只有 2 首）后「上一首」点了没反应，
+         * 而且这首播完也不会自动接下一首。
+         * 走到这里这首歌必定已在队列里（命中 inPlaylist，或被 PUSH_PLAYLIST 追加），
+         * 播放上下文就是队列本身：对齐 contextId 后正式接管为 'playlist'。
+         * isRestoring / 'restore' 期间不动，恢复流程在自己的 $nextTick 里收尾。
+         */
+        if (!this.isRestoring && this.currentSongSource !== 'playlist' && this.currentSongSource !== 'restore') {
+          this.playlistContextId = this.playContextId
+          this.currentSongSource = 'playlist'
+          console.log('[SourceChange]', { to: 'playlist', songId: val.id, trigger: 'currentSong', index: this.currentPlaylist.findIndex(t => t.id === val.id) })
         }
         this.$emit('songChange', val)
         this.$emit('getLyric', val.id)
@@ -923,16 +1007,27 @@ export default {
       if (!this.fadeStarted) this._rememberVolume(val)
     },
     /**
-     * 退出 FM 模式时（如 App.vue 跳到非 FM 歌单）清空播放列表，只留当前歌曲
-     * currentPlaylist 仍在 Vuex，所以走 commit
-     *
-     * 顺带把"FM 是否在放"镜像进 store：首页漫游卡的「播放中」徽标读它。
+     * 把"FM 是否在放"镜像进 store：首页漫游卡的「播放中」徽标读它。
      * 不镜像的话卡片只能看 fmMode（选了哪个模式），于是心动模式/普通歌单接管队列后
      * 漫游卡仍然亮着"播放中"，和心动卡一起显示两个正在播放。
+     *
+     * 【为什么不在这里清队】原来这里还有一句 `REPLACE_PLAYLIST([currentSong])`
+     * （"退出 FM 只留当前这首"）。但它对**所有**退出 FM 的路径生效，包括
+     * "FM 播着的时候点了别的歌单" —— 那时 playAllTracks 已经把队列换成新歌单了，
+     * 这一刀会把新歌单清成一首，等于点了播放全部却只剩一首歌。
+     * 清队语义只属于"用户从 FM 退到点播某首歌"，所以挪到 _fmModeHandler 里，
+     * 由它显式触发（时机仍然是 nextTick，等新歌塞进队列之后再清）。
      */
     isPersonalFM(val) {
       this.$store.commit('TracksAbout/SET_FM_ACTIVE', val)
-      if (!val) this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [this.currentSong])
+    },
+    /**
+     * 面板开着时队列长度变了（移除/追加），面板高度跟着变，
+     * 底边要重新贴回 fullBar —— 只靠打开时校正一次会被撑出缝。
+     */
+    'currentPlaylist.length'() {
+      if (!this.isDropdownOpen) return
+      this._schedulePanelAlign()
     },
     /**
      * FM 预加载：进入最后一首时主动 publish 'fmPrefetch'（**只拉数据，不应用**）
@@ -1139,6 +1234,33 @@ export default {
         this.miniBgStyle = ''
       }
       img.src = cover
+    },
+    /**
+     * 回到"没有当前歌曲"的空闲态。
+     *
+     * 触发场景：清空播放列表、把队里最后一首移除。
+     * 只 pause 是不够的——timeNow / timeDuration 还是上一首的值，进度条会停在
+     * 00:10 / 02:46；与此同时 audio 里还留着上一首的 src，点播放会把它放出来。
+     * 所以这里把计时、加载态、音源一起清掉，让播放条真正回到"未选择歌曲"。
+     */
+    _resetIdleState() {
+      this.timeNow = 0
+      this.timeDuration = 0
+      this.bufferedTime = 0
+      this.isPlay = false
+      this.isLoading = false
+      this.showPlayerPending = false
+      this.currentQuality = { requested: config.player.level, actual: '', isUnblock: false }
+      this.songLevels = []
+      if (!this.sel) return
+      // 摘掉 src 会触发一次 error 事件（无媒体源），临时压掉，避免弹"音源加载失败"
+      this.suppressAudioError = true
+      try {
+        this.sel.pause()
+        this.sel.removeAttribute('src')
+        this.sel.load()
+      } catch (e) { /* 浏览器差异，忽略 */ }
+      setTimeout(() => { this.suppressAudioError = false }, 1000)
     },
     init() { this.promiseList = []; this.isPlay = false; this.timeDuration = 0; this.timeNow = 0 },
     pushPromise(promise) { this.promiseList.unshift(promise) },
@@ -1542,6 +1664,15 @@ export default {
     },
     playSong() {
       const isCurrentEmpty = JSON.stringify(this.currentSong) === '{}'
+      /**
+       * 队列空 + 没有当前曲：audio 里可能还留着上一首的 src，
+       * 直接 play() 会把上一首放出来（UI 却写着"未选择歌曲"）。这里直接拦下。
+       */
+      if (isCurrentEmpty && !this.currentPlaylist.length) {
+        this.isPlay = false
+        this.showHint('播放列表为空', 'sequence', 2500)
+        return
+      }
       const playlistFirst = this.currentPlaylist[0]
       console.log('[SongState]', { action: 'playSong', isCurrentEmpty, currentSongId: this.currentSong.id || null, playlistFirstId: playlistFirst && playlistFirst.id || null, requestId: this.playRequestId })
       if (isCurrentEmpty && this.currentPlaylist.length) { console.trace('[CurrentSongSet] playSong_fallback'); this.currentSongSource = 'playlist'; this.currentSong = this.currentPlaylist[0] }
@@ -1570,7 +1701,22 @@ export default {
     preSong() {
       this.onInteract()
       if (!this._inPlaylist()) return
-      this.curIndex = this.getPrevIndex()
+      const prev = this.getPrevIndex()
+      /**
+       * 心动 / 私人FM 的队列是"现生成的推荐流"，不是用户排好的歌单：
+       * 第一首之前没有上一首，getPrevIndex 会返回 -1。原地不动 + 一条提示，
+       * 不再像以前那样走列表循环回绕到队尾（那等于凭空跳到一首没听过的推荐）。
+       * 普通队列的 -1 不会出现（那边是首尾相接的回绕）。
+       */
+      if (prev < 0) {
+        if (this.heartMode || this.isPersonalFM) {
+          const stream = this.heartMode ? 'heart' : 'fm'
+          console.log('[PrevGuard]', { action: 'skip_stream_head', stream, curIndex: this.curIndex, count: this.currentPlaylist.length })
+          this.showHint(stream === 'heart' ? '已经是心动推荐的第一首' : '已经是本批 FM 的第一首', stream === 'heart' ? 'likeFill' : 'radio', 2500)
+        }
+        return
+      }
+      this.curIndex = prev
     },
     nextSong() {
       this.onInteract()
@@ -1616,6 +1762,8 @@ export default {
       }, 1000)
       // 定时停止：本曲已消耗掉，到点就停，不再往下切
       if (this._consumeSleep()) return
+      // 单曲循环在心动 / 私人FM 下照常生效（这是推荐流里唯一保留的队列策略）：
+      // 开了就是"把当前这首循环听"，不再往推荐流里推进
       if (this.playMode === 'loop' && !(opts && opts.skipLoop)) { this._restartCurrent(); return }
       if (this.heartMode) { this._heartAdvance(); return }
       if (this.isPersonalFM) {
@@ -1758,10 +1906,8 @@ export default {
      * 「列表循环」把用户绕回原来的歌，语义就糊了。
      *
      * 两个坑：
-     *  1. `isPersonalFM = false` 必须在 REPLACE_PLAYLIST **之前很久**做——
-     *     isPersonalFM 的 watcher 会 REPLACE_PLAYLIST([currentSong]) 把队列清成一首，
-     *     而 watcher 是 nextTick 才跑，同帧内先 REPLACE 会被它覆盖掉。放在异步取流
-     *     之前就天然错开了。
+     *  1. `isPersonalFM = false` 要在异步取流之前就做——FM 的退出清队（见 _fmModeHandler）
+     *     是 nextTick 跑的，取流回来时早跑完了，不会把新队列覆盖掉。
      *  2. `curIndex = 0` 很可能是**空操作**（Vue 对同值赋值不触发 watcher），
      *     这正是之前 FM 换不了歌的老毛病。所以必须显式判断：目标下标与当前下标
      *     相同时直接改 currentSong，不走 curIndex。
@@ -1771,11 +1917,20 @@ export default {
       if (!seed) { this.$toast.warning('先播放一首歌，心动模式需要一首歌作为起点'); return }
       if (!this.isLogin) { this.$toast.warning('心动模式基于你的红心歌单，请先登录'); return }
       if (this.isPersonalFM) this.isPersonalFM = false
+      const token = ++this.heartRequestToken
       this.heartBusy = true
       fetchHeartBatch(seed, 20).then(list => {
+        // 取流期间用户换了台（playAllSong → _exitStreamModes）：这批属于旧队，丢掉
+        if (token !== this.heartRequestToken) return
         this.heartBusy = false
         if (!list.length) { this.$toast.info('这次没拿到心动推荐，稍后再试'); return }
         this.heartMode = true
+        /**
+         * 心动模式默认按顺序播放：它本来就是"顺着推荐流往下走"，队尾续批而不是绕回第一首。
+         * 列表循环 / 随机在这条流里没有意义，所以只把这两档对齐成 sequence；
+         * 用户本来开着单曲循环的话保留（那是明确的"这首多听几遍"意图）。
+         */
+        if (this.playMode === 'order' || this.playMode === 'random') this.setPlayMode('sequence', true)
         this.playContextId++
         this.playlistContextId = this.playContextId
         this.currentSongSource = 'playlist'
@@ -1800,6 +1955,7 @@ export default {
         this.showHint(`心动模式：已换上 ${list.length} 首，从第 1 首开始播`, 'likeFill', 5000)
         console.log('[Heart]', { action: 'on', seed, got: list.length, first: target.id })
       }).catch(err => {
+        if (token !== this.heartRequestToken) return
         this.heartBusy = false
         const map = {
           NO_UID: '心动模式需要登录',
@@ -1823,6 +1979,8 @@ export default {
       if (!seed) return Promise.resolve(false)
       this.heartExtendPromise = fetchHeartBatch(seed, 20).then(list => {
         this.heartExtendPromise = null
+        // 在途期间已经换台/关了心动：这批属于旧队列，绝不能 concat 到新歌单尾巴上
+        if (!this.heartMode) return false
         if (!list.length) return false
         const seen = new Set(this.currentPlaylist.map(t => String(t.id)))
         const fresh = list.filter(t => !seen.has(String(t.id)))
@@ -1873,10 +2031,11 @@ export default {
       return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
     },
     getPrevIndex() {
-      // FM 模式：同上，不走 shuffle
-      if (this.isPersonalFM) {
-        return this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1
-      }
+      /**
+       * 心动 / 私人FM：队列是推荐流，队列策略（随机 / 循环）不参与，一律线性后退；
+       * 队首返回 -1 表示"没有上一首"，由 preSong 决定原地不动并给出提示。
+       */
+      if (this.heartMode || this.isPersonalFM) return this.curIndex > 0 ? this.curIndex - 1 : -1
       if (this.playMode === 'random') return this._prevShuffleIndex()
       return this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1
     },
@@ -1926,13 +2085,44 @@ export default {
       } catch (e) { /* ignore */ }
     },
     togglePlayMode() {
+      /**
+       * 心动 / 私人FM 接管队列来源时，列表循环 / 顺序 / 随机都不生效，
+       * 但单曲循环仍然有意义（就是想把当前这首循环听）。所以这里不做"点了没反应"，
+       * 而是变成"开 / 关单曲循环"：关掉时还回上一条策略（它不生效，但退出推荐流后接着用）。
+       */
+      if (this.policyLocked) {
+        if (this.playMode === 'loop') {
+          this.setPlayMode(this._policyBeforeLoop || 'sequence', true)
+          return
+        }
+        this.setPlayMode('loop')
+        return
+      }
       const order = ['order', 'sequence', 'loop', 'random']
       const idx = order.indexOf(this.playMode)
       this.setPlayMode(order[(idx + 1) % order.length])
     },
-    /** 直达选择（菜单用）：不再依赖三态滚动 */
-    setPlayMode(mode) {
+    /**
+     * 直达选择（菜单用）：不再依赖三态滚动
+     * @param {string} mode order / sequence / loop / random
+     * @param {boolean} forceRestore 内部用：跳过"推荐流锁"，把模式还原成上一条策略
+     */
+    setPlayMode(mode, forceRestore) {
       if (['order', 'sequence', 'random', 'loop'].indexOf(mode) === -1) return
+      /**
+       * 兜底：菜单项已经置灰，这里再挡一次（键盘 / 脚本调用也不该改到不生效的策略）。
+       * 心动 / 私人FM 下允许"顺序播放"和"单曲循环"——前者就是这两种模式真实的推进方式，
+       * 后者是用户想把当前这首循环听；列表循环 / 随机才是不生效的两档。
+       */
+      if (!forceRestore && this._policyBlocked(mode)) {
+        // 静默挡掉（不弹提示文字）：置灰本身已经说明了，再弹一条只是噪音
+        console.log('[PlayMode]', { action: 'skip_locked', mode, heart: this.heartMode, fm: this.isPersonalFM })
+        return
+      }
+      // 在推荐流里开单曲循环：记住上一条策略，关掉循环时能还回去
+      if (!forceRestore && this.policyLocked && mode === 'loop' && this.playMode !== 'loop') {
+        this._policyBeforeLoop = this.playMode
+      }
       // 不关总览面板：面板是"四层一起调"的地方，选完队列策略还要能接着改别的层
       this.playMode = mode
       if (mode === 'random') {
@@ -1943,6 +2133,19 @@ export default {
       }
       try { localStorage.setItem('acmusic_play_mode', mode) } catch (e) { /* ignore */ }
       console.log('[PlayMode]', { mode })
+    },
+    /**
+     * 心动 / 私人FM 下哪些队列策略不可选。
+     *
+     * 这两种模式的推进方式是"顺着推荐流往下走"，等价于顺序播放 —— 所以 sequence
+     * 不只是可用，还是它们的默认档（见 _heartOn）。单曲循环只决定"这一首放完要不要
+     * 重播"，也不影响来源，照样可用。真正不生效的是：
+     *  - 列表循环：推荐流没有"首尾相接"这回事，队尾是续批；
+     *  - 随机：shuffle 会打乱推荐顺序，和"顺着流走"冲突。
+     */
+    _policyBlocked(mode) {
+      if (!this.policyLocked) return false
+      return mode !== 'sequence' && mode !== 'loop'
     },
     /**
      * 拉取当前歌曲实际可用的音质档位。
@@ -2658,9 +2861,50 @@ export default {
       if (visible) {
         this.clearHideTimer()
         this.$nextTick(() => this._scrollActiveSong('open'))
+        this._schedulePanelAlign()
       } else {
         this.scheduleHide()
       }
+    },
+    /**
+     * 排一次底边校正：第一枪 120ms（早，用户看不到跳），300ms 后再补一枪。
+     * 补枪是必要的——popper 把内联 top 写进来的时机晚于第一枪时，第一次会直接放弃；
+     * 校正本身幂等，已经贴边时第二次是空操作。
+     */
+    _schedulePanelAlign() {
+      clearTimeout(this.alignPanelTimer)
+      this.alignPanelTimer = setTimeout(() => {
+        this._alignQueuePanel()
+        this.alignPanelTimer = setTimeout(() => this._alignQueuePanel(), 300)
+      }, 120)
+    },
+    /**
+     * 让队列面板底边正好压在 fullBar 上沿。
+     *
+     * 为什么不能只靠 CSS：面板是 Element popper 定位的，列表出现滚动（面板变高）时
+     * 它会把 top 多算 5px，短面板贴边、长面板留 5px 缝，margin-bottom 调不准。
+     *
+     * 坐标系必须对齐：菜单挂在 body 上、播放条是 `position: fixed`。
+     * popper 检测到参考元素在 fixed 容器里时，会把菜单也设成 fixed（offsetTop 即视口坐标）；
+     * 万一是 absolute，offsetTop 就是文档坐标，需要减 scrollY。混用会把面板推出视口
+     *（滚 800px 后打开面板会直接飞出屏，表现为"展开瞬间消失"）。
+     *
+     * 用 offsetTop/offsetHeight 而不是 rect：rect 会被展开动画的 scaleY 影响
+     *（popper 把 transform-origin 设成 center bottom），offsetTop 不受影响。
+     */
+    _alignQueuePanel() {
+      const panel = document.querySelector('.playlistDropdown')
+      const bar = document.querySelector('.fullBar')
+      if (!panel || !bar) return
+      const cur = parseFloat(panel.style.top)
+      if (!isFinite(cur)) return
+      const fixed = getComputedStyle(panel).position === 'fixed'
+      const panelBottom = panel.offsetTop + panel.offsetHeight - (fixed ? 0 : window.scrollY)
+      const delta = bar.getBoundingClientRect().top - panelBottom
+      if (Math.abs(delta) < 1.5) return
+      const next = cur + delta
+      if (next < 0) return
+      panel.style.top = next + 'px'
     },
     _scrollActiveSong(reason) {
       setTimeout(() => {
@@ -2721,7 +2965,70 @@ export default {
       evt.preventDefault()
     },
     handleCommand(s) { this.onInteract(); this.showPlayerPending = true; this.isLoading = true; console.trace('[HandleCommandCall]'); console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.playIntentId++; this.playContextId++; this.currentSongSource = 'playlist'; this.currentPlaySourceLocked = true; this.playlistContextId = this.playContextId; console.log('[SourceChange]', { to: 'playlist', songId: s && s.id, trigger: 'handleCommand' }); console.trace('[CurrentSongSet] handleCommand', s && s.id); this.currentSong = s },
-    playAllSong(msgName, mode = "order") {
+    /**
+     * 把队列收成"只在播的这一首"。
+     *
+     * 触发场景：心动 / 私人 FM 播着，用户从别的歌单点了某一首。两种模式的队列是
+     * 现生成的推荐流，不该和用户点的歌混在一起（不同播放模式下的歌单不混用）。
+     *
+     * 必须等 nextTick：song / currentSong watcher 先把新歌塞进队列、对齐 curIndex，
+     * 这时候收才不会又被 append 回来。
+     */
+    _collapseQueueToCurrent() {
+      this.$nextTick(() => {
+        // 同一帧内又被重新打开（PersonalFM 卡片点播就是这么干的），别收
+        if (this.isPersonalFM) return
+        this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [this.currentSong])
+        /**
+         * 队列只剩这一首，下标必须归零。不归零的话 curIndex 会停在
+         * "推荐流批次下标 + 新歌追加位置"这种越界值上（比如 3 对长度 1），
+         * 下一次按上一首会取到 currentPlaylist[2] === undefined，
+         * 直接把 currentSong 写成 undefined。
+         */
+        this.curIndex = 0
+        // 队列刚被整体改写：立刻落盘，否则 5 秒内刷新会把旧的推荐流队列恢复回来
+        this._saveState()
+      })
+    },
+    /**
+     * 换台前退掉"会接管队列来源"的两种模式（心动 / 私人 FM）。
+     *
+     * 用户点了别的歌单/专辑的「播放全部」，语义就是"换个台"：队列整块换成那份歌单，
+     * 来源也必须一起换。退不掉的话队列虽然换了，来源还在 —— 心动会在队尾把红心推荐
+     * concat 到新歌单尾巴上，FM 会在队尾直接 REPLACE 掉整份歌单，等于用户点的那份
+     * 歌单被"抢"走了（用户反馈：FM / 心动播着的时候点别的歌单，模式没切走）。
+     *
+     * 两处细节：
+     *  - 心动还要作废在途的取批（heartRequestToken）：否则 0.5 秒后那批回来，
+     *    会把红心推荐 REPLACE 到刚换上的歌单上；
+     *  - FM 这里只关标志，不清队 —— "只留当前歌曲"的清队属于用户主动退出 FM 的场景，
+     *    见 _fmModeHandler。且 PersonalFM 自己的卡片点播会紧接着把 FM 重新打开
+     *    （同一个 tick 内值没变，watcher 根本不会跑），不会打断它。
+     */
+    _exitStreamModes() {
+      const wasHeart = this.heartMode
+      const wasFm = this.isPersonalFM
+      if (wasHeart || this.heartBusy) {
+        this.heartRequestToken++
+        this.heartBusy = false
+        this.heartExtendPromise = null
+        this.heartMode = false
+      }
+      if (wasFm) this.isPersonalFM = false
+      if (wasHeart || wasFm) {
+        console.log('[StreamMode]', { action: 'exit_on_switch', heart: wasHeart, fm: wasFm })
+      }
+    },
+    playAllSong(msgName, payload) {
+      /**
+       * payload 由 TracksAbout/playAllTracks 组装：`{ keepStream, mode }`。
+       * keepStream=true 表示"这批歌就是私人 FM 自己的流"——换队后来源不能退，
+       * 否则 FM 在第 1 首上就会丢失续批依据（表现为到了队尾不再取新歌）。
+       */
+      const keepStream = !!(payload && payload.keepStream)
+      const mode = (payload && payload.mode) || 'order'
+      // 换台先退模式：晚了的话 currentSong 已经换新歌，模式还开着就会继续按老来源续批
+      if (!keepStream) this._exitStreamModes()
       this.showPlayerPending = true
       this.isLoading = true
       this.playIntentId++
@@ -2743,7 +3050,11 @@ export default {
      * proactive 路径不调用此方法（PersonalFM 只 SET_FM_STAGED_BATCH，不 publish fmNewBatch）
      */
     playFmNewBatch(msgName, startIndex) {
-      if (!this.isPersonalFM) return
+      if (!this.isPersonalFM) {
+        // 队列已被换成新批次，但模式标志是关的 → 不会有声音，只留在控制台里
+        console.warn('[FmGate]', { action: 'skip_apply', reason: 'fm_off', startIndex, songId: this.currentSong.id, count: this.currentPlaylist.length })
+        return
+      }
       if (typeof startIndex !== 'number' || startIndex < 0) return
       if (startIndex >= this.currentPlaylist.length) return
       const target = this.currentPlaylist[startIndex]
@@ -2783,6 +3094,7 @@ export default {
      *    先用预取批次，没有就现拉一批。
      */
     _fmAdvance() {
+      console.log('[FmGate]', { action: 'advance', ui: isFmUiMounted(), curIndex: this.curIndex, count: this.currentPlaylist.length, source: this.currentSongSource })
       if (isFmUiMounted()) { pubsub.publish('getPersonalFM', new Date().getTime()); return }
       const staged = this.$store.state.TracksAbout.fmStagedBatch
       if (staged && staged.length) { this._applyFmBatch(staged); return }
@@ -2872,7 +3184,12 @@ export default {
       list.splice(idx, 1)
       if (!list.length) {
         this.$store.commit('TracksAbout/REPLACE_PLAYLIST', [])
-        this.pauseSong()
+        // 队列空了，来源模式（心动 / 私人FM）也跟着退出，别留一个假的"播放中"
+        this._exitStreamModes()
+        // 最后一首被移除 = 播放器正式空闲：当前曲与进度都要一起清掉
+        this.currentSong = {}
+        this.updateMiniBackground()
+        this._resetIdleState()
         this.showHint('播放列表已清空', 'sequence')
         return
       }
@@ -2885,6 +3202,38 @@ export default {
       }
       console.log('[Queue]', { action: 'remove', songId: s.id, index: idx, isCurrent })
     },
+    /**
+     * 当前歌曲加入歌单（入口在播放条控制行、下一首右边）。
+     * 和队列无关：FM / 心动下同样可用，加歌单只关心这首歌本身。
+     */
+    addCurrentToPlaylist() {
+      const s = this.currentSong
+      if (!s || !s.id) {
+        this.$toast.warning('还没有正在播放的歌曲')
+        return
+      }
+      this.$bus.$emit('open-add-to-playlist', { songs: [s], source: 'player' })
+    },
+    /**
+     * 当前播放列表整批加入歌单（队列面板头部入口）。
+     * 这里刻意不做任何过滤：登录校验、查重、分片都在全局弹窗里，
+     * 保证"从队列加"和"从列表加"走完全相同的链路。
+     */
+    addQueueToPlaylist() {
+      this.onInteract()
+      if (!this.currentPlaylist.length) return
+      if (!isLoggedIn()) {
+        this.$toast.warning('添加到歌单需要先登录')
+        return
+      }
+      this.$bus.$emit('open-add-to-playlist', {
+        songs: this.currentPlaylist.slice(),
+        source: 'queue'
+      })
+      // 弹窗盖在面板上，把面板收起来，免得关掉弹窗后它还挂在半空
+      const dd = this.$refs.queueDropdown
+      if (dd && typeof dd.hide === 'function') dd.hide()
+    },
     clearPlaylist() {
       this.$confirmBox({
         title: '清空播放列表',
@@ -2893,6 +3242,8 @@ export default {
         cancelText: '取消'
       }).then(() => {
         this.pauseSong()
+        // 队列都没了，"心动 / 私人FM 播放中"不该还亮着：先把来源模式退掉再清队
+        this._exitStreamModes()
         this.$bus.$emit("clearPlaylist")
         // 同步清除 localStorage 持久化数据
         // （_saveState 的守卫 if (!s || !s.id) return 会跳过 song 为空时的保存，
@@ -3136,7 +3487,12 @@ export default {
     },
     _saveState() {
       const s = this.currentSong
-      if (!s || !s.id) return
+      /**
+       * 队列可以独立于"当前歌曲"存在：用户先把歌加进播放列表、还没点播放时，
+       * currentSong 还是 {}。原来这里直接 return，于是这批歌在刷新后整批消失
+       * （currentPlaylist 只在内存 + player_state 里，这里是唯一的持久化入口）。
+       */
+      if ((!s || !s.id) && !this.currentPlaylist.length) return
       const MAX_TRACKS = 800
       const lite = t => ({
         id: t.id,
@@ -3159,7 +3515,7 @@ export default {
         playlist = playlist.slice(offset, offset + MAX_TRACKS)
       }
       const payload = {
-        song: {
+        song: (s && s.id) ? {
           id: s.id,
           name: s.name || '',
           // 专辑名要一起存：否则刷新后大播放器的专辑行是空的（原来只存了封面）
@@ -3170,7 +3526,7 @@ export default {
           ar: this._artistLite(s),
           alId: this._albumLite(s).id,
           mv: Number(s.mv) || 0
-        },
+        } : null,
         playlist,
         playlistOffset: offset,
         currentIndex: Math.max(0, this.curIndex - offset),
@@ -3524,8 +3880,24 @@ mounted() {
     // FM 模式标志（从 Vuex 下沉）：PersonalFM / HomePage / App 通过 $bus 通知
     // 心动模式与 FM 互斥（两者都要接管队列来源），开 FM 就关心动
     this._fmModeHandler = (val) => {
+      const wasFm = this.isPersonalFM
       this.isPersonalFM = !!val
       if (val && this.heartMode) this.heartMode = false
+      /**
+       * 私人FM 和心动一样，都是"顺着流往下走"：列表循环（首尾相接）和随机（洗牌）
+       * 在这条流里没有意义。进来时把这两档对齐成顺序播放，单曲循环保留。
+       */
+      if (val && (this.playMode === 'order' || this.playMode === 'random')) this.setPlayMode('sequence', true)
+      /**
+       * 从 FM 退到"点播某首歌"（App.vue 的 songClk 先发这个信号，再塞 props.song）：
+       * 队列只留最后在播的这首。必须等 nextTick —— 那时 song / currentSong watcher
+       * 才把用户点的那首追加进队列，currentSong 也才是"要留下的那首"。
+       * 换台（playAllSong）不经过这里，所以新歌单不会被清成一首。
+       */
+      if (!val && wasFm) {
+        // 从 FM 退到"点播某首歌"：队列只留最后在播的这首（下一帧等新歌入队后再收）
+        this._collapseQueueToCurrent()
+      }
     }
     this.$bus.$on('fm-mode', this._fmModeHandler)
     // 首页「心动模式」入口卡片：只发信号，真正的开关逻辑（登录校验/取流/换队列）在这里
@@ -3538,6 +3910,24 @@ mounted() {
      */
     this._pauseForVideoHandler = () => { if (this.isPlay) this.pauseSong() }
     this.$bus.$on('pause-song', this._pauseForVideoHandler)
+    /**
+     * 队列在别处被改写（列表行内的「加入播放列表」/「全部加入」）时立刻落盘。
+     * 不通知的话要等下一次切歌或 5 秒后的 timeupdate 才保存，
+     * 「队列里还没有在播歌曲」这一档更是永远不保存。
+     *
+     * 顺带处理「空队列加歌」：清空播放列表之后（或本次会话第一次加歌），
+     * 用户期望加完就能听到，这里挑刚加的那首直接开播。
+     * `wasEmpty` 保证只有"加之前队列是空的"才抢播放——往已有队列里加歌不打断当前播放。
+     */
+    this._queueChangedHandler = (payload) => {
+      this._saveState()
+      const playId = payload && payload.playId
+      if (!playId || !payload.wasEmpty) return
+      if (this.currentSong && this.currentSong.id) return
+      const target = this.currentPlaylist.find(t => t && String(t.id) === String(playId))
+      if (target) this.handleCommand(target)
+    }
+    this.$bus.$on('queue-changed', this._queueChangedHandler)
     this._onBeforeUnload = () => { this._saveState() }
     window.addEventListener('beforeunload', this._onBeforeUnload)
     /**
@@ -3579,7 +3969,9 @@ mounted() {
     this.$bus.$off('fm-mode', this._fmModeHandler)
     this.$bus.$off('heart-toggle', this._heartToggleHandler)
     this.$bus.$off('pause-song', this._pauseForVideoHandler)
+    this.$bus.$off('queue-changed', this._queueChangedHandler)
     if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
+    if (this.alignPanelTimer) { clearTimeout(this.alignPanelTimer); this.alignPanelTimer = null }
     this._clearSourceStatusTimers()
   }
 }
@@ -3855,6 +4247,9 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 
   .barControls {
     display: flex; align-items: center; gap: 12px; color: $text;
+    // 「添加到歌单」用绝对定位挂在控制组右侧：它不参与 flex 排布，
+    // 否则多出来的一颗按钮会把整组（含正中间的播放键）整体推左
+    position: relative;
     .miniTrackBtn {
       display: inline-flex; align-items: center; justify-content: center;
       width: 30px; height: 30px; border-radius: 50%;
@@ -3865,6 +4260,18 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       color: rgba(255,255,255,0.6);
       &:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.9); transform: scale(1.08); }
       &:active { transform: scale(0.92); }
+    }
+    // 「添加到歌单」：跟在下一首右边，比传输控件小一号、颜色更轻，
+    // 避免看起来像第四个播放控制
+    .addPlBtn {
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      margin-top: -13px;
+      width: 26px; height: 26px;
+      color: rgba(255,255,255,0.42);
+
+      &:hover { color: rgba(255,255,255,0.9); }
     }
     .modeWrap {
       position: relative;
@@ -3880,10 +4287,22 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       cursor: pointer; color: rgba(255,255,255,0.42);
       transition: all 160ms ease; font-size: 13px; position: relative;
       i { font-style: normal; }
-      &.mode-random { color: $accent; }
-      &.mode-loop { color: $accent; }
+      /**
+       * 四档队列策略一律同色（0.42 白）。
+       * 历史：2026-08 只有 order / random / loop 三档时，random 和 loop 被上了主色
+       * （"非默认模式高亮"），后来加第四档 sequence 时漏改，于是变成"随机/单曲紫、
+       * 列表/顺序浅"这种没有规律的样子。模式本身已经由图标形状区分，颜色不该再兼职，
+       * 主色只留给"叠加形态"（副歌 / A-B）和激活态。
+       */
       // 副歌形态生效时补一颗小点，避免"忘了自己开着副歌模式"
       &.is-chorus { color: $accent; }
+      // 心动 / 私人FM 接管队列来源时，非单曲循环的策略图标压暗
+      // （图标仍显示用户原来的策略，退出这两种模式后立刻恢复生效；
+      //  不换"禁用"光标 —— 按钮本身可点，点一下是开单曲循环）
+      &.is-locked {
+        opacity: .45;
+        &.is-chorus { color: rgba(255,255,255,0.42); }
+      }
       .chorusDot {
         position: absolute; right: 2px; bottom: 2px;
         width: 6px; height: 6px; border-radius: 50%;
@@ -3902,7 +4321,7 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
         background: rgba(255,255,255,0.07);
         border-color: rgba(255,255,255,0.06);
       }
-      &.mode-random:hover, &.mode-loop:hover, &.is-chorus:hover { color: $accent; }
+      &.is-chorus:hover { color: $accent; }
     }
     .barPlay {
       width: 32px; height: 32px; border-radius: 50%; background: $accent; color: #fff;
@@ -4009,23 +4428,25 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   .volumeWrap .volumeSlider {
     position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-    background: #1f202b; border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 10px; padding: 10px 10px 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); z-index: 10;
+    // 与播放列表/音质/定时同一套弹层配色（浅色主题下自动变白底深字）
+    background: var(--player-pop-bg); border: 1px solid var(--player-pop-border);
+    color: var(--player-pop-text);
+    border-radius: 12px; padding: 10px 10px 12px; box-shadow: 0 16px 48px var(--player-pop-shadow); z-index: 10;
     .volumeValue {
-      font-size: 11px; font-weight: 600; line-height: 1; color: rgba(255,255,255,0.75);
+      font-size: 11px; font-weight: 600; line-height: 1; color: var(--player-pop-secondary);
       font-variant-numeric: tabular-nums; min-width: 18px; text-align: center;
     }
     &::after {
       content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px;
       border-width: 6px 6px 0; border-style: solid;
-      border-color: #1f202b transparent transparent;
+      border-color: var(--player-pop-bg) transparent transparent;
     }
     input[type="range"] {
       writing-mode: vertical-lr; direction: rtl;
       width: 4px; height: 88px;
       -webkit-appearance: none; appearance: none;
-      background: rgba(255,255,255,0.1); border-radius: 2px; outline: none; cursor: pointer;
-      &::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+      background: var(--player-pop-chip); border-radius: 2px; outline: none; cursor: pointer;
+      &::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--player-pop-text); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
     }
   }
   .volume-pop-enter-active, .volume-pop-leave-active {
@@ -4145,59 +4566,96 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 <style lang="scss">
 /* global: playlist dropdown (teleported to body) */
 .playlistDropdown {
-  background: #1c1d29 !important;
-  border: 1px solid rgba(255,255,255,0.05) !important;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.55) !important;
+  background: var(--player-pop-bg) !important;
+  border: 1px solid var(--player-pop-border) !important;
+  box-shadow: 0 16px 48px var(--player-pop-shadow) !important;
   border-radius: 14px !important;
   padding: 0 !important;
-  min-width: 280px !important;
-  max-width: 380px;
+  box-sizing: border-box !important;
+  width: 250px !important;
+  min-width: 250px !important;
+  max-width: 250px;
   max-height: 420px;
-  overflow: hidden;
+  // 不能 overflow:hidden：popper 的倒三角挂在盒子外侧（bottom:-6px），会被裁掉。
+  // 圆角靠 .plItems 自己的 border-radius 收口。
+  overflow: visible;
+  /**
+   * 面板是 placement="top"、锚在播放条里的队列图标上，默认留白只有 5px，
+   * 面板底部会压进播放条顶部（实测重叠 16px，盖住控制区）。
+   * Popper 会把这个 margin 算进定位：28px 让面板底边正好贴在 fullBar 上沿。
+   */
+  margin-bottom: 23px !important;
 
-  .plHeader {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 18px 8px;
-    font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.85);
-
-    .plTotal { font-size: 12px; font-weight: 400; color: rgba(255,255,255,0.3); }
+  // 顶部操作条：面板里唯一不随列表滚动的一块（列表在 .plItems 内独立滚动）
+  .plHead {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+    padding: 10px 10px 8px 14px;
+    border-bottom: 1px solid var(--player-pop-border);
   }
 
-  .plActions {
-    padding: 0 18px 8px;
-    .el-button--text { color: rgba(255,255,255,0.3); font-size: 11px; padding: 3px 10px; border-radius: 10px;
-      &:hover { color: #ef4444; background: rgba(239,68,68,0.08); }
+  .plTitle {
+    display: inline-flex; align-items: baseline; gap: 4px;
+    font-size: 13px; font-weight: 700; color: var(--player-pop-text);
+
+    .plTotal {
+      font-size: 10px; font-weight: 500; color: var(--player-pop-muted);
+      font-variant-numeric: tabular-nums;
     }
   }
 
+  .plHeadOps { display: flex; align-items: center; gap: 0; }
+
+  // 250px 宽下面板左右都很紧：按钮压到 11px / 24px 高，
+  // 保证「收藏全部 + 清空」和标题能排在同一行不换行
+  .plHeadBtn {
+    display: inline-flex; align-items: center; gap: 3px;
+    height: 24px; padding: 0 6px;
+    border: 0; border-radius: 6px;
+    background: transparent;
+    color: var(--player-pop-muted);
+    font: inherit; font-size: 11px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+
+    &:hover { background: var(--player-pop-hover); color: var(--player-pop-text); }
+    &.is-danger:hover { background: rgba(229,68,77,0.14); color: var(--c-danger); }
+  }
+
   .plItems {
-    max-height: 340px; overflow-y: auto;
+    // overflow-x 必须显式关掉：行 hover 时原来有 translateX(3px)，
+    // 溢出会让 `overflow-y: auto` 顺带算出横向滚动条 —— 多出一条 15px 的条，
+    // 整个面板瞬间变高，看起来就是"鼠标一进去列表就往下长、盖住播放条"
+    max-height: 340px; overflow-y: auto; overflow-x: hidden;
+    // 容器不再 overflow:hidden（要给箭头留位置），底部圆角由列表自己收口，
+    // 否则 hover 底色会顶穿面板下方两个圆角
+    border-radius: 0 0 13px 13px;
 
     &::-webkit-scrollbar { width: 3px; }
     &::-webkit-scrollbar-track { background: transparent; }
-    &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
+    &::-webkit-scrollbar-thumb { background: var(--player-pop-border); border-radius: 2px; }
 
     .el-dropdown-menu__item {
       display: flex; flex-direction: column; gap: 2px;
       position: relative;
-      padding: 10px 64px 10px 18px; color: rgba(255,255,255,0.55); font-size: 13px;
-      transition: all 180ms ease; line-height: 1.3;
+      padding: 9px 82px 9px 14px; color: var(--player-pop-secondary); font-size: 13px;
+      transition: background-color 180ms ease, color 180ms ease; line-height: 1.3;
       overflow: hidden; min-width: 0;
 
       .plSongName { font-size: 13px; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .plSongArtist { font-size: 11px; color: rgba(255,255,255,0.25); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .plSongArtist { font-size: 11px; color: var(--player-pop-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
       &:hover {
-        background: rgba(255,255,255,.08); color: rgba(255,255,255,.96);
-        .plSongArtist { color: rgba(255,255,255,.70); }
-        transform: translateX(3px);
+        background: var(--player-pop-hover); color: var(--player-pop-text);
+        .plSongArtist { color: var(--player-pop-secondary); }
       }
 
       &.active {
-        background: rgba(var(--theme-accent-rgb), 0.1);
-        color: var(--c-accent); font-weight: 600;
-        border-left: 2px solid var(--c-accent);
-        .plSongArtist { color: rgba(var(--theme-accent-rgb), 0.5); }
+        background: var(--player-pop-soft);
+        color: var(--player-pop-accent); font-weight: 600;
+        border-left: 2px solid var(--player-pop-accent);
+        .plSongArtist { color: var(--player-pop-secondary); }
       }
     }
 
@@ -4211,26 +4669,26 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     .plOp {
       display: inline-flex; align-items: center; justify-content: center;
       width: 22px; height: 22px; border-radius: 6px;
-      color: rgba(255,255,255,0.42);
+      color: var(--player-pop-secondary);
       transition: background 140ms ease, color 140ms ease;
-      &:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.92); }
+      &:hover { background: var(--player-pop-chip); color: var(--player-pop-text); }
     }
   }
 
   .plEmpty {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 40px 18px; text-align: center; color: rgba(255,255,255,0.2); font-size: 13px;
+    padding: 40px 18px; text-align: center; color: var(--player-pop-muted); font-size: 13px;
     .plEmptyIcon { font-size: 32px; margin-bottom: 12px; opacity: .5; }
     p { margin: 0; line-height: 1.6; }
-    .plEmptyHint { font-size: 11px; color: rgba(255,255,255,0.1); margin-top: 4px; }
+    .plEmptyHint { font-size: 11px; color: var(--player-pop-muted); opacity: .65; margin-top: 4px; }
   }
 }
 
 /* global: 单曲形态下拉（teleported to body，scoped 样式管不到） */
 .chorusDropdown {
-  background: #1c1d29 !important;
-  border: 1px solid rgba(255,255,255,0.06) !important;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.55) !important;
+  background: var(--player-pop-bg) !important;
+  border: 1px solid var(--player-pop-border) !important;
+  box-shadow: 0 16px 48px var(--player-pop-shadow) !important;
   border-radius: 12px !important;
   padding: 6px !important;
   min-width: 156px !important;
@@ -4238,21 +4696,21 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   .el-dropdown-menu__item {
     display: flex; align-items: center; gap: 6px;
     padding: 8px 10px; border-radius: 8px;
-    font-size: 13px; color: rgba(255,255,255,0.62);
+    font-size: 13px; color: var(--player-pop-secondary);
     line-height: 1.4;
     transition: background 160ms ease, color 160ms ease;
 
-    &:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
+    &:hover { background: var(--player-pop-hover); color: var(--player-pop-text); }
     &.is-active {
-      color: var(--c-accent);
-      background: rgba(var(--theme-accent-rgb), 0.12);
+      color: var(--player-pop-accent);
+      background: var(--player-pop-soft);
       font-weight: 600;
     }
 
     .opt-hint {
       font-size: 10px; font-weight: 400;
-      color: rgba(255,255,255,0.28);
-      background: rgba(255,255,255,0.05);
+      color: var(--player-pop-muted);
+      background: var(--player-pop-chip);
       border-radius: 4px; padding: 1px 5px;
     }
   }
@@ -4260,9 +4718,9 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
 
 /* global: 定时停止下拉（teleported to body，scoped 样式管不到） */
 .sleepDropdown {
-  background: #1c1d29 !important;
-  border: 1px solid rgba(255,255,255,0.06) !important;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.55) !important;
+  background: var(--player-pop-bg) !important;
+  border: 1px solid var(--player-pop-border) !important;
+  box-shadow: 0 16px 48px var(--player-pop-shadow) !important;
   border-radius: 12px !important;
   padding: 6px !important;
   min-width: 186px !important;
@@ -4271,14 +4729,14 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   .el-dropdown-menu__item {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
     padding: 8px 10px; border-radius: 8px;
-    font-size: 13px; color: rgba(255,255,255,0.62);
+    font-size: 13px; color: var(--player-pop-secondary);
     line-height: 1.4;
     transition: background 160ms ease, color 160ms ease;
 
-    &:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
+    &:hover { background: var(--player-pop-hover); color: var(--player-pop-text); }
     &.is-active {
-      color: var(--c-accent);
-      background: rgba(var(--theme-accent-rgb), 0.12);
+      color: var(--player-pop-accent);
+      background: var(--player-pop-soft);
       font-weight: 600;
     }
   }
@@ -4288,11 +4746,11 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   .sdRow {
     display: flex; align-items: center; gap: 5px;
     padding: 7px 10px; border-radius: 8px;
-    font-size: 13px; color: rgba(255,255,255,0.62);
+    font-size: 13px; color: var(--player-pop-secondary);
     transition: background 160ms ease, color 160ms ease;
 
-    &:hover { background: rgba(255,255,255,0.06); }
-    &.is-active { color: var(--c-accent); background: rgba(var(--theme-accent-rgb), 0.1); font-weight: 600; }
+    &:hover { background: var(--player-pop-hover); }
+    &.is-active { color: var(--player-pop-accent); background: var(--player-pop-soft); font-weight: 600; }
 
     .sdLabel { flex-shrink: 0; }
     .sdUnit { flex-shrink: 0; font-weight: 400; }
@@ -4302,14 +4760,14 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       display: inline-flex; align-items: center; justify-content: center;
       width: 20px; height: 20px; border-radius: 6px;
       font-size: 14px; line-height: 1;
-      background: rgba(255,255,255,0.08);
-      color: rgba(255,255,255,0.8);
+      background: var(--player-pop-chip);
+      color: var(--player-pop-text);
       cursor: pointer; user-select: none;
       transition: background 140ms ease, color 140ms ease;
-      &:hover { background: rgba(255,255,255,0.18); color: #fff; }
+      &:hover { background: var(--player-pop-hover); }
       &:active { transform: scale(0.92); }
       // 到边界置灰但仍占位，避免按钮消失导致行宽跳动
-      &.disabled { opacity: 0.3; cursor: not-allowed; &:hover { background: rgba(255,255,255,0.08); } }
+      &.disabled { opacity: 0.3; cursor: not-allowed; &:hover { background: var(--player-pop-chip); } }
     }
 
     // 定宽而不是 flex:1 —— 撑满会让整个弹窗被拉宽，而这里只需要放下两三位数字
@@ -4321,12 +4779,12 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
       font-variant-numeric: tabular-nums;
       font-family: inherit;
       color: inherit;
-      background: rgba(0,0,0,0.22);
-      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--player-pop-input);
+      border: 1px solid var(--player-pop-border);
       border-radius: 6px;
       outline: none;
       transition: border-color 140ms ease, background 140ms ease;
-      &:focus { border-color: rgba(var(--theme-accent-rgb), 0.6); background: rgba(0,0,0,0.34); }
+      &:focus { border-color: var(--player-pop-accent); background: var(--player-pop-input); }
     }
   }
 
@@ -4335,30 +4793,30 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
   .sdFade {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     margin-top: 4px; padding: 9px 10px 7px;
-    border-top: 1px solid rgba(255,255,255,0.06);
-    font-size: 12px; color: rgba(255,255,255,0.45);
+    border-top: 1px solid var(--player-pop-border);
+    font-size: 12px; color: var(--player-pop-muted);
     cursor: pointer;
     transition: color 160ms ease;
-    &:hover { color: rgba(255,255,255,0.8); }
+    &:hover { color: var(--player-pop-text); }
   }
 
   .sdSwitch {
     position: relative; flex-shrink: 0;
     width: 26px; height: 14px; border-radius: 7px;
-    background: rgba(255,255,255,0.14);
+    background: var(--player-pop-chip);
     transition: background 180ms ease;
 
     &::after {
       content: '';
       position: absolute; top: 2px; left: 2px;
       width: 10px; height: 10px; border-radius: 50%;
-      background: rgba(255,255,255,0.75);
+      background: var(--player-pop-text);
       transition: transform 180ms ease, background 180ms ease;
     }
 
     &.on {
       background: rgba(var(--theme-accent-rgb), 0.55);
-      &::after { transform: translateX(12px); background: #fff; }
+      &::after { transform: translateX(12px); background: var(--theme-on-accent); }
     }
   }
 }

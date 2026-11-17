@@ -69,7 +69,8 @@
   --search-border: rgba(237, 241, 247, .14);
   --search-scroll: rgba(181, 193, 211, .4);
 
-  /* 播放器弹层独立于页面浅深主题，包含挂到 body 的下拉菜单。 */
+  /* 播放器本体（展开页的歌词/歌曲信息/进度/标签）：恒深色，不随页面主题。
+     这组值同时被 SongInfoPanel 等播放器内部区块复用，改动前先看它们是否也吃这套色。 */
   --player-menu-bg: #29313e;
   --player-menu-input: #202938;
   --player-menu-hover: #3a4556;
@@ -80,6 +81,22 @@
   --player-menu-soft: rgba(var(--theme-accent-rgb), .14);
   --player-menu-border: rgba(237, 241, 247, .16);
   --player-menu-shadow: rgba(10, 16, 28, .36);
+
+  /* 播放器弹层（音量 / 播放列表 / 音质 / 定时 / 副歌 / 模式）：跟随页面浅深主题。
+     和 --player-menu-* 分开，避免把播放器本体（歌词页）一起改成浅色。 */
+  --player-pop-bg: #ffffff;
+  --player-pop-input: #f2f2f4;
+  --player-pop-chip: rgba(0, 0, 0, .06);
+  --player-pop-hover: #f2f2f4;
+  --player-pop-text: #101013;
+  --player-pop-secondary: #555555;
+  --player-pop-muted: #666666;
+  --player-pop-accent: var(--theme-ink-light);
+  --player-pop-soft: rgba(var(--theme-accent-rgb), .10);
+  --player-pop-border: rgba(0, 0, 0, .10);
+  --player-pop-shadow: rgba(17, 24, 39, .16);
+  --player-pop-gold: #9a6a00;
+  --player-pop-gold-rgb: 154, 106, 0;
 
   /* ---- 阴影 ---- */
   --c-shadow-low: rgba(0, 0, 0, .04);
@@ -160,6 +177,21 @@ html[data-theme="dark"] {
   --c-shadow-low: rgba(0, 0, 0, .15);
   --c-shadow-mid: rgba(0, 0, 0, .28);
   --c-shadow-high: rgba(0, 0, 0, .42);
+
+  /* 播放器弹层：深色下回到原配色（比页面底亮一档 + 白描边） */
+  --player-pop-bg: #29313e;
+  --player-pop-input: #202938;
+  --player-pop-chip: rgba(255, 255, 255, .08);
+  --player-pop-hover: #3a4556;
+  --player-pop-text: #edf1f7;
+  --player-pop-secondary: #c1c9d6;
+  --player-pop-muted: #b0b9c8;
+  --player-pop-accent: var(--theme-ink-dark);
+  --player-pop-soft: rgba(var(--theme-accent-rgb), .14);
+  --player-pop-border: rgba(237, 241, 247, .16);
+  --player-pop-shadow: rgba(10, 16, 28, .36);
+  --player-pop-gold: #f0c674;
+  --player-pop-gold-rgb: 240, 198, 116;
 }
 
 /* 防刷新白闪：主题切换/首帧时页面底色跟随 token */

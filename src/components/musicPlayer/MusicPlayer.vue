@@ -60,8 +60,8 @@
           <div class="controlsRow" @keydown.left.stop @keydown.right.stop>
             <button type="button"
                 class="modeBtn"
-                :class="'mode-' + playMode"
-                :title="playMode === 'order' ? '列表循环' : playMode === 'sequence' ? '顺序播放' : playMode === 'random' ? '随机播放' : '单曲循环'"
+                :class="{ 'is-locked': modeLocked && playMode !== 'loop' }"
+                :title="modeBtnTitle"
                 @click="togglePlayMode"
             >
               <BaseIcon v-if="playMode === 'order'" name="loopList" :size="24"/>
@@ -218,6 +218,22 @@ export default {
     isLoading() { return this.$refs.pgPanel ? this.$refs.pgPanel.isLoading : false },
     bufferedTime() { return this.$refs.pgPanel ? this.$refs.pgPanel.bufferedTime : 0 },
     playMode() { return this.$refs.pgPanel ? this.$refs.pgPanel.playMode : 'order' },
+    /**
+     * 队列策略是否被"来源层"接管（心动 / 私人FM）—— 与 PlayerCore.policyLocked 同源，
+     * 但这里必须走 Vuex：$refs 不是响应式的，直接读 pgPanel.isPersonalFM 拿不到更新。
+     * fmActive 是 PlayerCore 单向镜像过来的"FM 真的在放"。
+     */
+    modeLocked() { return !!(this.heartMode || this.$store.state.TracksAbout.fmActive) },
+    heartMode() { return this.$store.state.TracksAbout.heartMode },
+    /**
+     * 模式按钮的 tooltip：只报当前状态，不带操作说明（不写括号）。
+     * 心动 / 私人FM 期间是"来源 · 当前那一档"（如 `心动模式 · 顺序播放`）。
+     */
+    modeBtnTitle() {
+      const policy = { order: '列表循环', sequence: '顺序播放', random: '随机播放', loop: '单曲循环' }[this.playMode] || '列表循环'
+      if (!this.modeLocked) return policy
+      return `${this.heartMode ? '心动模式' : '私人FM'} · ${policy}`
+    },
     progressPercent() { return this.duration ? (this.timeNow / this.duration) * 100 : 0 },
     bufferPercent() { return this.duration ? (this.bufferedTime / this.duration) * 100 : 0 },
     // 直接订阅 Core 的响应式状态，乐观更新与失败回滚同步显示。
@@ -836,13 +852,17 @@ export default {
       cursor: pointer;
       color: rgba(255,255,255,0.42);
       transition: all 180ms ease;
-      &.mode-random, &.mode-loop { color: var(--c-accent); }
+      // 四档模式一律同色：模式靠图标形状区分，主色不兼职（见 PlayerCore 同段注释）
       &:hover {
         color: rgba(255,255,255,0.9);
         background: rgba(255,255,255,0.07);
         border-color: rgba(255,255,255,0.06);
       }
-      &.mode-random:hover, &.mode-loop:hover { color: var(--c-accent); }
+      // 心动 / 私人FM 接管队列来源：非单曲循环的策略图标压暗（不换禁用手感，按钮仍可点）
+      &.is-locked {
+        opacity: .45;
+        &:hover { color: rgba(255,255,255,0.42); background: transparent; border-color: transparent; }
+      }
     }
     // 喜欢 / 下载：与切歌键同尺寸的透明圆钮，只有 hover 才浮出背景
     .iconBtn {

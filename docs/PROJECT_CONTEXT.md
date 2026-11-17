@@ -35,7 +35,7 @@
 | 工具库 | `dayjs`（含 relativeTime、duration、zh-cn）、`pubsub-js`、`js-cookie`、`animate.css` |
 | 视频播放 | **xgplayer**（MV / 视频） |
 | 音频播放 | **原生 `<Audio>`** 元素（被 `new Audio()` 在 `PlayerCore` 中实例化） |
-| 图标 | 自研 **BaseIcon** + `ac-font` 字体 + 内联 SVG（统一在 `src/config/icon.js`） |
+| 图标 | 自研 **BaseIcon** + 内联 SVG 注册表（`src/config/icon.js`，24×24 / 1.8px，无字体图标） |
 | 包管理 | yarn / npm，`.npmrc` 设置 `legacy-peer-deps=true` |
 
 ## 后端 / 服务
@@ -141,7 +141,6 @@ ACMUSIC/
 │   │   ├── Tracks.js
 │   │   └── User.js
 │   ├── assets/
-│   │   ├── ac-font/            # 字体图标资源（iconfont.css/ttf/woff）
 │   │   ├── images/             # logo、vinyl
 │   │   ├── mixin/              # ⚠️ 注意：放的是 searchMixin，但路径常被记成 src/mixins
 │   │   │   └── index.js        # searchMixin（共享搜索列表状态机）
@@ -316,8 +315,9 @@ song/detail 检查 fee:
 
 - `currentSong`、`playRequestMode`（递增计数器，用于 race condition 取消旧请求）
 - `playContextId` / `playlistContextId` — 区分"用户在播放列表中切歌" vs"单首搜索播放"
-- `currentSongSource`：`'unknown' | 'playlist' | 'restore' | 'search' | 'fm'`
-- `isRestoring`、`isPersonalFM`、`playMode` (`order` / `random` / `loop`)
+- `currentSongSource`：`'unknown' | 'playlist' | 'restore'`（`'search'` / `'fm'` 只在早期文档里出现过，代码从未赋值）
+  - 点歌（`songClk` → `props.song`）先打成 `'unknown'`，`currentSong` watcher 判定该曲已入队后立刻接管为 `'playlist'` 并对齐 `playlistContextId`；**这一步不能省**，否则 `curIndex` watcher 的 `PlaylistGuard` 会吞掉 `preSong` / `nextSong` / `_autoNext` 的切歌
+- `isRestoring`、`isPersonalFM`、`playMode` (`order` / `sequence` / `random` / `loop`)
 
 ### 状态持久化
 

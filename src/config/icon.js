@@ -9,6 +9,9 @@ export default {
     moon: { type: 'svg', stroke: 'currentColor', strokeWidth: 1.8, path: 'M20.8 13A8.7 8.7 0 0 1 11 3.2 8.8 8.8 0 1 0 20.8 13z' },
     list: { type: 'svg', stroke: 'currentColor', strokeWidth: 1.8, path: 'M4 6h16 M4 12h16 M4 18h10' },
     listPlus: { type: 'svg', strokeWidth: 1.8, path: 'M4 6h16 M4 12h10 M4 18h10 M19 14v8 M15 18h8' },
+    // 「加入歌单」：方框里一个加号。刻意不用「列表+加号」——那和 listPlus 太像，
+    // 两个按钮并排时用户分不清哪个是队列、哪个是歌单
+    playlistPlus: { type: 'svg', strokeWidth: 1.8, path: 'M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z M12 8.5v7 M8.5 12h7' },
     lyrics: { type: 'svg', strokeWidth: 1.8, path: 'M4 5h16 M4 10h12 M4 15h8 M4 20h8 M19 13v8 M16 16l3-3 3 3' },
     // ---- 播放器核心 ----
     // 播放三角：三个转角用二次贝塞尔收圆（原来是 r=1 的尖角，小尺寸下像锐角）。
@@ -41,20 +44,23 @@ export default {
         stroke: 'currentColor', strokeWidth: 1.8,
         path: 'M17 2l4 4-4 4 M3 11V9a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v2a4 4 0 0 1-4 4H3',
     },
+    // ---- 四档队列策略（Lucide 几何：repeat / repeat-1 / shuffle / arrow-right-to-line）----
+    // 多段 path 合并成一条 d：每段都以绝对 M 开头（Lucide 原文里的相对 m 已改写），
+    // 这样单 <path> 渲染和原来的多元素完全等价。视觉与其余 Lucide 图标同族。
     loopList: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 1.8,
-        path: 'M17 3l3 3-3 3 M4 9V7a3 3 0 0 1 3-3h13 M7 21l-3-3 3-3 M20 15v2a3 3 0 0 1-3 3H4',
+        path: 'M17 2l4 4-4 4 M3 11v-1a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v1a4 4 0 0 1-4 4H3',
     },
     loopOne: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 1.8,
-        path: 'M17 2l4 4-4 4 M3 11V9a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v2a4 4 0 0 1-4 4H3 M12 8v8 M9 10l3-2 3 2',
+        path: 'M17 2l4 4-4 4 M3 11v-1a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v1a4 4 0 0 1-4 4H3 M11 10h1v4',
     },
     shuffle: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 1.8,
-        path: 'M16 3h5v5 M4 20l17-17 M21 16v5h-5 M15 15l6 6 M4 4l5 5',
+        path: 'M18 14l4 4-4 4 M18 2l4 4-4 4 M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22 M2 6h1.972a4 4 0 0 1 3.6 2.2 M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45',
     },
     // 副歌模式：波形中间一段被高亮，隐喻"只播高潮段"
     chorus: {
@@ -63,10 +69,12 @@ export default {
         path: 'M4 10v4 M8 7v10 M12 4v16 M16 8v8 M20 11v2',
     },
     // 顺序播放：向右走到底线就停（区别于"循环"的闭合箭头）
+    // 顺序播放：两支横向右箭头**上下并列** = "一行一行往前推"
+    // 行高 7 / 17（上下各留 7），箭头 15 长、头 3 单位（45°），18px 下两行不会粘在一起
     sequence: {
         type: 'svg',
         stroke: 'currentColor', strokeWidth: 1.8,
-        path: 'M4 12h12 M12 8l4 4-4 4 M5 19h15',
+        path: 'M4 7h15 M16 4l3 3-3 3 M4 17h15 M16 14l3 3-3 3',
     },
     // A-B 循环：两个端点夹一段，右端回指箭头隐喻"到 B 跳回 A"
     abLoop: {
@@ -125,6 +133,8 @@ export default {
     female: { type: 'svg', strokeWidth: 1.8, path: 'M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12z M12 15v7 M8 19h8' },
     warning: { type: 'svg', strokeWidth: 1.8, path: 'M10.3 4a2 2 0 0 1 3.4 0l8 14a2 2 0 0 1-1.7 3H4a2 2 0 0 1-1.7-3z M12 9v4 M12 17h.01' },
     star: { type: 'svg', strokeWidth: 1.8, path: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z' },
+    // 已收藏态：与 like / likeFill 同一套做法，路径不变、只把描边换成填充
+    starFill: { type: 'svg', fill: 'currentColor', stroke: 'none', path: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z' },
     thumb: { type: 'svg', strokeWidth: 1.8, path: 'M7 10H3v11h4z M7 10l5-8a3 3 0 0 1 2 4l-1 4h6a2 2 0 0 1 2 2l-1 7a2 2 0 0 1-2 2H7' },
     download: {
         type: 'svg',

@@ -1,16 +1,8 @@
 <template>
-  <!-- 字体图标 -->
+  <!-- 图标只有内联 SVG 一种形态（iconfont 字体那套 2026-11 已清掉）：
+       24×24 网格、1.8px 圆角描边，状态类图标显式填充。 -->
   <i
-      v-if="icon && icon.type === 'font' && icon.class"
-      class="ac-icon ac-font"
-      :class="[icon.class, customClass]"
-      :style="iconStyle"
-      v-bind="$attrs"
-      v-on="$listeners"
-  />
-  <!-- SVG 图标 -->
-  <i
-      v-else-if="icon && icon.type === 'svg' && icon.path"
+      v-if="icon && icon.path"
       class="ac-icon ac-icon-svg"
       :class="[icon.class, customClass]"
       :style="svgStyle"
@@ -22,12 +14,12 @@
       <path :d="icon.path" :fill="icon.fill || 'none'" :stroke="icon.stroke || 'currentColor'" :stroke-width="icon.stroke === 'none' ? 0 : 1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </i>
-  <!-- 占位 -->
+  <!-- 占位：注册表里没有这个 name 时给一个灰块，比什么都不显示好排查 -->
   <i
       v-else
       class="ac-icon icon-fallback"
       :class="customClass"
-      :style="iconStyle"
+      :style="svgStyle"
       v-bind="$attrs"
       v-on="$listeners"
   />
@@ -60,15 +52,8 @@ export default {
     customClass() {
       return this.$attrs.class || ''
     },
-    // 字体/占位用的尺寸(px)
-    iconStyle() {
-      const style = {}
-      if (this.size) style.fontSize = typeof this.size === 'number' ? this.size + 'px' : this.size
-      if (this.color) style.color = this.color
-      return style
-    },
     // SVG 用的尺寸
-    // 未传 size 时使用 1em, 继承容器的 font-size, 与字体图标对齐
+    // 未传 size 时使用 1em, 继承容器的 font-size
     svgSize() {
       if (typeof this.size === 'number') return this.size
       if (typeof this.size === 'string' && this.size) {

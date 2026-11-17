@@ -3,52 +3,66 @@
 html .playlistDropdown,
 html .chorusDropdown,
 html .sleepDropdown {
-  color-scheme: dark;
-  background: var(--player-menu-bg) !important;
-  border-color: var(--player-menu-border) !important;
-  box-shadow: 0 16px 48px var(--player-menu-shadow) !important;
-  color: var(--player-menu-text);
+  // 不要写死 color-scheme: dark —— 弹层现在跟随页面主题，
+  // 浅色下滚动条/输入框要按浅色渲染（值由 tokens.scss 的 html[data-theme] 决定）
+  background: var(--player-pop-bg) !important;
+  border-color: var(--player-pop-border) !important;
+  box-shadow: 0 16px 48px var(--player-pop-shadow) !important;
+  color: var(--player-pop-text);
 
   .el-dropdown-menu__item {
-    color: var(--player-menu-secondary);
-    &.is-active, &.active { color: var(--player-menu-accent); background: var(--player-menu-soft); }
+    color: var(--player-pop-secondary);
+    &.is-active, &.active { color: var(--player-pop-accent); background: var(--player-pop-soft); }
     &:focus, &:not(.is-disabled):hover {
-      background: var(--player-menu-hover) !important;
-      color: var(--player-menu-text);
+      background: var(--player-pop-hover) !important;
+      color: var(--player-pop-text);
     }
   }
-  .popper__arrow, .popper__arrow::after { border-top-color: var(--player-menu-bg) !important; }
+  .popper__arrow, .popper__arrow::after { border-top-color: var(--player-pop-bg) !important; }
 }
 
 html .playlistDropdown {
-  .plHeader { color: var(--player-menu-text); }
-  .plHeader .plTotal { color: var(--player-menu-muted); }
-  .plActions .el-button--text { color: var(--player-menu-muted); background: transparent; }
-  .plItems .el-dropdown-menu__item {
-    color: var(--player-menu-secondary);
-    .plSongArtist { color: var(--player-menu-muted); }
-    &.active { color: var(--player-menu-accent); border-left-color: var(--player-menu-accent); }
-    &.active .plSongArtist { color: var(--player-menu-secondary); }
-    &:hover .plSongArtist { color: var(--player-menu-secondary); }
+  .plHead { border-bottom-color: var(--player-pop-border); }
+  .plTitle { color: var(--player-pop-text); }
+  .plTotal { color: var(--player-pop-muted); }
+  .plHeadBtn {
+    color: var(--player-pop-muted);
+    &:hover { background: var(--player-pop-hover); color: var(--player-pop-text); }
+    &.is-danger:hover { background: rgba(229, 72, 77, .14); color: var(--c-danger); }
   }
-  .plItems .plOp { color: var(--player-menu-secondary); }
+  .plItems .el-dropdown-menu__item {
+    color: var(--player-pop-secondary);
+    .plSongArtist { color: var(--player-pop-muted); }
+    &.active { color: var(--player-pop-accent); border-left-color: var(--player-pop-accent); }
+    &.active .plSongArtist { color: var(--player-pop-secondary); }
+    &:hover .plSongArtist { color: var(--player-pop-secondary); }
+  }
+  .plItems .plOp {
+    color: var(--player-pop-secondary);
+    &:hover { background: var(--player-pop-chip); color: var(--player-pop-text); }
+  }
+  .plItems::-webkit-scrollbar-thumb { background: var(--player-pop-border); }
   .plItems .el-dropdown-menu__item:focus-within .plOps { opacity: 1; }
-  .plEmpty, .plEmpty .plEmptyHint { color: var(--player-menu-muted); }
+  .plEmpty, .plEmpty .plEmptyHint { color: var(--player-pop-muted); }
 }
 
 html .chorusDropdown .el-dropdown-menu__item .opt-hint {
-  color: var(--player-menu-muted);
-  background: var(--player-menu-input);
+  color: var(--player-pop-muted);
+  background: var(--player-pop-input);
 }
 
 html .sleepDropdown {
-  .sdRow, .sdFade { color: var(--player-menu-secondary); }
-  .sdRow.is-active { color: var(--player-menu-accent); background: var(--player-menu-soft); }
+  .sdRow, .sdFade { color: var(--player-pop-secondary); }
+  .sdRow.is-active { color: var(--player-pop-accent); background: var(--player-pop-soft); }
   .sdRow .sdNum {
-    color: var(--player-menu-text);
-    background: var(--player-menu-input);
-    border-color: var(--player-menu-border);
+    color: var(--player-pop-text);
+    background: var(--player-pop-input);
+    border-color: var(--player-pop-border);
   }
-  .sdRow .sdNum:focus { border-color: var(--player-menu-accent); }
-  .sdRow .sdStep { color: var(--player-menu-text); }
+  .sdRow .sdNum:focus { border-color: var(--player-pop-accent); }
+  .sdRow .sdStep {
+    color: var(--player-pop-text);
+    background: var(--player-pop-chip);
+    &:hover { background: var(--player-pop-hover); }
+  }
 }
