@@ -779,23 +779,21 @@ export default {
       &:hover { color: #fff; border-color: rgba(255,255,255,0.42); }
     }
     .likeBtn {
-      // 预留右侧 40px 给角标：按钮右边缘与封面右边缘对齐，
-      // 红心落在左边，数字压在它右上角
-      position: relative;
+      // 红心 + 数字作为整体靠右：不再固定 64px，数字短时右边不会空出一截。
+      // 数字仍压在红心右上角——靠 align-self: flex-start 顶到容器上沿，
+      // 红心垂直居中（顶部 5px），两者错开 5px，就是原来绝对定位 top:0 的效果。
       flex: 0 0 auto; margin-left: auto;
-      display: inline-flex; align-items: center; justify-content: flex-start;
-      width: 64px; height: 32px; padding: 0;
+      display: inline-flex; align-items: center; gap: 2px;
+      height: 32px; padding: 0;
       border: none; background: transparent;
       color: rgba(255,255,255,0.72);
       cursor: pointer;
       transition: color 180ms ease;
       &:hover { color: #fff; }
       &.is-on { color: $player-danger; }
-      // 角标：绝对定位到红心右上角，纯文字不加底色
       .likeCount {
-        position: absolute; left: 19px; top: 0;
-        padding: 0;
-        font-size: 9px; font-weight: 600; line-height: 1.2;
+        align-self: flex-start;
+        font-size: 9px; font-weight: 600; line-height: 1;
         font-variant-numeric: tabular-nums; letter-spacing: .2px;
         color: rgba(255,255,255,0.8);
         white-space: nowrap; pointer-events: none;
