@@ -3,6 +3,7 @@
     <!-- 浮动入口：右下角，避开底部播放条 -->
     <button
         v-show="!open"
+        ref="fabRoot"
         type="button"
         class="ai-fab"
         :class="{ 'has-player': hasPlayer, 'is-pulse': songPulse }"
@@ -10,16 +11,18 @@
         title="AI 点歌"
         @click="openPanel"
     >
-      <!-- 只有两层：气态光晕在外、图标本体在内。
-           光晕由两层不同模糊半径的雾叠出来 —— 一层收得紧、一层散得开，
-           两者呼吸相位错开，看起来才像气体在涌动，而不是一圈光 -->
+      <!-- Glass Orb：质感做在玻璃本体上，外部柔光只是氛围。
+           层级从下到上：外部柔光 → 玻璃球 → 表面高光 / 内部漫射 / 弧形反射 → 图标 -->
       <span class="fab-glow" aria-hidden="true">
         <i ref="fabCore" class="glow-core"></i>
         <i ref="fabHaze" class="glow-haze"></i>
       </span>
-      <span ref="fabBody" class="fab-body">
-        <!-- 大小两颗星仍旧由 CSS 各自呼吸：这是质感层，和整体缩放叠加不冲突 -->
-        <svg class="fab-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+
+      <span class="orb-glass">
+        <span class="orb-inner-glow" aria-hidden="true"></span>
+        <span class="orb-highlight" aria-hidden="true"></span>
+        <span class="orb-reflection" aria-hidden="true"></span>
+        <svg class="orb-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path class="glyph-main"
                 d="M11.5 2.8Q12.7 9.4 19.3 10.6Q12.7 11.8 11.5 18.4Q10.3 11.8 3.7 10.6Q10.3 9.4 11.5 2.8Z"
                 fill="currentColor"/>
@@ -28,6 +31,9 @@
                 fill="currentColor"/>
         </svg>
       </span>
+
+      <!-- 外沿一道很细的弧光，转速固定（BPM 只驱动呼吸，不驱动转速） -->
+      <span class="orb-arc" aria-hidden="true"></span>
     </button>
 
     <!-- 面板：宽度和高度都设上限，窄屏时自动收到视口内 -->
@@ -406,19 +412,26 @@ export default {
 
       const core = this.$refs.fabCore
       if (core) {
-        core.style.opacity = (m.glow * level * 0.95).toFixed(3)
+        core.style.opacity = (m.glow * level * 0.55).toFixed(3)
         core.style.transform = `scale(${(0.9 + 0.16 * level * m.amp).toFixed(3)})`
       }
 
       const haze = this.$refs.fabHaze
       if (haze) {
-        haze.style.opacity = (m.glow * (0.18 + 0.82 * hazeCurve) * 0.88).toFixed(3)
+        haze.style.opacity = (m.glow * (0.18 + 0.82 * hazeCurve) * 0.5).toFixed(3)
         haze.style.transform =
           `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(${(0.92 + 0.26 * hazeCurve * m.amp).toFixed(3)})`
       }
 
-      const fabBody = this.$refs.fabBody
-      if (fabBody) fabBody.style.transform = `scale(${(1 + 0.04 * m.amp * curve).toFixed(4)})`
+      // 玻璃本体的呼吸全部走 CSS 变量：球内漫射光、弧形反射、整体通透度
+      const fab = this.$refs.fabRoot
+      if (fab) {
+        fab.style.setProperty('--breath-intensity', (0.3 + 0.6 * level).toFixed(3))
+        fab.style.setProperty('--breath-scale', (0.9 + 0.16 * level * m.amp).toFixed(3))
+        fab.style.setProperty('--reflection-opacity', (0.35 + 0.5 * level).toFixed(3))
+        fab.style.setProperty('--reflection-offset', `${(dx * 1.1).toFixed(2)}px`)
+        fab.style.setProperty('--glass-opacity', (0.88 + 0.12 * m.amp).toFixed(3))
+      }
 
       // 头像只在面板打开时存在，refs 为空就跳过 —— 不为看不见的元素算动画
       const headCore = this.$refs.headCore
@@ -740,55 +753,42 @@ export default {
   box-sizing: border-box;
 }
 
-// ---- 浮动按钮 ----
+// ---- 浮动按钮（Glass Orb）----
 .ai-fab {
   position: fixed;
   right: 24px;
   bottom: 24px;
   z-index: 90;
-  width: 52px;
-  height: 52px;
-  display: grid;
-  place-items: center;
-  // 玻璃：半透明主色 + 背后模糊，上面再压一层左上到右下的高光。
-  // 不透明的纯色无论怎么加阴影都像"塑料片"，必须有东西透出来才是玻璃
-  border: 1px solid rgba(255, 255, 255, .24);
-  border-radius: 50%;
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, .04) 30%, rgba(255, 255, 255, 0) 52%),
-    rgba(var(--theme-accent-rgb), .9);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  color: #fff;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: none;
+  background: transparent;
   cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .55),
-    inset 0 -12px 20px rgba(0, 0, 0, .14),
-    0 10px 30px rgba(var(--theme-accent-rgb), .32);
-  transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+  transition: transform .2s ease;
 
-  // 只保留 hover 的位移；呼吸缩放交给内层 .fab-body，两个 transform 不再互相覆盖
-  &:hover {
-    transform: translateY(-2px) scale(1.04);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, .6),
-      inset 0 -12px 22px rgba(0, 0, 0, .16),
-      0 14px 36px rgba(var(--theme-accent-rgb), .42);
-  }
+  // rAF 每帧只改这几个变量，玻璃本体据此呼吸；不直接改属性值，
+  // 是为了让"呼吸"这件事由一份配置驱动，而不是散落在各处
+  --breath-intensity: .5;
+  --breath-scale: 1;
+  --reflection-opacity: .7;
+  --reflection-offset: 0px;
+  --glass-opacity: 1;
 
-  &:active { transform: scale(.96); }
-
-  // 有播放条时抬高，避免压在播放条上
   &.has-player { bottom: 104px; }
 
-  // ---- 气态光晕：两层不同模糊半径的雾，相位错开 ----
-  // 一层收得紧（光源本体），一层散得开（被吹散的雾）。
-  // 只用一层的话无论怎么调都像"一圈光"，两层叠加才有体积感
+  &:hover { transform: translateY(-2px) scale(1.05); }
+  &:active { transform: scale(.96); }
+
+  &.is-pulse {
+    animation: fab-pulse .55s ease;
+  }
+
+  // ---- 外部柔光：氛围层，刻意做淡，主体交给玻璃本身 ----
   .fab-glow {
     display: block;
     position: absolute;
-    // 光晕层要足够大，否则渐变在元素边界被截断，根本没有地方扩散
-    inset: -24px;
+    inset: -20px;
     pointer-events: none;
 
     i {
@@ -801,48 +801,124 @@ export default {
       will-change: transform, opacity;
     }
 
-    // 中心必须完全透明：光晕和按钮同色，画在按钮上只会显得"按钮变大了一圈"。
-    // 从按钮边缘（52%）之外才开始发光，颜色由白过渡到主色
     .glow-core {
       background: radial-gradient(circle,
           rgba(255, 255, 255, 0) 0%,
-          rgba(255, 255, 255, 0) 52%,
-          rgba(255, 255, 255, .38) 62%,
-          rgba(var(--theme-accent-rgb), .75) 78%,
+          rgba(255, 255, 255, 0) 54%,
+          rgba(255, 255, 255, .26) 64%,
+          rgba(var(--theme-accent-rgb), .48) 79%,
           rgba(var(--theme-accent-rgb), 0) 94%);
-      filter: blur(10px);
+      filter: blur(12px);
     }
 
     .glow-haze {
       inset: -14px;
       background: radial-gradient(circle,
           rgba(255, 255, 255, 0) 0%,
-          rgba(255, 255, 255, 0) 46%,
-          rgba(255, 255, 255, .24) 58%,
-          rgba(var(--theme-accent-rgb), .5) 74%,
+          rgba(255, 255, 255, 0) 48%,
+          rgba(255, 255, 255, .16) 60%,
+          rgba(var(--theme-accent-rgb), .32) 75%,
           rgba(var(--theme-accent-rgb), 0) 92%);
-      filter: blur(20px);
+      filter: blur(22px);
     }
   }
 
-  // ---- 本体。只做微缩放 ----
-  .fab-body {
+  // ---- 玻璃球本体 ----
+  .orb-glass {
     position: relative;
-    display: grid;
-    place-items: center;
-    will-change: transform;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    // 三段渐变：顶部被光照亮、中间是主色、底部压暗表现玻璃的厚度。
+    // 中间那段的浓度决定"它是紫色球还是个灰玻璃球"，.48 是试出来的平衡点
+    background: linear-gradient(145deg,
+        rgba(255, 255, 255, .42) 0%,
+        rgba(var(--theme-accent-rgb), .48) 44%,
+        rgba(30, 24, 62, .45) 100%);
+    border: 1px solid rgba(255, 255, 255, .3);
+    box-shadow:
+      inset 0 1px 2px rgba(255, 255, 255, .5),
+      // 底部只留一点内壁的暗，压太重会像塑料壳的厚度
+      inset 0 -8px 16px rgba(40, 30, 90, .16),
+      0 4px 12px rgba(0, 0, 0, .18),
+      0 10px 28px rgba(var(--theme-accent-rgb), .26);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    opacity: var(--glass-opacity, 1);
   }
 
-  .fab-glyph {
-    width: 23px;
-    height: 23px;
-    display: block;
+  // 内部漫射光：球心那团亮，随呼吸缩放 —— 这是"玻璃里有光"的来源
+  .orb-inner-glow {
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+        rgba(255, 255, 255, .52) 0%,
+        rgba(var(--theme-accent-rgb), .32) 48%,
+        rgba(var(--theme-accent-rgb), 0) 75%);
+    filter: blur(5px);
+    opacity: var(--breath-intensity, .5);
+    transform: scale(var(--breath-scale, 1));
+    will-change: transform, opacity;
+  }
+
+  // 表面高光：左上亮、右下极淡，制造球面的弧度
+  .orb-highlight {
+    position: absolute;
+    inset: 1px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: linear-gradient(155deg,
+        rgba(255, 255, 255, .4) 0%,
+        rgba(255, 255, 255, 0) 38%,
+        rgba(255, 255, 255, 0) 70%,
+        rgba(255, 255, 255, .1) 100%);
+  }
+
+  // 弧形玻璃反射：顶部那道弯月形亮边，是"玻璃"最直接的证据
+  .orb-reflection {
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    width: 42px;
+    height: 18px;
+    border-top: 2px solid rgba(255, 255, 255, .55);
+    border-radius: 50%;
+    filter: blur(1px);
+    pointer-events: none;
+    transform: rotate(-25deg) translateX(var(--reflection-offset, 0px));
+    opacity: var(--reflection-opacity, .7);
+    will-change: transform, opacity;
+  }
+
+  // 外沿一道细弧光。转速固定 —— BPM 只决定呼吸快慢，不决定转速
+  .orb-arc {
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: conic-gradient(from 0deg,
+        rgba(255, 255, 255, 0) 0deg,
+        rgba(255, 255, 255, 0) 272deg,
+        rgba(226, 220, 255, .55) 308deg,
+        rgba(255, 255, 255, 0) 344deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+    animation: orb-orbit 7s linear infinite;
+  }
+
+  .orb-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 26px;
+    height: 26px;
+    transform: translate(-50%, -50%);
     overflow: visible;
-    // 图标本身用白色，而不是 on-accent —— 主题算出来的是黑色，
-    // 压在主色圆上又闷又脏。图形元素按 WCAG 只要 3:1，白字在这里够用，
-    // 再加一层极淡的投影兜住浅色主题下对比度不足的情况
     color: #fff;
-    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .22));
+    filter: drop-shadow(0 1px 2px rgba(20, 12, 50, .45));
   }
 
   // 两颗星各自绕自身中心动、相位错开：一起动会像整个图标在呼吸，
@@ -858,11 +934,6 @@ export default {
     transform-origin: center;
     animation: glyph-twinkle 3.4s ease-in-out infinite;
     animation-delay: .55s;
-  }
-
-  // 换歌：整个按钮脉冲一次，表示"我注意到你切歌了"
-  &.is-pulse {
-    animation: fab-pulse .55s ease;
   }
 }
 
@@ -1515,11 +1586,17 @@ export default {
   100% { transform: scale(1); }
 }
 
+// 外沿细弧光：匀速绕圈，和呼吸解耦
+@keyframes orb-orbit {
+  to { transform: rotate(360deg); }
+}
+
 // 系统开了「减少动态效果」：双星的 CSS 动画和换歌脉冲都停掉；
 // 光环那边由 JS 判断，prefersReduced() 为真时干脆不启动 rAF
 @media (prefers-reduced-motion: reduce) {
   .ai-fab .glyph-main,
   .ai-fab .glyph-mini,
+  .ai-fab .orb-arc,
   .ai-fab.is-pulse {
     animation: none;
   }
