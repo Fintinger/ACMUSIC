@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# 写入 / 更新 DeepSeek API Key 并重启 AI 点歌服务。
+#
+# 为什么用脚本而不是让人直接 sed：
+#   1) key 会留在 shell history 里 —— 这里用 read -s，输入不回显、不落盘；
+#   2) 顺便把文件权限、字段完整性、重启和健康检查一次做完，不会出现
+#      「改了 key 但忘了重启」或者「key 写对了但权限 644」这种半成品。
+#
+# 用法：sudo bash /opt/acmusic-ai/set-key.sh
+set -euo pipefail
+
+ENV_FILE=/etc/acmusic-ai.env
+
+read -rsp "粘贴 DeepSeek API Key（输入不显示）: " KEY
+echo
+if [ -z "${KEY}" ]; then
+    echo "没有输入内容，已取消。" >&2
+    exit 1
+fi
+
+umask 077
+cat > "${ENV_FILE}" <<EOF
+DEEPSEEK_API_KEY=${KEY}
+NETEASE_API_BASE=http://127.0.0.1:3000
+AI_PORT=3002
+EOF
+chmod 600 "${ENV_FILE}"
+chown root:root "${ENV_FILE}"
+
+systemctl restart acmusic-ai
+sleep 1
+
+echo "已写入 ${ENV_FILE}（600）并重启服务，当前状态："
+curl -s --max-time 5 http://127.0.0.1:3002/health || true
+echo

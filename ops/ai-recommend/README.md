@@ -34,7 +34,13 @@ Node 需要 **18+**（用到全局 `fetch` 和 `AbortSignal.timeout`）。VPS �
 
 ### 2. 配 key
 
-`/etc/acmusic-ai.env`（**权限必须 600**，这个文件不进 git）：
+仓库里带了脚本，一条命令搞定 —— 它会**隐藏输入**（key 不进 shell history）、写文件、设权限、重启、并回显健康状态：
+
+```bash
+sudo bash /opt/acmusic-ai/set-key.sh
+```
+
+不想用脚本的话，手动建 `/etc/acmusic-ai.env`（**权限必须 600**，这个文件不进 git）：
 
 ```bash
 sudo tee /etc/acmusic-ai.env >/dev/null <<'EOF'
@@ -44,6 +50,7 @@ AI_PORT=3002
 EOF
 sudo chmod 600 /etc/acmusic-ai.env
 sudo chown root:root /etc/acmusic-ai.env
+sudo systemctl restart acmusic-ai
 ```
 
 可选变量：
@@ -67,6 +74,10 @@ sudo systemctl enable --now acmusic-ai
 systemctl status acmusic-ai --no-pager
 curl -s http://127.0.0.1:3002/health
 ```
+
+> **ExecStart 里的 node 路径要按机器改**。当前服务器是解压安装在 `/opt/node/bin/node`，
+> 不在默认 PATH 里，而 systemd 不读 shell 的 PATH。换机器时先 `command -v node` 再改这一行，
+> 否则服务会以 `status=203/EXEC` 反复重启。
 
 `/health` 返回 `aiEnabled: false` 说明没读到 key —— 服务能跑，但只做原话直搜。
 

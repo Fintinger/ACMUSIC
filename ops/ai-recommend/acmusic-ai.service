@@ -10,7 +10,9 @@ Type=simple
 WorkingDirectory=/opt/acmusic-ai
 # key 只存在这个文件里，权限 600，不进 git、不进 .env、不进 systemd unit
 EnvironmentFile=/etc/acmusic-ai.env
-ExecStart=/usr/bin/node /opt/acmusic-ai/ai-recommend.mjs
+# node 在这台机器上是解压安装的（/opt/node），不在默认 PATH 里。
+# 换机器时按 `command -v node` 的结果改这一行；systemd 不读 shell 的 PATH。
+ExecStart=/opt/node/bin/node /opt/acmusic-ai/ai-recommend.mjs
 Restart=on-failure
 RestartSec=3
 
