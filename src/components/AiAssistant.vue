@@ -11,13 +11,8 @@
         title="AI 点歌"
         @click="openPanel"
     >
-      <!-- Glass Orb：质感做在玻璃本体上，外部柔光只是氛围。
-           层级从下到上：外部柔光 → 玻璃球 → 表面高光 / 内部漫射 / 弧形反射 → 图标 -->
-      <span class="fab-glow" aria-hidden="true">
-        <i ref="fabCore" class="glow-core"></i>
-        <i ref="fabHaze" class="glow-haze"></i>
-      </span>
-
+      <!-- Glass Orb：质感做在玻璃本体上。
+           层级从下到上：玻璃球 → 表面高光 / 内部漫射 / 弧形反射 → 图标 -->
       <span class="orb-glass">
         <span class="orb-inner-glow" aria-hidden="true"></span>
         <span class="orb-highlight" aria-hidden="true"></span>
@@ -47,11 +42,7 @@
       >
         <header class="panel-head">
           <span class="head-avatar">
-            <span class="ha-glow" aria-hidden="true">
-              <i ref="headCore" class="glow-core"></i>
-              <i ref="headHaze" class="glow-haze"></i>
-            </span>
-            <span class="ha-img"><img src="/favicon.ico" alt=""></span>
+            <span class="ha-img"><img ref="headImg" src="/favicon.ico" alt=""></span>
           </span>
           <div class="head-text">
             <strong>AI 点歌</strong>
@@ -402,26 +393,11 @@ export default {
       }
       m.wroteAt = ts
 
-      // 第二层雾用滞后一点的相位：两层同步就只是"一圈光在缩放"，
-      // 错开才有气体互相推挤的感觉
-      const hazeCurve = this.breathCurve((m.phase + 0.78) % 1)
-      // 缓慢游移，幅度很小 —— 大了会像果冻
+      // 第二层雾的相位差已经不需要了（外部柔光整层删掉），
+      // 只保留一个缓慢位移给玻璃反射用
       const driftAmt = (0.5 + 0.5 * m.spin) * (0.6 + 0.4 * m.amp)
       const dx = Math.cos(m.phase * Math.PI * 2) * 2.2 * driftAmt
       const dy = Math.sin(m.phase * Math.PI * 2) * 1.8 * driftAmt
-
-      const core = this.$refs.fabCore
-      if (core) {
-        core.style.opacity = (m.glow * level * 0.55).toFixed(3)
-        core.style.transform = `scale(${(0.9 + 0.16 * level * m.amp).toFixed(3)})`
-      }
-
-      const haze = this.$refs.fabHaze
-      if (haze) {
-        haze.style.opacity = (m.glow * (0.18 + 0.82 * hazeCurve) * 0.5).toFixed(3)
-        haze.style.transform =
-          `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(${(0.92 + 0.26 * hazeCurve * m.amp).toFixed(3)})`
-      }
 
       // 玻璃本体的呼吸全部走 CSS 变量：球内漫射光、弧形反射、整体通透度
       const fab = this.$refs.fabRoot
@@ -430,21 +406,15 @@ export default {
         fab.style.setProperty('--breath-scale', (0.9 + 0.16 * level * m.amp).toFixed(3))
         fab.style.setProperty('--reflection-opacity', (0.35 + 0.5 * level).toFixed(3))
         fab.style.setProperty('--reflection-offset', `${(dx * 1.1).toFixed(2)}px`)
+        fab.style.setProperty('--reflection-lift', `${(dy * 0.7).toFixed(2)}px`)
         fab.style.setProperty('--glass-opacity', (0.88 + 0.12 * m.amp).toFixed(3))
       }
 
       // 头像只在面板打开时存在，refs 为空就跳过 —— 不为看不见的元素算动画
-      const headCore = this.$refs.headCore
-      if (headCore) {
-        headCore.style.opacity = (m.glow * level * 0.55).toFixed(3)
-        headCore.style.transform = `scale(${(0.92 + 0.12 * level * m.amp).toFixed(3)})`
-      }
-
-      const headHaze = this.$refs.headHaze
-      if (headHaze) {
-        headHaze.style.opacity = (m.glow * (0.2 + 0.8 * hazeCurve) * 0.45).toFixed(3)
-        headHaze.style.transform =
-          `translate(${(dx * 0.6).toFixed(2)}px, ${(dy * 0.6).toFixed(2)}px) scale(${(0.94 + 0.2 * hazeCurve * m.amp).toFixed(3)})`
+      // 头像不再扩散光晕，只做亮度呼吸 —— 陪伴感不需要发光，亮一点就够
+      const headImg = this.$refs.headImg
+      if (headImg) {
+        headImg.style.filter = `brightness(${(0.94 + 0.14 * level * m.amp).toFixed(3)})`
       }
 
       this._raf = requestAnimationFrame(this.tickMotion)
@@ -773,7 +743,13 @@ export default {
   --breath-scale: 1;
   --reflection-opacity: .7;
   --reflection-offset: 0px;
+  --reflection-lift: 0px;
   --glass-opacity: 1;
+  // 球体三段渐变的浓度，浅色主题下会整体覆盖（见文件末尾）
+  --orb-top: rgba(255, 255, 255, .42);
+  --orb-core: rgba(var(--theme-accent-rgb), .48);
+  --orb-bottom: rgba(30, 24, 62, .45);
+  --orb-border: rgba(255, 255, 255, .3);
 
   &.has-player { bottom: 104px; }
 
@@ -782,45 +758,6 @@ export default {
 
   &.is-pulse {
     animation: fab-pulse .55s ease;
-  }
-
-  // ---- 外部柔光：氛围层，刻意做淡，主体交给玻璃本身 ----
-  .fab-glow {
-    display: block;
-    position: absolute;
-    inset: -20px;
-    pointer-events: none;
-
-    i {
-      position: absolute;
-      inset: 0;
-      display: block;
-      border-radius: 50%;
-      pointer-events: none;
-      opacity: 0;
-      will-change: transform, opacity;
-    }
-
-    .glow-core {
-      background: radial-gradient(circle,
-          rgba(255, 255, 255, 0) 0%,
-          rgba(255, 255, 255, 0) 54%,
-          rgba(255, 255, 255, .26) 64%,
-          rgba(var(--theme-accent-rgb), .48) 79%,
-          rgba(var(--theme-accent-rgb), 0) 94%);
-      filter: blur(12px);
-    }
-
-    .glow-haze {
-      inset: -14px;
-      background: radial-gradient(circle,
-          rgba(255, 255, 255, 0) 0%,
-          rgba(255, 255, 255, 0) 48%,
-          rgba(255, 255, 255, .16) 60%,
-          rgba(var(--theme-accent-rgb), .32) 75%,
-          rgba(var(--theme-accent-rgb), 0) 92%);
-      filter: blur(22px);
-    }
   }
 
   // ---- 玻璃球本体 ----
@@ -832,18 +769,18 @@ export default {
     border-radius: 50%;
     overflow: hidden;
     // 三段渐变：顶部被光照亮、中间是主色、底部压暗表现玻璃的厚度。
-    // 中间那段的浓度决定"它是紫色球还是个灰玻璃球"，.48 是试出来的平衡点
+    // 三个 alpha 都提成变量，浅色主题下要整体加浓，否则半透明球在浅背景上会被"透白"
     background: linear-gradient(145deg,
-        rgba(255, 255, 255, .42) 0%,
-        rgba(var(--theme-accent-rgb), .48) 44%,
-        rgba(30, 24, 62, .45) 100%);
-    border: 1px solid rgba(255, 255, 255, .3);
+        var(--orb-top, rgba(255, 255, 255, .42)) 0%,
+        var(--orb-core, rgba(var(--theme-accent-rgb), .48)) 44%,
+        var(--orb-bottom, rgba(30, 24, 62, .45)) 100%);
+    border: 1px solid var(--orb-border, rgba(255, 255, 255, .3));
     box-shadow:
       inset 0 1px 2px rgba(255, 255, 255, .5),
       // 底部只留一点内壁的暗，压太重会像塑料壳的厚度
       inset 0 -8px 16px rgba(40, 30, 90, .16),
-      0 4px 12px rgba(0, 0, 0, .18),
-      0 10px 28px rgba(var(--theme-accent-rgb), .26);
+      // 落地阴影用中性黑：主色投影在浅色背景上会糊成一圈光晕，用户不要那个
+      0 6px 16px rgba(0, 0, 0, .22);
     backdrop-filter: blur(12px) saturate(140%);
     -webkit-backdrop-filter: blur(12px) saturate(140%);
     opacity: var(--glass-opacity, 1);
@@ -888,7 +825,7 @@ export default {
     border-radius: 50%;
     filter: blur(1px);
     pointer-events: none;
-    transform: rotate(-25deg) translateX(var(--reflection-offset, 0px));
+    transform: rotate(-25deg) translate(var(--reflection-offset, 0px), var(--reflection-lift, 0px));
     opacity: var(--reflection-opacity, .7);
     will-change: transform, opacity;
   }
@@ -990,45 +927,6 @@ export default {
       }
     }
 
-    // 头像只有两层：雾 + 图片。雾比按钮更散更淡 —— 它的角色是陪伴，
-    // 不能和按钮一样抢眼
-    .ha-glow {
-      display: block;
-      position: absolute;
-      inset: -12px;
-      pointer-events: none;
-
-      i {
-        position: absolute;
-        inset: 0;
-        display: block;
-        border-radius: 50%;
-        pointer-events: none;
-        opacity: 0;
-        will-change: transform, opacity;
-      }
-
-      .glow-core {
-        background: radial-gradient(circle,
-            rgba(255, 255, 255, 0) 0%,
-            rgba(255, 255, 255, 0) 50%,
-            rgba(255, 255, 255, .34) 62%,
-            rgba(var(--theme-accent-rgb), .55) 77%,
-            rgba(var(--theme-accent-rgb), 0) 96%);
-        filter: blur(8px);
-      }
-
-      .glow-haze {
-        inset: -6px;
-        background: radial-gradient(circle,
-            rgba(255, 255, 255, 0) 0%,
-            rgba(255, 255, 255, 0) 48%,
-            rgba(255, 255, 255, .22) 60%,
-            rgba(var(--theme-accent-rgb), .4) 75%,
-            rgba(var(--theme-accent-rgb), 0) 94%);
-        filter: blur(12px);
-      }
-    }
   }
 
   .head-text {
@@ -1600,5 +1498,16 @@ export default {
   .ai-fab.is-pulse {
     animation: none;
   }
+}
+
+// 浅色主题下球体必须加浓。
+// 玻璃是半透明 + backdrop-filter，背景越亮透进来越多 —— 白底上原来的浓度
+// 会淡成一个灰紫球，白色图标也跟着糊掉。这里只调浓度，不动结构
+html[data-theme="light"] .ai-fab {
+  --orb-top: rgba(255, 255, 255, .62);
+  --orb-core: rgba(var(--theme-accent-rgb), .92);
+  --orb-bottom: rgba(56, 44, 120, .68);
+  // 浅底上白边框会糊出一圈光晕感，收细一点
+  --orb-border: rgba(255, 255, 255, .38);
 }
 </style>
