@@ -12,6 +12,12 @@
     >
       <!-- 不用 BaseIcon：那颗星是单条 path，没法把大小两颗分开做动画。
            这里手写填充版双星，各自绕自身中心呼吸/闪烁，相位错开才像"活着" -->
+      <!-- 环形的光弧：用 SVG 描边画一段圆弧再整体旋转。
+           试过 conic-gradient + radial mask，在那个尺寸下环带被按钮外发光吞掉，
+           换成描边后粗细和位置都可控 -->
+      <svg class="fab-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <circle cx="50" cy="50" r="46"/>
+      </svg>
       <svg class="fab-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path class="glyph-main"
               d="M11.5 2.8Q12.7 9.4 19.3 10.6Q12.7 11.8 11.5 18.4Q10.3 11.8 3.7 10.6Q10.3 9.4 11.5 2.8Z"
@@ -32,7 +38,11 @@
           aria-label="AI 点歌"
       >
         <header class="panel-head">
-          <img class="head-avatar" src="/favicon.ico" alt="">
+          <!-- 包一层容器：img 上没法挂伪元素，光环需要画在外层 -->
+          <span class="head-avatar" :class="{ 'is-playing': isPlaying }">
+            <span class="ha-img"><img src="/favicon.ico" alt=""></span>
+            <span class="ha-ring" aria-hidden="true"></span>
+          </span>
           <div class="head-text">
             <strong>AI 点歌</strong>
             <span>{{ headSub }}</span>
@@ -571,8 +581,45 @@ export default {
   background: var(--c-button-primary);
   color: var(--c-text-on-accent);
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(var(--theme-accent-rgb), .38);
+  box-shadow: 0 8px 24px rgba(var(--theme-accent-rgb), .38), inset 0 1px 0 rgba(255, 255, 255, .18);
   transition: transform .2s ease, box-shadow .2s ease;
+
+  // 外沿的环形光弧：SVG 描边 + dasharray 画一段弧，整体旋转。
+  // 用 conic-gradient + radial mask 试过两版：环带总是落在按钮外发光里被吞掉，
+  // 换成描边后，粗细、半径、亮度都是确定的
+  .fab-ring {
+    position: absolute;
+    inset: -8px;
+    pointer-events: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    // 待机时只是"若有若无的一道光"，播放时才拉到全亮 —— 两个状态的差别要有
+    opacity: .42;
+    animation: ring-spin 7s linear infinite;
+    transition: opacity .5s ease;
+
+    circle {
+      fill: none;
+      // viewBox 100 对 68px 元素，4.4 约等于视觉上的 3px
+      stroke: rgba(255, 255, 255, .96);
+      stroke-width: 4.4;
+      stroke-linecap: round;
+      // 圆周长 2π×46 ≈ 289，取 62 约等于 77° 的弧
+      stroke-dasharray: 62 227;
+    }
+  }
+
+  // 播放中：转得更快，明暗跟着一起呼吸
+  &.is-playing .fab-ring {
+    opacity: 1;
+    animation: ring-alive 2.6s linear infinite;
+  }
+
+  // 播放中：转得更快，明暗跟着一起呼吸
+  &.is-playing .fab-ring {
+    opacity: 1;
+    animation: ring-alive 2.6s linear infinite;
+  }
 
   // 有播放条时抬高，避免压在播放条上
   &.has-player { bottom: 104px; }
@@ -657,13 +704,52 @@ export default {
   background: var(--c-bg-sunken);
 
   .head-avatar {
+    position: relative;
     width: 30px;
     height: 30px;
-    border-radius: 9px;
-    object-fit: cover;
     flex-shrink: 0;
-    // favicon 是透明底深色图形，深色主题下会糊进背景，垫一层浅底才看得见
-    background: #fff;
+
+    .ha-img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      // 改圆形：方形头像套圆形光环会在四个角穿帮
+      border-radius: 50%;
+      overflow: hidden;
+      // favicon 是透明底深色图形，深色主题下会糊进背景，垫一层浅底才看得见
+      background: #fff;
+
+      img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    }
+
+    // 和按钮同款光弧，但更细更慢 —— 30px 的头像上不能抢戏
+    .ha-ring {
+      position: absolute;
+      inset: -5px;
+      border-radius: 50%;
+      pointer-events: none;
+      background: conic-gradient(from 0deg,
+          rgba(var(--theme-accent-rgb), 0) 0deg,
+          rgba(var(--theme-accent-rgb), 1) 32deg,
+          rgba(var(--theme-accent-rgb), 0) 104deg,
+          rgba(var(--theme-accent-rgb), 0) 360deg);
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 2px));
+      mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 2px));
+      filter: drop-shadow(0 0 4px rgba(var(--theme-accent-rgb), .9));
+      opacity: .35;
+      animation: ring-spin 9s linear infinite;
+      transition: opacity .5s ease;
+    }
+
+    &.is-playing .ha-ring {
+      opacity: 1;
+      animation: ring-alive 3.4s linear infinite;
+    }
   }
 
   .head-text {
@@ -1221,12 +1307,25 @@ export default {
   100% { transform: scale(1); }
 }
 
-// 系统开了"减少动态效果"就全部停掉：呼吸和闪烁都是装饰，不该强行播
+// 环形光弧：匀速转一圈
+@keyframes ring-spin {
+  to { transform: rotate(360deg); }
+}
+
+// 转一圈正好呼吸一次 —— 播放时用这条，让光圈跟着节奏明暗
+@keyframes ring-alive {
+  0% { transform: rotate(0deg); opacity: .5; }
+  50% { opacity: 1; }
+  100% { transform: rotate(360deg); opacity: .5; }
+}
+
+// 系统开了"减少动态效果"就全部停掉：呼吸、闪烁、光圈都是装饰，不该强行播
 @media (prefers-reduced-motion: reduce) {
   .ai-fab .glyph-main,
   .ai-fab .glyph-mini,
-  .ai-fab.is-pulse {
-    animation: none;
-  }
+  .ai-fab.is-pulse { animation: none; }
+
+  .ai-fab .fab-ring,
+  .panel-head .ha-ring { animation: none; }
 }
 </style>
