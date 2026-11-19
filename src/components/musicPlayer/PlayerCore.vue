@@ -1075,6 +1075,10 @@ export default {
       this._syncMediaSession()
       this._broadcastNowPlaying()
     },
+    isPending() {
+      // 加载态推给浮窗：那段时间光环只流动、不呼吸，避免"没声还在喘气"
+      this._broadcastNowPlaying()
+    },
     /**
      * 屏蔽名单变了：当前这首刚被屏蔽就立刻跳走。
      * 用 rev 计数而不是 deep watch —— Vue.set/Vue.delete 不换对象引用，浅 watch 捕捉不到，
@@ -1242,7 +1246,8 @@ export default {
         id: s.id || 0,
         name: s.name || '',
         artist: (ar && ar.name) || '',
-        playing: !!this.isPlay
+        playing: !!this.isPlay,
+        pending: !!this.isPending
       })
     },
     _syncTitle() {

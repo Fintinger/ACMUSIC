@@ -4226,3 +4226,17 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 无障碍：`prefers-reduced-motion: reduce` 下停掉呼吸与脉冲。
 - 验证：headless 注入 `$bus('nowPlaying')` 实测 —— 空闲时副标题为默认文案且无卡片；playing 后副标题 `正在听《Summer》`、fab class 含 `is-playing`、卡片三项与按钮齐全；暂停后变 `已暂停 · Summer` 且 `is-playing` 移除；换歌后 `is-pulse` 出现、卡片更新为 `Where Is Armo?`；无 console 报错。
 - 注意：`$bus` 事件只在换歌/播放状态变化时推，浮窗挂载时如果已经在播不会自动收到 —— 实际场景里刷新后不会自动播放，所以不影响；如果以后做「恢复上次播放」要补一次主动查询。
+
+### 2026-11-19 — 音乐驱动视觉系统 P1（v1.11.0，未推送）
+
+- 需求：用户要求把"循环播放的 CSS 动画"升级成"感受音乐的动态元素"，并给出完整方案（BPM 定节奏、五维呼吸、三层结构、状态体系、两会话差异化）。评审后分三期，本次只做 P1：三层拆分 + rAF 控制器 + BPM 获取缓存 + 状态机。
+- **BPM 数据源**（本轮最大发现）：项目早有 `/song/wiki/summary`，返回 `blocks[].creatives[]` 里 `creativeType === 'bpm'` 就是 BPM（经 `uiElement.textLinks[0].text`）。实测热门 12/12、冷门 8/10，合计约 90% 覆盖，数值合理（晴天 136、成都 62、Take Five 171）。**注意响应多包一层 `data`**，解析要取 `data.blocks`，第一版按 `blocks` 取导致 0/12。
+- `src/utils/songBpm.js`：按 id 缓存 + 并发合并 + 31–300 之外当脏数据；`breathSeconds()` 做 `clamp(240/bpm, 1.8, 3.6)`。切歌时前端先退回 100（2.4s），查到再平滑插值 —— 不继承上一首（两首速度差大时会明显错位，用户明确否决继承）。
+- **rAF 控制器**：单一相位驱动亮度 / 缩放 / 光晕 / 旋转；`_motion` 挂在实例上（非响应式），每帧只写 DOM style，**不进 data**，否则 60fps 就是 60 次 re-render。BPM 变化用 `dt/0.9` 系数插值，不直接替换周期（改 animation-duration 会让时间轴重算、视觉跳帧）。
+- **三层结构**：`.fab-glow`（scale/opacity）/ `.fab-ring`（rotate）/ `.fab-body`（scale）；头像同构。hover 位移留在按钮本身，彻底避开 transform 覆盖。
+- **状态机**：`idle / playing / paused / loading` 四态，参数分别是 amp 0.2/1/0.15/0.05、spin 0.32/1/0.16/1.5。`pending` 由 PlayerCore 新增的 `watch isPending` 推过来。
+- 呼吸曲线：0–36% 上升、36–52% 停在峰值、52–100% 缓降（smoothstep，非正弦），低谷 0.15 不是 0。
+- 浮窗关闭时降频到约 20fps（相位照常按真实 dt 累积，只跳过写 DOM 那次）；页面 `hidden` 时完全停；`prefers-reduced-motion` 下不启动 rAF。
+- 踩坑：SVG `getTotalLength()` 返回的是 **viewBox 单位**（r=46 → 289），不是渲染像素。头像环第一版按像素算成 `25 91`，弧短到只有 31°；改成 `62 227` 才是 77°。另外 `span` 做 SVG 容器要显式 `display: block`，否则尺寸被内容撑开。
+- 验证：headless 注入 `nowPlaying` 实测 —— 成都 62 → breathe 3.60、晴天 136 → 1.87、海阔天空 76 → 3.11（插值中）；暂停 amp 1→0.19、加载 amp 0.06；环角度持续变化；模拟 `prefers-reduced-motion: reduce` 后 `prefers: true, rafRunning: false`；无 console 报错。
+- 待观察：P1 只做骨架，光带粗细、边缘流动、切歌跃升、结束消散留到 P2/P3。用户要求先看慢/中/快各一首和切歌过渡，再决定是否进 P2。

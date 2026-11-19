@@ -5,27 +5,28 @@
         v-show="!open"
         type="button"
         class="ai-fab"
-        :class="{ 'has-player': hasPlayer, 'is-playing': isPlaying, 'is-pulse': songPulse }"
+        :class="{ 'has-player': hasPlayer, 'is-pulse': songPulse }"
         aria-label="打开 AI 点歌"
         title="AI 点歌"
         @click="openPanel"
     >
-      <!-- 不用 BaseIcon：那颗星是单条 path，没法把大小两颗分开做动画。
-           这里手写填充版双星，各自绕自身中心呼吸/闪烁，相位错开才像"活着" -->
-      <!-- 环形的光弧：用 SVG 描边画一段圆弧再整体旋转。
-           试过 conic-gradient + radial mask，在那个尺寸下环带被按钮外发光吞掉，
-           换成描边后粗细和位置都可控 -->
-      <svg class="fab-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-        <circle cx="50" cy="50" r="46"/>
-      </svg>
-      <svg class="fab-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path class="glyph-main"
-              d="M11.5 2.8Q12.7 9.4 19.3 10.6Q12.7 11.8 11.5 18.4Q10.3 11.8 3.7 10.6Q10.3 9.4 11.5 2.8Z"
-              fill="currentColor"/>
-        <path class="glyph-mini"
-              d="M18.2 12.8Q19.1 16.1 22.4 17Q19.1 17.9 18.2 21.2Q17.3 17.9 14 17Q17.3 16.1 18.2 12.8Z"
-              fill="currentColor"/>
-      </svg>
+      <!-- 三层各管一个 transform，互不覆盖：光晕层只缩、光环层只转、本体层只微缩放。
+           每帧由 rAF 直接写 style，不走响应式数据 —— 否则 60fps 就是 60 次 re-render -->
+      <span ref="fabGlow" class="fab-glow" aria-hidden="true"></span>
+      <span ref="fabRing" class="fab-ring" aria-hidden="true">
+        <svg viewBox="0 0 100 100" focusable="false"><circle cx="50" cy="50" r="46"/></svg>
+      </span>
+      <span ref="fabBody" class="fab-body">
+        <!-- 大小两颗星仍旧由 CSS 各自呼吸：这是质感层，和整体缩放叠加不冲突 -->
+        <svg class="fab-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path class="glyph-main"
+                d="M11.5 2.8Q12.7 9.4 19.3 10.6Q12.7 11.8 11.5 18.4Q10.3 11.8 3.7 10.6Q10.3 9.4 11.5 2.8Z"
+                fill="currentColor"/>
+          <path class="glyph-mini"
+                d="M18.2 12.8Q19.1 16.1 22.4 17Q19.1 17.9 18.2 21.2Q17.3 17.9 14 17Q17.3 16.1 18.2 12.8Z"
+                fill="currentColor"/>
+        </svg>
+      </span>
     </button>
 
     <!-- 面板：宽度和高度都设上限，窄屏时自动收到视口内 -->
@@ -38,10 +39,12 @@
           aria-label="AI 点歌"
       >
         <header class="panel-head">
-          <!-- 包一层容器：img 上没法挂伪元素，光环需要画在外层 -->
-          <span class="head-avatar" :class="{ 'is-playing': isPlaying }">
+          <span class="head-avatar">
+            <span ref="headGlow" class="ha-glow" aria-hidden="true"></span>
             <span class="ha-img"><img src="/favicon.ico" alt=""></span>
-            <span class="ha-ring" aria-hidden="true"></span>
+            <span ref="headRing" class="ha-ring" aria-hidden="true">
+              <svg viewBox="0 0 100 100" focusable="false"><circle cx="50" cy="50" r="46"/></svg>
+            </span>
           </span>
           <div class="head-text">
             <strong>AI 点歌</strong>
@@ -234,6 +237,7 @@ import {recommendPlaylist} from "@/api/Ai";
 import {create, addTracks} from "@/api/Playlist";
 import {likelist, detail as songDetail} from "@/api/Tracks";
 import {isLoggedIn} from "@/utils/auth";
+import {getBpm, breathSeconds as bpmToBreath, DEFAULT_BPM} from "@/utils/songBpm";
 
 /**
  * AI 点歌浮窗
@@ -260,6 +264,10 @@ export default {
       // 当前播放：由 PlayerCore 通过 $bus('nowPlaying') 推过来（那两个字段不在 store 里）
       nowSong: {id: 0, name: '', artist: ''},
       isPlaying: false,
+      // 音源加载中：这段时间光圈只流动、不呼吸
+      pending: false,
+      // 当前歌曲 BPM。0 表示还在查，查不到统一回退 100
+      bpm: 0,
       // 换歌时给入口一个短脉冲，让"它注意到你切歌了"这件事有反馈
       songPulse: false,
       presets: ['下雨天写代码', '90 年代粤语金曲', '跑步时听的快节奏']
@@ -288,18 +296,171 @@ export default {
       const s = this.nowSong
       if (!s.id || !s.name) return ''
       return `照着《${s.name}》${s.artist ? ' - ' + s.artist : ''} 这种感觉来一张`
+    },
+    /** BPM → 一次完整呼吸的秒数（240/BPM，钳在 1.8–3.6） */
+    breatheT() {
+      return bpmToBreath(this.bpm || DEFAULT_BPM)
+    },
+    /** 状态机：rAF 按它选不同的幅度、转速、光晕强度 */
+    motionState() {
+      if (this.pending) return 'loading'
+      if (!this.nowSong.id) return 'idle'
+      return this.isPlaying ? 'playing' : 'paused'
     }
+  },
+  created() {
+    /**
+     * 动画状态全部放在非响应式对象里。
+     * 每帧写 this.$data 会触发 watcher → 虚拟 DOM diff，60fps 就是 60 次重渲染，
+     * 所以相位、角度、当前周期都挂在 _motion 上，只把结果直接写进 DOM style。
+     */
+    this._motion = {
+      raf: 0,
+      last: 0,
+      phase: 0,
+      angleFab: 0,
+      angleHead: 0,
+      breathe: 2.4,
+      amp: 0.2,
+      glow: 0.15,
+      spin: 0.3
+    }
+    this._raf = 0
   },
   mounted() {
     // 全屏播放详情页上不显示入口
     this.$bus.$on('playerExpand', this.onPlayerExpand)
     this.$bus.$on('nowPlaying', this.onNowPlaying)
+    document.addEventListener('visibilitychange', this.onVisibility)
+    this.startMotion()
   },
   beforeDestroy() {
     this.$bus.$off('playerExpand', this.onPlayerExpand)
     this.$bus.$off('nowPlaying', this.onNowPlaying)
+    document.removeEventListener('visibilitychange', this.onVisibility)
+    this.stopMotion()
   },
   methods: {
+    /** 尊重系统「减少动态效果」：不开 rAF，只留静态样式 */
+    prefersReduced() {
+      try {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      } catch (e) {
+        return false
+      }
+    },
+    onVisibility() {
+      // 标签页切到后台就停：rAF 会被浏览器节流成 1fps，留着只会让相位和音乐脱节
+      if (document.hidden) this.stopMotion()
+      else this.startMotion()
+    },
+    startMotion() {
+      if (this._raf) return
+      if (this.prefersReduced()) return
+      this._motion.last = 0
+      this._raf = requestAnimationFrame(this.tickMotion)
+    },
+    stopMotion() {
+      if (!this._raf) return
+      cancelAnimationFrame(this._raf)
+      this._raf = 0
+    },
+    /**
+     * 单一时间基准：一次循环算出呼吸相位 → 同时驱动亮度、缩放、光晕、旋转。
+     * 两个载体共享同一个 phase，所以永远不会越跑越偏。
+     */
+    tickMotion(ts) {
+      const m = this._motion
+      if (!m.last) m.last = ts
+      // 切回前台的间隔可能很长，钳住避免相位一次跳掉
+      const dt = Math.min(64, ts - m.last) / 1000
+      m.last = ts
+
+      const p = this.motionParams()
+      // BPM 切换走插值（约 0.9s 到位），绝不直接替换周期 —— 否则时间轴重算会跳帧
+      m.breathe += (p.t - m.breathe) * Math.min(1, dt / 0.9)
+      m.amp += (p.amp - m.amp) * Math.min(1, dt / 0.6)
+      m.glow += (p.glow - m.glow) * Math.min(1, dt / 0.6)
+      m.spin += (p.spin - m.spin) * Math.min(1, dt / 0.9)
+
+      m.phase = (m.phase + dt / Math.max(0.6, m.breathe)) % 1
+      const curve = this.breathCurve(m.phase)
+      const level = 0.18 + 0.82 * m.amp * curve
+
+      m.angleFab = (m.angleFab + dt * (360 / 6.5) * m.spin) % 360
+      m.angleHead = (m.angleHead + dt * (360 / 9.5) * m.spin) % 360
+
+      // 浮窗关着时只有按钮需要动，降到约 20fps：
+      // 呼吸周期以秒计，20 帧足够平滑，而写 DOM 的次数降到三分之一。
+      // 相位和角度上面已经按真实 dt 累积过，这里跳过的只是"写字"这一下
+      const minGap = this.open ? 0 : 45
+      if (minGap && ts - (m.wroteAt || 0) < minGap) {
+        this._raf = requestAnimationFrame(this.tickMotion)
+        return
+      }
+      m.wroteAt = ts
+
+      const fabRing = this.$refs.fabRing
+      if (fabRing) fabRing.style.transform = `rotate(${m.angleFab.toFixed(2)}deg)`
+
+      const fabGlow = this.$refs.fabGlow
+      if (fabGlow) {
+        fabGlow.style.opacity = (m.glow * level * 0.75).toFixed(3)
+        fabGlow.style.transform = `scale(${(0.84 + 0.2 * level * m.amp).toFixed(3)})`
+      }
+
+      const fabBody = this.$refs.fabBody
+      if (fabBody) fabBody.style.transform = `scale(${(1 + 0.04 * m.amp * curve).toFixed(4)})`
+
+      // 头像只在面板打开时存在，refs 为空就跳过 —— 不为看不见的元素算动画
+      const headRing = this.$refs.headRing
+      if (headRing) {
+        headRing.style.transform = `rotate(${m.angleHead.toFixed(2)}deg)`
+        // 头像幅度按 0.62 倍、转速慢 1.4 倍，共享同一相位
+        headRing.style.opacity = (0.3 + 0.7 * m.amp * 0.62 * curve).toFixed(3)
+      }
+
+      const headGlow = this.$refs.headGlow
+      if (headGlow) {
+        headGlow.style.opacity = (m.glow * level * 0.7).toFixed(3)
+        headGlow.style.transform = `scale(${(0.88 + 0.16 * level * m.amp).toFixed(3)})`
+      }
+
+      this._raf = requestAnimationFrame(this.tickMotion)
+    },
+    /** 每种播放状态一套参数 —— 加载中不呼吸、暂停后几乎静止 */
+    motionParams() {
+      const st = this.motionState
+      if (st === 'playing') {
+        return {t: this.breatheT, amp: 1, glow: 1, spin: 1}
+      }
+      if (st === 'loading') {
+        return {t: 3.2, amp: 0.05, glow: 0.6, spin: 1.5}
+      }
+      if (st === 'paused') {
+        return {t: 3.4, amp: 0.15, glow: 0.26, spin: 0.16}
+      }
+      return {t: 4.2, amp: 0.2, glow: 0.16, spin: 0.32}
+    },
+    /**
+     * 呼吸曲线：吸气比呼气快，不是正弦波。
+     * 0–36% 上升，36–52% 停在峰值，52–100% 缓慢回落（回落到 0.15，不是 0）。
+     */
+    breathCurve(p) {
+      const ease = t => t * t * (3 - 2 * t)
+      if (p < 0.36) return ease(p / 0.36)
+      if (p < 0.52) return 1
+      return 1 - 0.85 * ease((p - 0.52) / 0.48)
+    },
+    /** 查 BPM。回来时要校验 song id，防止快速切歌让旧歌的节奏盖到新歌上 */
+    loadBpm(id) {
+      const want = String(id)
+      if (!want) return
+      getBpm(want).then(bpm => {
+        if (String(this.nowSong.id) !== want) return
+        this.bpm = bpm
+      })
+    },
     onNowPlaying(payload) {
       if (!payload) return
       const changed = payload.id && payload.id !== this.nowSong.id
@@ -309,10 +470,15 @@ export default {
         artist: payload.artist || ''
       }
       this.isPlaying = !!payload.playing
+      this.pending = !!payload.pending
       if (changed) {
         this.songPulse = true
         clearTimeout(this._pulseTimer)
         this._pulseTimer = setTimeout(() => { this.songPulse = false }, 600)
+        // 换歌先退回默认 100（2.4s），不继承上一首 —— 两首速度差太多时会明显错位。
+        // 查到新 BPM 后由 rAF 平滑插值过去，不重启动画
+        this.bpm = 0
+        this.loadBpm(payload.id)
       }
     },
     askSameVibe() {
@@ -584,19 +750,48 @@ export default {
   box-shadow: 0 8px 24px rgba(var(--theme-accent-rgb), .38), inset 0 1px 0 rgba(255, 255, 255, .18);
   transition: transform .2s ease, box-shadow .2s ease;
 
-  // 外沿的环形光弧：SVG 描边 + dasharray 画一段弧，整体旋转。
-  // 用 conic-gradient + radial mask 试过两版：环带总是落在按钮外发光里被吞掉，
-  // 换成描边后，粗细、半径、亮度都是确定的
-  .fab-ring {
+  // 只保留 hover 的位移；呼吸缩放交给内层 .fab-body，两个 transform 不再互相覆盖
+  &:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 12px 30px rgba(var(--theme-accent-rgb), .48);
+  }
+
+  &:active { transform: scale(.96); }
+
+  // 有播放条时抬高，避免压在播放条上
+  &.has-player { bottom: 104px; }
+
+  // ---- 层 3：光晕。只做 scale + opacity，这两个属性走合成层 ----
+  // 从 50% 才开始有颜色：中心透明，避免和按钮同色叠加成一片糊
+  .fab-glow {
     position: absolute;
-    inset: -8px;
+    inset: -10px;
+    border-radius: 50%;
     pointer-events: none;
-    transform-box: fill-box;
-    transform-origin: center;
-    // 待机时只是"若有若无的一道光"，播放时才拉到全亮 —— 两个状态的差别要有
+    background: radial-gradient(circle,
+        rgba(var(--theme-accent-rgb), 0) 0%,
+        rgba(var(--theme-accent-rgb), 0) 52%,
+        rgba(var(--theme-accent-rgb), .6) 66%,
+        rgba(var(--theme-accent-rgb), 0) 84%);
+    opacity: 0;
+    will-change: transform, opacity;
+  }
+
+  // ---- 层 2：光弧。只做 rotate ----
+  .fab-ring {
+    display: block;
+    position: absolute;
+    inset: -5px;
+    pointer-events: none;
     opacity: .42;
-    animation: ring-spin 7s linear infinite;
-    transition: opacity .5s ease;
+    will-change: transform;
+
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
 
     circle {
       fill: none;
@@ -609,20 +804,13 @@ export default {
     }
   }
 
-  // 播放中：转得更快，明暗跟着一起呼吸
-  &.is-playing .fab-ring {
-    opacity: 1;
-    animation: ring-alive 2.6s linear infinite;
+  // ---- 层 1：本体。只做微缩放 ----
+  .fab-body {
+    position: relative;
+    display: grid;
+    place-items: center;
+    will-change: transform;
   }
-
-  // 播放中：转得更快，明暗跟着一起呼吸
-  &.is-playing .fab-ring {
-    opacity: 1;
-    animation: ring-alive 2.6s linear infinite;
-  }
-
-  // 有播放条时抬高，避免压在播放条上
-  &.has-player { bottom: 104px; }
 
   .fab-glyph {
     width: 23px;
@@ -649,16 +837,6 @@ export default {
     transform-origin: center;
     animation: glyph-twinkle 3.4s ease-in-out infinite;
     animation-delay: .55s;
-  }
-
-  // 播放中：节奏整体加快一倍，让"正在放歌"从图标上就能看出来
-  &.is-playing {
-    .glyph-main { animation-duration: 1.9s; }
-
-    .glyph-mini {
-      animation-duration: 1.9s;
-      animation-delay: .3s;
-    }
   }
 
   // 换歌：整个按钮脉冲一次，表示"我注意到你切歌了"
@@ -727,28 +905,47 @@ export default {
       }
     }
 
-    // 和按钮同款光弧，但更细更慢 —— 30px 的头像上不能抢戏
-    .ha-ring {
+    // 头像的三层：光晕 / 图片 / 光弧。和按钮共享同一相位，但幅度只有 0.62 倍，
+    // 转速慢 1.4 倍 —— 它的角色是陪伴，不是吸引注意
+    .ha-glow {
       position: absolute;
-      inset: -5px;
+      inset: -10px;
       border-radius: 50%;
       pointer-events: none;
-      background: conic-gradient(from 0deg,
-          rgba(var(--theme-accent-rgb), 0) 0deg,
-          rgba(var(--theme-accent-rgb), 1) 32deg,
-          rgba(var(--theme-accent-rgb), 0) 104deg,
-          rgba(var(--theme-accent-rgb), 0) 360deg);
-      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 2px));
-      mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 2px));
-      filter: drop-shadow(0 0 4px rgba(var(--theme-accent-rgb), .9));
-      opacity: .35;
-      animation: ring-spin 9s linear infinite;
-      transition: opacity .5s ease;
+      background: radial-gradient(circle,
+          rgba(var(--theme-accent-rgb), 0) 0%,
+          rgba(var(--theme-accent-rgb), 0) 46%,
+          rgba(var(--theme-accent-rgb), .5) 62%,
+          rgba(var(--theme-accent-rgb), 0) 84%);
+      opacity: 0;
+      will-change: transform, opacity;
     }
 
-    &.is-playing .ha-ring {
-      opacity: 1;
-      animation: ring-alive 3.4s linear infinite;
+    .ha-ring {
+      display: block;
+      position: absolute;
+      inset: -5px;
+      pointer-events: none;
+      opacity: .3;
+      will-change: transform;
+
+      svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      circle {
+        fill: none;
+        stroke: rgba(var(--theme-accent-rgb), 1);
+        // 40px 元素上 7 约等于 2.8px 的视觉粗细
+        stroke-width: 7;
+        stroke-linecap: round;
+        // dasharray 的单位是 viewBox 长度，不是像素：周长 2π×46 ≈ 289，
+        // 取 62 才等于 77°（第一版按渲染像素算成 25，弧短到只有 31°）
+        stroke-dasharray: 62 227;
+      }
     }
   }
 
@@ -1307,25 +1504,13 @@ export default {
   100% { transform: scale(1); }
 }
 
-// 环形光弧：匀速转一圈
-@keyframes ring-spin {
-  to { transform: rotate(360deg); }
-}
-
-// 转一圈正好呼吸一次 —— 播放时用这条，让光圈跟着节奏明暗
-@keyframes ring-alive {
-  0% { transform: rotate(0deg); opacity: .5; }
-  50% { opacity: 1; }
-  100% { transform: rotate(360deg); opacity: .5; }
-}
-
-// 系统开了"减少动态效果"就全部停掉：呼吸、闪烁、光圈都是装饰，不该强行播
+// 系统开了「减少动态效果」：双星的 CSS 动画和换歌脉冲都停掉；
+// 光环那边由 JS 判断，prefersReduced() 为真时干脆不启动 rAF
 @media (prefers-reduced-motion: reduce) {
   .ai-fab .glyph-main,
   .ai-fab .glyph-mini,
-  .ai-fab.is-pulse { animation: none; }
-
-  .ai-fab .fab-ring,
-  .panel-head .ha-ring { animation: none; }
+  .ai-fab.is-pulse {
+    animation: none;
+  }
 }
 </style>
