@@ -11,7 +11,7 @@
     <div v-if="searchLoading" class="skel-list">
       <div v-for="n in 8" :key="n" class="skel-row"><div class="skel-bar skeleton-item"></div></div>
     </div>
-    <TracksLayout v-if="!searchLoading && list.length" :list="list"/>
+    <TracksLayout v-if="!searchLoading && list.length" :list="list" blocked-mode="mark"/>
     <el-row>
       <LoadMore :error="searchPageError" v-if="!searchLoading && list.length" :load="load" :loading="loading" :noMore="noMore"/>
     </el-row>

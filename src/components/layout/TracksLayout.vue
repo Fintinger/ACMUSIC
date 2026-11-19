@@ -2,13 +2,20 @@
   <div class="tracksContainer" :class="{ 'has-actions': showActions }">
     <el-row v-if="needBtn" class="btns">
       <div class="btn-container">
-        <button type="button" class="btn-item" :disabled="!list.length" @click="playAllTracks(list)"><BaseIcon name="play"/><span> 播放全部</span></button>
-        <button type="button" class="btn-item" :disabled="!list.length" aria-label="全部加入播放列表" title="全部加入播放列表" @click="pushAllToQueue"><BaseIcon name="listPlus"/></button>
+        <button type="button" class="btn-item" :disabled="!visibleEntries.length" @click="playAllTracks(visibleTracks)"><BaseIcon name="play"/><span> 播放全部</span></button>
+        <button type="button" class="btn-item" :disabled="!visibleEntries.length" aria-label="全部加入播放列表" title="全部加入播放列表" @click="pushAllToQueue"><BaseIcon name="listPlus"/></button>
       </div>
     </el-row>
 
+    <!-- 被屏蔽的行不渲染，但歌单总数对不上会让人以为丢歌了：这里明说屏蔽了几首，并给管理入口 -->
+    <div v-if="blockedCount && effectiveBlockedMode === 'hide'" class="tracksBlockedHint">
+      <BaseIcon name="block" :size="12"/>
+      <span>已屏蔽 {{ blockedCount }} 首</span>
+      <router-link to="/blacklist" class="hintLink">管理</router-link>
+    </div>
+
     <!-- 列头：让「歌曲 / 专辑 / 时长」的列义可读（原先四列全靠猜） -->
-    <div v-if="list.length" class="tracks-head" aria-hidden="true">
+    <div v-if="visibleEntries.length" class="tracks-head" aria-hidden="true">
       <span class="col-index">#</span>
       <span class="col-cover"></span>
       <span class="col-title">歌曲</span>
@@ -20,43 +27,48 @@
     <!-- 行结构：flex + 垂直居中（原 el-col 栅格 + margin-top 补偿，
          字号一变就基线错位，且 span 总和可超 24 列导致换行） -->
     <div
-        v-for="(t, index) in list"
-        :key="t.id"
+        v-for="(entry, index) in visibleEntries"
+        :key="entry.track.id"
         class="tracks"
-        :class="{ 'has-actions': showActions, 'is-current': isCurrent(t) }"
+        :class="{
+          'has-actions': showActions,
+          'is-current': isCurrent(entry.track),
+          'is-blocked': effectiveBlockedMode === 'mark' && isBlocked(entry.track)
+        }"
     >
       <div class="tracks-wrap">
         <span class="col-index">
-          <BaseIcon v-if="isCurrent(t)" name="play" :size="12" class="index-play"/>
+          <BaseIcon v-if="isCurrent(entry.track)" name="play" :size="12" class="index-play"/>
           <template v-else>{{ index + 1 }}</template>
         </span>
         <span class="col-cover">
-          <cover-image :src="coverOf(t)" :alt="(t.name || '未知') + '的封面'"/>
+          <cover-image :src="coverOf(entry.track)" :alt="(entry.track.name || '未知') + '的封面'"/>
         </span>
         <div class="col-title">
           <!-- 歌名 + MV 角标同一行：角标只在真的有 MV 时出现（实测约 4~6 成歌曲有），
                不占固定列宽，避免整列留白 -->
           <div class="titleRow">
-            <button type="button" class="name" :title="'播放 ' + (t.name || '未知')" @click="songClk(t)">{{ t.name || '未知' }}</button>
-            <button v-if="mvOf(t)" type="button" class="mvTag" :title="'播放《' + (t.name || '未知') + '》的 MV'" @click.stop="mvClk(mvOf(t))">MV</button>
+            <button type="button" class="name" :title="'播放 ' + (entry.track.name || '未知')" @click="songClk(entry.track)">{{ entry.track.name || '未知' }}</button>
+            <span v-if="effectiveBlockedMode === 'mark' && isBlocked(entry.track)" class="blockedTag">已屏蔽</span>
+            <button v-if="mvOf(entry.track)" type="button" class="mvTag" :title="'播放《' + (entry.track.name || '未知') + '》的 MV'" @click.stop="mvClk(mvOf(entry.track))">MV</button>
           </div>
-          <span class="artist" :title="artistList(t).map(a => a.name).join(', ')">
+          <span class="artist" :title="artistList(entry.track).map(a => a.name).join(', ')">
             <span
-                v-for="(a, ind) in artistList(t)"
+                v-for="(a, ind) in artistList(entry.track)"
                 :key="ind"
                 class="artist-link"
                 @click.stop="arClk(a.id)"
-            >{{ a.name }}<i v-if="ind !== artistList(t).length - 1">, </i></span>
+            >{{ a.name }}<i v-if="ind !== artistList(entry.track).length - 1">, </i></span>
           </span>
         </div>
-        <span class="col-album" :title="albumName(t)" @click.stop="albumClick(t)">{{ albumName(t) || '未知' }}</span>
-        <span v-if="hasExtra" class="col-extra">{{ extraOf(t) }}</span>
-        <span class="col-duration">{{ durationOf(t) }}</span>
+        <span class="col-album" :title="albumName(entry.track)" @click.stop="albumClick(entry.track)">{{ albumName(entry.track) || '未知' }}</span>
+        <span v-if="hasExtra" class="col-extra">{{ extraOf(entry.track) }}</span>
+        <span class="col-duration">{{ durationOf(entry.track) }}</span>
       </div>
       <!-- 行内快捷操作：hover 才出现，日常浏览不干扰。
            和下面的 actions 插槽二选一——管理模式下右侧已经有 ↑↓✕，再叠一层会挤。
-           电台节目（isVoice）没有音乐音源，两个入口都给不了，直接不渲染。 -->
-      <div v-if="!showActions && !t.isVoice" class="trackAdd" @click.stop>
+           电台节目（isVoice）没有音乐音源，这些入口都给不了，直接不渲染。 -->
+      <div v-if="!showActions && !entry.track.isVoice" class="trackAdd" @click.stop>
         <button
             type="button"
             class="rowAddBtn"
@@ -64,7 +76,7 @@
             :aria-disabled="queueAddBlocked"
             :title="queueAddTitle"
             aria-label="加入播放列表"
-            @click.stop="addToQueue(t)"
+            @click.stop="addToQueue(entry.track)"
         >
           <BaseIcon name="listPlus" :size="14"/>
         </button>
@@ -73,15 +85,32 @@
             class="rowAddBtn"
             title="加入歌单"
             aria-label="加入歌单"
-            @click.stop="addToPlaylist(t)"
+            @click.stop="addToPlaylist(entry.track)"
         >
           <BaseIcon name="playlistPlus" :size="14"/>
         </button>
+        <!-- 第三个入口收进「更多」：行内空间只够两个按钮，硬塞会把时长列挤掉 -->
+        <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            @command="cmd => onRowCommand(cmd, entry.track)"
+            @click.native.stop
+        >
+          <button type="button" class="rowAddBtn" title="更多" aria-label="更多操作">
+            <BaseIcon name="more" :size="14"/>
+          </button>
+          <el-dropdown-menu slot="dropdown">
+            <el-dropdown-item command="blockSong">屏蔽这首歌</el-dropdown-item>
+            <el-dropdown-item command="blockArtist" :disabled="!primaryArtist(entry.track)">屏蔽这位歌手</el-dropdown-item>
+          </el-dropdown-menu>
+        </el-dropdown>
       </div>
       <!-- 行操作：由调用方通过作用域插槽提供（如歌单详情的删歌/排序）。
-           TracksLayout 是全站共用的展示组件，这里只留位置，不放业务逻辑。 -->
+           TracksLayout 是全站共用的展示组件，这里只留位置，不放业务逻辑。
+           注意 index 传的是**原始索引**：歌单管理用 moveTrack(index) 直接操作源数组，
+           传可见索引会在有屏蔽行时删错歌。 -->
       <div v-if="showActions" class="trackActions" @click.stop>
-        <slot name="actions" :track="t" :index="index"/>
+        <slot name="actions" :track="entry.track" :index="entry.srcIndex"/>
       </div>
     </div>
   </div>
@@ -115,6 +144,16 @@ export default {
     showReason: {
       type: Boolean,
       default: false
+    },
+    /**
+     * 被屏蔽曲目的处理方式：
+     *  - hide（默认）：直接不渲染，配一条"已屏蔽 N 首"提示。歌单/专辑/每日推荐/首页用这个
+     *  - mark：照常渲染但压暗 + 打「已屏蔽」角标，点了会问要不要解除。搜索页用这个
+     *  - none：完全不过滤（管理模式必须用这个，否则 index 错位会删错歌）
+     */
+    blockedMode: {
+      type: String,
+      default: 'hide'
     }
   },
   data() {
@@ -123,12 +162,34 @@ export default {
     }
   },
   computed: {
+    /** 管理模式下强制不过滤：上移/下移/删除都按源数组索引操作 */
+    effectiveBlockedMode() {
+      return this.showActions ? 'none' : this.blockedMode
+    },
+    /**
+     * 渲染用的条目：track + 源数组索引。
+     * 之所以不直接过滤成 track 数组，是因为 actions 插槽要拿原始 index。
+     */
+    visibleEntries() {
+      const src = this.list || []
+      const entries = src.map((track, srcIndex) => ({ track, srcIndex }))
+      if (this.effectiveBlockedMode !== 'hide') return entries
+      return entries.filter(e => !this.isBlocked(e.track))
+    },
+    visibleTracks() {
+      return this.visibleEntries.map(e => e.track)
+    },
+    /** 被屏蔽的条数（hide 模式给提示条用；mark/none 不提示） */
+    blockedCount() {
+      if (this.effectiveBlockedMode !== 'hide') return 0
+      return (this.list || []).filter(t => this.isBlocked(t)).length
+    },
     hasExtra() {
-      return this.showReason || this.list.some(t => t.recordPlayCount != null || t.fileSize != null)
+      return this.showReason || this.visibleTracks.some(t => t.recordPlayCount != null || t.fileSize != null)
     },
     extraLabel() {
       if (this.showReason) return '推荐理由'
-      return this.list.some(t => t.recordPlayCount != null) ? '播放次数' : '文件大小'
+      return this.visibleTracks.some(t => t.recordPlayCount != null) ? '播放次数' : '文件大小'
     },
     /** 当前播放曲目 id：PlayerCore 切歌时给队列项打 curSong 标记（见 PlayerCore.vue:739） */
     currentId() {
@@ -166,6 +227,16 @@ export default {
     isCurrent(t) {
       return this.currentId != null && t.id === this.currentId
     },
+    /** 这一行是否被屏蔽（mark 模式打角标、hide 模式过滤都用它） */
+    isBlocked(t) {
+      if (this.effectiveBlockedMode === 'none') return false
+      return !!this.$store.getters['BlockAbout/isTrackBlocked'](t)
+    },
+    /** 第一个带 id 的歌手：屏蔽歌手必须用真实 id，缺 id 的（恢复队列里的旧存档）不给入口 */
+    primaryArtist(t) {
+      const arr = this.artistList(t)
+      return arr.find(a => a && a.id != null) || null
+    },
     coverOf(t) {
       return (t.al && t.al.picUrl) || (t.album && t.album.picUrl) || this.defaultImg
     },
@@ -200,6 +271,21 @@ export default {
       this.$bus.$emit('mvClk', id)
     },
     songClk(song) {
+      // mark 模式下点了已屏蔽的歌：先问要不要解除，别让它静默不响
+      if (this.isBlocked(song)) {
+        this.$confirmBox({
+          title: '这首歌已被屏蔽',
+          message: `《${song.name || '未知'}》在你的音乐黑名单里，解除后才会播放。`,
+          confirmText: '解除并播放',
+          cancelText: '取消'
+        }).then(() => {
+          return this.$store.dispatch('BlockAbout/unblockSong', song.id).then(() => {
+            this.$toast.success('已解除屏蔽')
+            this.$bus.$emit('songClk', song)
+          })
+        }).catch(() => { /* 取消或接口失败，保持原样 */ })
+        return
+      }
       // 单击播放（原为 dblclick：与全站卡片单击跳转的习惯相反，新用户发现不了）
       this.$bus.$emit('songClk', song)
     },
@@ -208,6 +294,43 @@ export default {
     },
     alClk(id) {
       this.$bus.$emit('alClk', id)
+    },
+    /** 行内「更多」菜单：目前只有两个屏蔽动作，后续要加复制链接之类直接在这里扩 */
+    onRowCommand(cmd, track) {
+      if (cmd === 'blockSong') {
+        this.confirmBlockSong(track)
+      } else if (cmd === 'blockArtist') {
+        const artist = this.primaryArtist(track)
+        if (artist) this.confirmBlockArtist(artist)
+      }
+    },
+    confirmBlockSong(track) {
+      this.$confirmBox({
+        title: '屏蔽这首歌',
+        message: `《${track.name || '未知'}》将从所有列表隐藏，播放时自动跳过，官方客户端同样生效。可在「音乐黑名单」中恢复。`,
+        confirmText: '屏蔽',
+        cancelText: '取消'
+      }).then(() => {
+        this.$store.dispatch('BlockAbout/blockSong', track)
+            .then(() => {
+              this.$toast.success('已屏蔽，可在「音乐黑名单」中恢复')
+            })
+            .catch(() => this.$toast.error('屏蔽失败，请稍后重试'))
+      }).catch(() => { /* 取消 */ })
+    },
+    confirmBlockArtist(artist) {
+      this.$confirmBox({
+        title: '屏蔽这位歌手',
+        message: `「${artist.name}」的所有歌曲（含合唱）都将隐藏，播放时自动跳过。可在「音乐黑名单」中恢复。`,
+        confirmText: '屏蔽',
+        cancelText: '取消'
+      }).then(() => {
+        this.$store.dispatch('BlockAbout/blockArtist', artist)
+            .then(() => {
+              this.$toast.success('已屏蔽该歌手')
+            })
+            .catch(() => this.$toast.error('屏蔽失败，请稍后重试'))
+      }).catch(() => { /* 取消 */ })
     },
     /**
      * 单曲加入当前播放列表。
@@ -238,13 +361,13 @@ export default {
     },
     /** 顶部「全部加入播放列表」：先算清楚有几首是新的，避免提示"已加入 50 首"其实一首没进 */
     pushAllToQueue() {
-      if (!this.list.length) return
+      if (!this.visibleTracks.length) return
       if (this.queueAddBlocked) {
         this.$toast.info(this.queueAddTitle)
         return
       }
       // 声音（电台节目）搜索页也复用这个列表，它们没有音乐音源，不能进队列
-      const valid = this.list.filter(t => t && !t.isVoice && t.id != null)
+      const valid = this.visibleTracks.filter(t => t && !t.isVoice && t.id != null)
       if (!valid.length) {
         this.$toast.warning('声音节目不支持加入播放列表')
         return
@@ -263,6 +386,11 @@ export default {
         this.$bus.$emit('queue-changed', { playId: fresh[0].id, wasEmpty })
       })
     },
+    /** 外部（歌单页/日推页的"播放全部"）调用：只播可见的，跳过被屏蔽的 */
+    playVisible() {
+      if (!this.visibleTracks.length) return
+      this.playAllTracks(this.visibleTracks)
+    },
     ...mapActions('TracksAbout', {playAllTracks: 'playAllTracks'})
   }
 }
@@ -271,7 +399,7 @@ export default {
 <style lang="scss" scoped>
 @import "src/assets/scss/tracksLayout";
 
-// 行内快捷操作（加入播放列表 / 加入歌单）：hover 才出现，避免日常浏览时干扰。
+// 行内快捷操作（加入播放列表 / 加入歌单 / 更多）：hover 才出现，避免日常浏览时干扰。
 // 绝对定位在右侧并带底色——它盖住的是时长列，不给底色会和数字叠在一起。
 .trackAdd {
   position: absolute;
@@ -353,5 +481,43 @@ export default {
 .tracks:focus-within .trackActions {
   opacity: 1;
   pointer-events: auto;
+}
+
+// 已屏蔽提示条：告诉用户"少了 N 首"不是 bug，并给管理入口
+.tracksBlockedHint {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .3rem .1rem .55rem;
+  font-size: 12px;
+  color: var(--c-text-secondary);
+
+  .hintLink {
+    color: var(--c-accent);
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; }
+  }
+}
+
+// mark 模式（搜索结果）：整行压暗，但仍可交互——点播放会问要不要解除
+.tracks.is-blocked {
+  .name,
+  .artist,
+  .col-album,
+  .col-duration {
+    opacity: .45;
+  }
+}
+
+.blockedTag {
+  flex-shrink: 0;
+  padding: 0 .28rem;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--c-text-secondary);
+  background: var(--c-bg-sunken, rgba(127, 127, 127, .12));
+  border: 1px solid var(--c-border, rgba(127, 127, 127, .25));
 }
 </style>

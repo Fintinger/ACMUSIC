@@ -10,7 +10,7 @@
     />
     <div class="albumContainer">
       <GridSkeleton v-if="searchLoading" :count="8" type="artist"/>
-      <ArtistLayout v-if="!searchLoading && list.length" :list="list"/>
+      <ArtistLayout v-if="!searchLoading && list.length" :list="list" blocked-mode="mark"/>
     </div>
     <el-row>
       <LoadMore :error="searchPageError" v-if="!searchLoading && list.length" :load="load" :loading="loading" :noMore="noMore"/>

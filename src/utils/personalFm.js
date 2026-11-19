@@ -1,4 +1,5 @@
 import * as tracksApi from "@/api/Tracks"
+import store from "@/store"
 
 /**
  * 私人 FM 的「取流归属」登记。
@@ -67,6 +68,12 @@ export async function fetchFmBatch(size = 3, maxRequests = 4, excludeIds = [], o
         if (!Array.isArray(batch)) return
         batch.forEach(s => {
             if (!s || s.id == null) return
+            /**
+             * 被屏蔽的直接丢弃，且不进 repeats 兜底。
+             * 关键：过滤必须发生在 seen 判断之前 —— 否则"全被过滤"时会走 repeats 分支，
+             * 把屏蔽的歌唱回来（那段兜底的本意是应对同一时间窗，不是应对黑名单）。
+             */
+            if (store.getters['BlockAbout/isTrackBlocked'](s)) return
             if (seen.has(s.id)) {
                 if (!repeats.some(r => r.id === s.id)) repeats.push(s)
                 return

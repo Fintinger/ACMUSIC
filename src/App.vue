@@ -58,6 +58,7 @@
                       <BaseIcon name="user"/>个人主页
                     </el-dropdown-item>
                     <el-dropdown-item :command="openAccentPicker" class="menu-item"><BaseIcon name="palette"/>主题颜色</el-dropdown-item>
+                    <el-dropdown-item :command="goBlacklist" class="menu-item"><BaseIcon name="block"/>音乐黑名单</el-dropdown-item>
                     <el-dropdown-item :command="openChangelog" class="menu-item">
                       <BaseIcon name="calendar"/>更新日志<i v-if="changelogUnread" class="menu-dot"></i>
                     </el-dropdown-item>
@@ -159,9 +160,25 @@ export default {
     //路由变化（含 query 变化）后清理 keep-alive 漏掉的实例，见 reapEvictedPages
     '$route.fullPath'() {
       this.$nextTick(() => this.reapEvictedPages())
+      // 登录成功后一般都会跳转，借这次导航补拉屏蔽名单（登录态 getter 不是响应式的，watch 未必触发）
+      this.syncBlocklist()
+    },
+    /**
+     * 登录态变化：登录后拉一次屏蔽名单，登出清空。
+     * 名单是账号级的，换账号必须重新拉，否则会把上一份带过去。
+     */
+    isLogin(val) {
+      if (val) this.$store.dispatch('BlockAbout/init')
+      else this.$store.dispatch('BlockAbout/reset')
     }
   },
   methods: {
+    /** 已登录且还没同步过时拉一次名单；未登录不发请求，避免 301 噪音 */
+    syncBlocklist() {
+      const st = this.$store.state.BlockAbout
+      if (!st || st.loaded || st.loading) return
+      if (this.isLogin) this.$store.dispatch('BlockAbout/init')
+    },
     openAccentPicker() { this.showAccentPicker = true },
     openChangelog() {
       this.showChangelog = true
@@ -278,6 +295,9 @@ export default {
     goUserPage() {
       this.$router.push('/me')
     },
+    goBlacklist() {
+      this.$router.push('/blacklist')
+    },
     logout() {
       // 原实现用的是浏览器原生 confirm，与项目视觉完全脱节
       this.$confirmBox({
@@ -303,6 +323,8 @@ export default {
   },
   mounted() {
     this._stopAccentWatch = watchAccent(() => {})
+    // 首屏就同步一次屏蔽名单：有 localStorage 缓存的立刻生效，接口只做校正
+    this.syncBlocklist()
     // 有未读的更新日志时，头像上点一个小红点（版本号来自 package.json）
     this.changelogUnread = isChangelogUnread()
     this._stopThemeWatch = watchTheme(mode => { this.themePreference = mode; this.themeDark = document.documentElement.dataset.theme === 'dark' })

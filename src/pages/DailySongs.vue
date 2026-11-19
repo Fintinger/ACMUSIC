@@ -143,7 +143,14 @@ export default {
   methods: {
     playAll() {
       if (!this.list.length) return
-      this.$store.dispatch('TracksAbout/playAllTracks', this.list)
+      // 跳过黑名单：列表里已经隐藏了，播放全部也不能把它们带进队列
+      const isBlocked = this.$store.getters['BlockAbout/isTrackBlocked']
+      const playable = this.list.filter(t => !isBlocked(t))
+      if (!playable.length) {
+        this.$toast.info('这些歌都在音乐黑名单里')
+        return
+      }
+      this.$store.dispatch('TracksAbout/playAllTracks', playable)
     },
     /** 从响应里取歌曲数组：v1 与老接口都放在 data.dailySongs */
     readDaily(res) {

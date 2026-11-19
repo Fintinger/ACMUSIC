@@ -39,6 +39,13 @@
             <template v-else-if="followed">已关注</template>
             <template v-else>关注</template>
           </button>
+          <!-- 屏蔽歌手：和"关注"相反的动作，压成次要按钮，不跟关注抢主次 -->
+          <button class="blockBtn" :class="{ 'is-blocked': artistBlocked }"
+                  :title="artistBlocked ? '解除屏蔽' : '该歌手的所有歌曲将不再播放'"
+                  @click="toggleBlockArtist">
+            <BaseIcon name="block" :size="14"/>
+            <span>{{ artistBlocked ? '已屏蔽' : '屏蔽' }}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -157,6 +164,10 @@ export default {
     isLogin() {
       return this.$store.getters["UserAbout/isLogin"]
     },
+    /** 当前歌手是否在音乐黑名单里（账号级，跨设备一致） */
+    artistBlocked() {
+      return this.$store.getters['BlockAbout/isArtistBlocked'](this.id)
+    },
     /** 专辑区块是否显示【更多】（跳转全部专辑页） */
     hasMoreAlbums() {
       return this.arBasicInfo.albumSize > this.CARD_PREVIEW
@@ -218,6 +229,41 @@ export default {
       })
         .then(() => this.setFollow(0))
         .catch(() => { /* 继续关注 */ })
+    },
+    /**
+     * 屏蔽 / 解除屏蔽当前歌手。
+     * 屏蔽后该歌手的所有歌曲（含合唱）都会从列表消失、播放时跳过，
+     * 当前正在放的如果就是他，PlayerCore 会立刻切下一首。
+     */
+    toggleBlockArtist() {
+      if (!this.isLogin) {
+        this.$toast.info('登录后才能使用屏蔽功能')
+        return
+      }
+      const artist = { id: this.id, name: this.arBasicInfo.name || '' }
+      if (this.artistBlocked) {
+        this.$confirmBox({
+          title: '解除屏蔽',
+          message: `解除后「${artist.name}」的歌曲会重新出现在列表和推荐中。`,
+          confirmText: '解除',
+          cancelText: '取消'
+        }).then(() => {
+          this.$store.dispatch('BlockAbout/unblockArtist', this.id)
+              .then(() => this.$toast.success('已解除屏蔽'))
+              .catch(() => this.$toast.error('操作失败，请稍后重试'))
+        }).catch(() => { /* 取消 */ })
+        return
+      }
+      this.$confirmBox({
+        title: '屏蔽这位歌手',
+        message: `「${artist.name}」的所有歌曲（含合唱）都将隐藏，播放时自动跳过。可在「音乐黑名单」中恢复。`,
+        confirmText: '屏蔽',
+        cancelText: '取消'
+      }).then(() => {
+        this.$store.dispatch('BlockAbout/blockArtist', artist)
+            .then(() => this.$toast.success('已屏蔽该歌手'))
+            .catch(() => this.$toast.error('屏蔽失败，请稍后重试'))
+      }).catch(() => { /* 取消 */ })
     },
     setFollow(t) {
       this.followPending = true
@@ -300,7 +346,7 @@ export default {
   .hero-desc { font-size: 13px; opacity: .5; margin: 0; max-width: 600px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   // 关注按钮贴右侧（hero 是深色磨砂底，用白底/半透明描边两态）
-  .hero-actions { margin-left: auto; flex-shrink: 0; padding-left: 24px; }
+  .hero-actions { margin-left: auto; flex-shrink: 0; padding-left: 24px; display: flex; align-items: center; gap: 10px; }
   .followBtn {
     min-width: 104px;
     height: 38px;
@@ -324,6 +370,30 @@ export default {
     }
 
     &:disabled { opacity: .6; cursor: default; transform: none; }
+  }
+
+  // 屏蔽：次要动作，描边幽灵按钮，不跟"关注"争视觉重心
+  .blockBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 38px;
+    padding: 0 18px;
+    border-radius: 19px;
+    font-size: 13px;
+    cursor: pointer;
+    color: rgba(255,255,255,.8);
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.35);
+    transition: all .2s;
+
+    &:hover { color: #fff; border-color: rgba(255,255,255,.7); background: rgba(255,255,255,.08); }
+
+    &.is-blocked {
+      color: #f56c6c;
+      border-color: rgba(245,108,108,.55);
+      background: rgba(245,108,108,.12);
+    }
   }
 }
 

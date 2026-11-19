@@ -15,7 +15,7 @@
 
 | 优先级 | 位置 | 具体落点 |
 | --- | --- | --- |
-| P0 | 大播放器「更多」 | `MusicPlayer.vue` 红心/MV 那一排加 `⋯`，菜单：屏蔽这首歌 / 屏蔽这位歌手 |
+| P0 | 迷你条「更多」 | `PlayerCore.vue` 的 `barRight` 末尾加 `⋯`，菜单：屏蔽这首歌 / 屏蔽这位歌手。展开播放大厅不放入口——那里是沉浸听歌，不该塞管理动作 |
 | P0 | 歌曲行「更多」 | `TracksLayout.vue` 现有两个 hover 按钮收进 `⋯` 下拉（加入队列、加入歌单、屏蔽歌曲、屏蔽歌手） |
 | P1 | 歌手页 | `ArtistDetail.vue` 的 `hero-actions`，关注按钮旁边加「屏蔽」 |
 | P1 | 播放队列 | `PlayerCore.vue:281` 每项操作区，在「下一首播放 / 移除」之间 |
@@ -137,3 +137,30 @@ blockedMode: 'hide' | 'mark'   // 默认 hide
 | 7 | FM / 心动取流过滤、每日推荐补位 | 1 |
 
 前 5 步是 MVP，够用且不破坏任何现有交互；6、7 是打磨。
+
+## 八、实现状态（2026-11-19）
+
+已按下文落地，代码位置：
+
+| 模块 | 文件 |
+| --- | --- |
+| 接口封装 | `src/api/Block.js`（get 带 `?t=` 绕缓存；`contentIdList` 统一转 JSON 数组字符串） |
+| 名单状态 | `src/store/modules/Block.js`（localStorage 缓存垫底 + 写操作乐观更新 + `rev` 版本号） |
+| 启动同步 | `App.vue` 的 `syncBlocklist()`，mounted 与路由变化各查一次；登出时 `reset` |
+| 播放跳过 | `PlayerCore.vue` 的 `_findPlayable` / `getNextIndex` / `getPrevIndex` / shuffle / FM 分支 |
+| 列表过滤 | `TracksLayout.vue` 的 `blockedMode`（`hide` / `mark` / `none`）+「已屏蔽 N 首」提示条 |
+| 歌手卡片 | `ArtistLayout.vue` 的 `blockedMode` |
+| 入口 | 迷你条右侧 `⋯`（队列按钮旁）、歌曲行 `⋯`、歌手页「屏蔽」 |
+| 管理页 | `src/pages/Blacklist.vue`，路由 `/blacklist`，头像菜单进入 |
+| 推荐过滤 | `utils/personalFm.js` 的 `collect`、`utils/heartMode.js` 的 `fetchHeartBatch` |
+
+两处与设计不同：
+
+1. **队列不物理移除**。设计里写"屏蔽时把歌从队列移除"，实现改成"跳过 + 队列里灰显划掉"。原因是物理移除必须同步修正 `curIndex`，而这个索引被 77 处代码依赖，`REPLACE_PLAYLIST` 与 `curIndex` watcher 之间很容易错位删错歌。用户感知一致：不会播到它，队列里能看到它被划掉。
+2. **「我的」页入口未做**。目前只有头像菜单一个入口。`UserDetailLayout.vue` 有 80KB，结构复杂，为一张卡片动它的风险大于收益，等重做那块时再补。
+
+另外两处小调整：
+
+- `blockArtist` 图标没做（`block` 一个就够用）；`more` 图标项目里本来就有，没重复添加。
+- 歌手详情页的"已屏蔽"横幅没做，改为 hero 区按钮本身的反色状态（「已屏蔽」红字）表达同一件事。
+

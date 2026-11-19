@@ -278,7 +278,7 @@
                 </span>
               </div>
               <div class="plItems">
-                <el-dropdown-item v-for="s in currentPlaylist" :key="s.id" :class="{ active: s.curSong }" :command="s">
+                <el-dropdown-item v-for="s in currentPlaylist" :key="s.id" :class="{ active: s.curSong, 'is-blocked': isBlocked(s) }" :command="s">
                   <span class="plSongName">{{ s.name }}</span>
                   <span class="plSongArtist">{{ getArtistStr(s) }}</span>
                   <span class="plOps">
@@ -293,6 +293,22 @@
                 <p>播放列表为空</p>
                 <p class="plEmptyHint">播放歌曲后会自动添加</p>
               </div>
+            </el-dropdown-menu>
+          </el-dropdown>
+        </div>
+        <!--
+          更多：屏蔽歌曲 / 歌手。
+          放在迷你条而不是展开播放器——展开态是"沉浸听歌"，不该塞低频管理动作；
+          迷你条才是"听到不想听的随手处理"的地方。
+        -->
+        <div class="barItem moreWrap">
+          <el-dropdown trigger="click" placement="top" @command="onBlockCommand">
+            <span class="moreTrigger" title="更多" aria-label="更多操作">
+              <BaseIcon name="more" :size="16"/>
+            </span>
+            <el-dropdown-menu slot="dropdown">
+              <el-dropdown-item command="blockSong" :disabled="!currentSong.id">屏蔽这首歌</el-dropdown-item>
+              <el-dropdown-item command="blockArtist" :disabled="!primaryArtist">屏蔽这位歌手</el-dropdown-item>
             </el-dropdown-menu>
           </el-dropdown>
         </div>
@@ -742,11 +758,15 @@ export default {
       return this.sleepFade ? `${base}（最后 ${this.fadeSec} 秒渐弱）` : base
     },
     isVip() { return this.vipType !== 0 },
-    /**
-     * 菜单里该高亮哪一档。
-     * 用户选的档位这首歌没有时（例如全局选了无损，但这首最高只有 320k），
-     * 不能让高亮停在"不存在的档位"上——标出实际在用的那一档，否则菜单看着像坏了。
-     */
+    /** 屏蔽名单版本号：watch 用它（字符串路径 watch 走 $store 不稳，computed 更可靠） */
+    blockRev() { return this.$store.state.BlockAbout.rev },
+    /** 第一个带 id 的歌手：屏蔽歌手必须用真实 id，恢复队列里的旧存档可能只有名字 */
+    primaryArtist() {
+      const s = this.currentSong || {}
+      const ar = s.ar || s.artists
+      if (!Array.isArray(ar)) return null
+      return ar.find(a => a && a.id != null) || null
+    },
     /**
      * 菜单里该高亮哪一档——以"实际在放的档位"为准。
      *
@@ -1052,6 +1072,14 @@ export default {
     isPlay() {
       this._syncTitle()
       this._syncMediaSession()
+    },
+    /**
+     * 屏蔽名单变了：当前这首刚被屏蔽就立刻跳走。
+     * 用 rev 计数而不是 deep watch —— Vue.set/Vue.delete 不换对象引用，浅 watch 捕捉不到，
+     * deep watch 又要遍历整个名单，性价比低。
+     */
+    blockRev() {
+      this._onBlocklistChanged()
     }
   },
   methods: {
@@ -1724,12 +1752,10 @@ export default {
       if (this._consumeSleep(true)) return
       if (this.heartMode) { this._heartAdvance(); return }
       if (this.isPersonalFM) {
-        // FM 模式：未到末尾时顺序切，到末尾才触发取流（见 _fmAdvance）
-        if (this.curIndex < this.currentPlaylist.length - 1) {
-          this.curIndex = this.curIndex + 1
-        } else {
-          this._fmAdvance()
-        }
+        // FM 模式：顺序切，跳过被屏蔽的；到末尾（或剩下的全被屏蔽）才触发取流（见 _fmAdvance）
+        const next = this._findPlayable(this.curIndex, 1, false)
+        if (next >= 0) this.curIndex = next
+        else this._fmAdvance()
         return
       }
       if (!this._inPlaylist()) return
@@ -1741,6 +1767,104 @@ export default {
     _inPlaylist() {
       const id = this.currentSong && this.currentSong.id
       return id && this.currentPlaylist.findIndex(s => s.id === id) !== -1
+    },
+    // ---------------- 屏蔽（音乐黑名单） ----------------
+    /**
+     * 队列里第 i 项是否被屏蔽。
+     * 判定口径与官方客户端一致：歌 id 命中 songIds，或任一歌手 id 命中 artistIds
+     * （见 store/modules/Block.js 的 isTrackBlocked）。
+     */
+    _isBlockedAt(i) {
+      const t = this.currentPlaylist[i]
+      if (!t) return false
+      return !!this.$store.getters['BlockAbout/isTrackBlocked'](t)
+    },
+    /** 一首歌是否被屏蔽（模板里给队列项打灰标用） */
+    isBlocked(t) {
+      if (!t) return false
+      return !!this.$store.getters['BlockAbout/isTrackBlocked'](t)
+    },
+    /**
+     * 从 start 出发按 step 找下一个没被屏蔽的索引。
+     * 找满一圈都没有就返回 -1 —— "全部被屏蔽"和"队尾"要由调用方区分，
+     * 这里只回答"有没有下一首能播的"。
+     * @param {number} start 起始索引（不含）
+     * @param {number} step +1 / -1
+     * @param {boolean} wrap 越界是否回绕
+     */
+    _findPlayable(start, step = 1, wrap = true) {
+      const len = this.currentPlaylist.length
+      if (!len) return -1
+      let idx = start
+      for (let n = 0; n < len; n++) {
+        idx += step
+        if (idx < 0) {
+          if (!wrap) return -1
+          idx = len - 1
+        } else if (idx >= len) {
+          if (!wrap) return -1
+          idx = 0
+        }
+        if (!this._isBlockedAt(idx)) return idx
+      }
+      return -1
+    },
+    /** 队列里还有没有能播的（给"全被屏蔽"的提示文案用） */
+    _hasPlayable() {
+      return this.currentPlaylist.some(t => t && !this.$store.getters['BlockAbout/isTrackBlocked'](t))
+    },
+    /** 当前这首是否已被屏蔽 */
+    _currentBlocked() {
+      const cur = this.currentSong
+      return !!(cur && cur.id != null && this.$store.getters['BlockAbout/isTrackBlocked'](cur))
+    },
+    /**
+     * 名单变化后的收尾：当前这首刚被屏蔽就立刻跳走，不要停在上面。
+     * 别的歌被屏蔽不用管 —— 切歌时会自动跳过。
+     */
+    _onBlocklistChanged() {
+      if (!this._currentBlocked()) return
+      const next = this.getNextIndex()
+      if (next >= 0 && next !== this.curIndex) {
+        this.showHint('这首已被屏蔽，已跳到下一首', 'block', 3000)
+        this.curIndex = next
+      } else {
+        this.pauseSong()
+        this.showHint('当前歌曲已被屏蔽', 'block', 3000)
+      }
+    },
+    /** 迷你条「更多」菜单：屏蔽歌曲 / 歌手 */
+    onBlockCommand(cmd) {
+      if (cmd === 'blockSong') this.confirmBlockSong()
+      else if (cmd === 'blockArtist') this.confirmBlockArtist()
+    },
+    confirmBlockSong() {
+      const s = this.currentSong || {}
+      if (!s.id) return
+      this.$confirmBox({
+        title: '屏蔽这首歌',
+        message: `《${s.name || '未知'}》将从所有列表隐藏，播放时自动跳过，官方客户端同样生效。可在「音乐黑名单」中恢复。`,
+        confirmText: '屏蔽',
+        cancelText: '取消'
+      }).then(() => {
+        this.$store.dispatch('BlockAbout/blockSong', s)
+            .then(() => this.$toast.success('已屏蔽，可在「音乐黑名单」中恢复'))
+            .catch(() => this.$toast.error('屏蔽失败，请稍后重试'))
+      }).catch(() => { /* 取消 */ })
+    },
+    confirmBlockArtist() {
+      const ar = this.primaryArtist
+      if (!ar) return
+      this.$confirmBox({
+        title: '屏蔽这位歌手',
+        message: `「${ar.name}」的所有歌曲（含合唱）都将隐藏，播放时自动跳过。可在「音乐黑名单」中恢复。`,
+        confirmText: '屏蔽',
+        cancelText: '取消'
+      }).then(() => {
+        this.$store.dispatch('BlockAbout/blockArtist', ar)
+            .then(() => this.$toast.success('已屏蔽该歌手'))
+            .catch(() => this.$toast.error('屏蔽失败，请稍后重试'))
+      }).catch(() => { /* 取消 */ })
     },
     // 自动播放到结尾触发：loop 模式重播当前曲
     // opts.skipLoop=true 时忽略单曲循环分支（副歌模式到点切歌要走这里，
@@ -1767,13 +1891,11 @@ export default {
       if (this.playMode === 'loop' && !(opts && opts.skipLoop)) { this._restartCurrent(); return }
       if (this.heartMode) { this._heartAdvance(); return }
       if (this.isPersonalFM) {
-        // FM 模式：未到末尾时顺序切，到末尾才触发取流（见 _fmAdvance）
-        if (this.curIndex < this.currentPlaylist.length - 1) {
-          this.curIndex = this.curIndex + 1
-        } else {
-          // 末尾：有 UI 时由 PersonalFM 应用预取批次，没有 UI 时本组件自己拉
-          this._fmAdvance()
-        }
+        // FM 模式：顺序切，跳过被屏蔽的；到末尾才触发取流
+        // 末尾：有 UI 时由 PersonalFM 应用预取批次，没有 UI 时本组件自己拉
+        const next = this._findPlayable(this.curIndex, 1, false)
+        if (next >= 0) this.curIndex = next
+        else this._fmAdvance()
         return
       }
       if (!this._inPlaylist()) return
@@ -1787,8 +1909,10 @@ export default {
      */
     _onQueueEnd() {
       this.pauseSong()
-      this.showHint('队列已播完（顺序播放）', 'sequence')
-      console.log('[PlayMode]', { action: 'queue_end', mode: this.playMode })
+      // 全部被屏蔽时不能说"队列已播完"——用户会以为队列真的空了
+      const playable = this._hasPlayable()
+      this.showHint(playable ? '队列已播完（顺序播放）' : '队列里的歌都被屏蔽了', 'sequence')
+      console.log('[PlayMode]', { action: 'queue_end', mode: this.playMode, playable })
     },
     /**
      * 播放器内联状态条。
@@ -2028,16 +2152,20 @@ export default {
       if (this.playMode === 'random') return this._nextShuffleIndex()
       // 顺序播放：走到底返回 -1，由调用方负责停播（区别于列表循环的回绕）
       if (this.playMode === 'sequence' && this.curIndex >= this.currentPlaylist.length - 1) return -1
-      return this.curIndex + 1 > this.currentPlaylist.length - 1 ? 0 : this.curIndex + 1
+      // 跳过被屏蔽的；一整圈都不可播返回 -1，由调用方停播并给出提示
+      return this._findPlayable(this.curIndex, 1, this.playMode !== 'sequence')
     },
     getPrevIndex() {
       /**
        * 心动 / 私人FM：队列是推荐流，队列策略（随机 / 循环）不参与，一律线性后退；
        * 队首返回 -1 表示"没有上一首"，由 preSong 决定原地不动并给出提示。
+       * 被屏蔽的曲目同样跳过。
        */
-      if (this.heartMode || this.isPersonalFM) return this.curIndex > 0 ? this.curIndex - 1 : -1
+      if (this.heartMode || this.isPersonalFM) {
+        return this._findPlayable(this.curIndex, -1, false)
+      }
       if (this.playMode === 'random') return this._prevShuffleIndex()
-      return this.curIndex - 1 < 0 ? this.currentPlaylist.length - 1 : this.curIndex - 1
+      return this._findPlayable(this.curIndex, -1, true)
     },
     // 随机播放洗牌序列：Fisher-Yates 打乱，当前曲放首位，保证一轮内每首只播一次
     _initShuffle() {
@@ -2059,13 +2187,24 @@ export default {
     },
     _nextShuffleIndex() {
       if (this.shuffleOrder.length !== this.currentPlaylist.length || this.shufflePos === -1) this._initShuffle()
-      this.shufflePos = (this.shufflePos + 1) % this.shuffleOrder.length
-      return this.shuffleOrder[this.shufflePos]
+      const len = this.shuffleOrder.length
+      // 沿洗牌序列往前找，跳过被屏蔽的；一轮都不行返回 -1（全被屏蔽）
+      for (let n = 0; n < len; n++) {
+        this.shufflePos = (this.shufflePos + 1) % len
+        const idx = this.shuffleOrder[this.shufflePos]
+        if (!this._isBlockedAt(idx)) return idx
+      }
+      return -1
     },
     _prevShuffleIndex() {
       if (this.shuffleOrder.length !== this.currentPlaylist.length || this.shufflePos === -1) this._initShuffle()
-      this.shufflePos = (this.shufflePos - 1 + this.shuffleOrder.length) % this.shuffleOrder.length
-      return this.shuffleOrder[this.shufflePos]
+      const len = this.shuffleOrder.length
+      for (let n = 0; n < len; n++) {
+        this.shufflePos = (this.shufflePos - 1 + len) % len
+        const idx = this.shuffleOrder[this.shufflePos]
+        if (!this._isBlockedAt(idx)) return idx
+      }
+      return -1
     },
     _restartCurrent() {
       this.onInteract()
@@ -2964,7 +3103,13 @@ export default {
       }, { once: true })
       evt.preventDefault()
     },
-    handleCommand(s) { this.onInteract(); this.showPlayerPending = true; this.isLoading = true; console.trace('[HandleCommandCall]'); console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.playIntentId++; this.playContextId++; this.currentSongSource = 'playlist'; this.currentPlaySourceLocked = true; this.playlistContextId = this.playContextId; console.log('[SourceChange]', { to: 'playlist', songId: s && s.id, trigger: 'handleCommand' }); console.trace('[CurrentSongSet] handleCommand', s && s.id); this.currentSong = s },
+    handleCommand(s) {
+      // 队列里点已屏蔽的歌：不播，给一条能走下去的提示
+      if (this.isBlocked(s)) {
+        this.$toast.info('这首歌已被屏蔽，可在「音乐黑名单」中解除')
+        return
+      }
+      this.onInteract(); this.showPlayerPending = true; this.isLoading = true; console.trace('[HandleCommandCall]'); console.log('[SongState]', { action: 'handleCommand', songId: s && s.id, requestId: this.playRequestId }); this.playIntentId++; this.playContextId++; this.currentSongSource = 'playlist'; this.currentPlaySourceLocked = true; this.playlistContextId = this.playContextId; console.log('[SourceChange]', { to: 'playlist', songId: s && s.id, trigger: 'handleCommand' }); console.trace('[CurrentSongSet] handleCommand', s && s.id); this.currentSong = s },
     /**
      * 把队列收成"只在播的这一首"。
      *
@@ -4461,6 +4606,15 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
     i { font-size: 16px; }
     .plCount { font-size: 10px; background: rgba(255,255,255,0.1); color: $text; border-radius: 8px; padding: 1px 5px; min-width: 14px; text-align: center; }
   }
+  // 更多（屏蔽入口）：跟着队列按钮走，尺寸对齐，不额外抢空间
+  .moreWrap .moreTrigger {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    color: $text-sec;
+    transition: color 160ms ease, background 160ms ease;
+    &:hover { color: $text; background: rgba(255, 255, 255, 0.08); }
+  }
   .qualityWrap .qualityBtn {
     display: inline-flex; align-items: center; justify-content: center;
     height: 22px; padding: 0 7px;
@@ -4656,6 +4810,12 @@ $border: rgba(255,255,255,0.06); $radius: 12px;
         color: var(--player-pop-accent); font-weight: 600;
         border-left: 2px solid var(--player-pop-accent);
         .plSongArtist { color: var(--player-pop-secondary); }
+      }
+
+      // 已被屏蔽：压暗 + 删除线。仍然显示（用户要能看到队列里有哪些），但点了不播
+      &.is-blocked {
+        opacity: .45;
+        .plSongName { text-decoration: line-through; }
       }
     }
 

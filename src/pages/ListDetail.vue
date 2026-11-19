@@ -23,7 +23,7 @@
               <pre v-text="listInfo.description"></pre>
             </el-row>
             <div class="detail-play-actions">
-              <button type="button" class="detail-play-all" :disabled="initialLoading || !songs.length" @click="$refs.songTracks.playAllTracks(songs)"><BaseIcon name="play"/> 播放全部</button>
+              <button type="button" class="detail-play-all" :disabled="initialLoading || !songs.length" @click="$refs.songTracks.playVisible()"><BaseIcon name="play"/> 播放全部</button>
               <button type="button" class="detail-queue-all" :disabled="!songs.length" @click="$refs.songTracks.pushAllToQueue()"><BaseIcon name="listPlus"/> 加入列表</button>
               <!-- 收藏：自己的歌单 / 系统歌单（我喜欢的音乐、榜单）不显示，服务端本来也不允许 -->
               <button

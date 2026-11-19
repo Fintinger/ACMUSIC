@@ -8,6 +8,7 @@ Vue.use(Vuex);
 //引入相关模块
 import UserAbout from "@/store/modules/User"
 import TracksAbout from "@/store/modules/Tracks"
+import BlockAbout from "@/store/modules/Block"
 
 
 
@@ -15,6 +16,7 @@ import TracksAbout from "@/store/modules/Tracks"
 export default new Vuex.Store({
     modules: {
         UserAbout,
-        TracksAbout
+        TracksAbout,
+        BlockAbout
     }
 })

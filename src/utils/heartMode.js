@@ -18,6 +18,7 @@ import * as authApi from "@/api/auth";
 import * as userDetailApi from "@/api/UserDetail";
 import * as tracksApi from "@/api/Tracks";
 import { normalizeTrack } from "@/utils/normalize";
+import store from "@/store";
 
 // 红心歌单 id 缓存：一次会话内不会变，切账号/登出时由 resetHeartPlaylistId() 清
 let heartPlaylistId = 0;
@@ -65,7 +66,9 @@ export function getHeartPlaylistId() {
  */
 export function fetchHeartBatch(seedId, count = 20) {
     return getHeartPlaylistId().then(pid => {
-        return tracksApi.smartPlay(seedId, pid, undefined, count).then(res => {
+        // 多要一些：下面会按黑名单过滤，只取 count 条很可能过滤完不够数
+        const askCount = Math.max(count * 2, 40)
+        return tracksApi.smartPlay(seedId, pid, undefined, askCount).then(res => {
             const d = res && res.data
             if (!d || d.code !== 200) {
                 const e = new Error((d && d.message) || '心动模式不可用')
@@ -78,6 +81,8 @@ export function fetchHeartBatch(seedId, count = 20) {
             return raw
                 .filter(x => x && x.songInfo && String(x.songInfo.id) !== seed)
                 .map(x => normalizeTrack(x.songInfo))
+                // 黑名单过滤：心动模式的队列是现生成的推荐流，被屏蔽的不能进来
+                .filter(t => !store.getters['BlockAbout/isTrackBlocked'](t))
                 // 上游可能一次给几十上百首，截一下避免队列膨胀到不可控
                 .slice(0, 30)
         })

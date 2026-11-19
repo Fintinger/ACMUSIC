@@ -214,4 +214,10 @@ export default {
         stroke: 'currentColor', strokeWidth: 1.8,
         path: 'M12 21.5s7-5.8 7-11.5a7 7 0 1 0-14 0c0 5.7 7 11.5 7 11.5z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
     },
+    // 屏蔽（音乐黑名单）：禁止符号。用「圆 + 斜杠」而不是垃圾桶——屏蔽是可逆的过滤，不是删除
+    block: {
+        type: 'svg',
+        stroke: 'currentColor', strokeWidth: 1.8,
+        path: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M5.64 5.64l12.72 12.72',
+    },
 }
