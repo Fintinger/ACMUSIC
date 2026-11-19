@@ -62,17 +62,8 @@
 
         <div ref="thread" class="panel-thread">
           <!-- 空态：窗口小，只给三个方向差异明显的例子 -->
-          <!-- 空态：先告诉用户"我知道你在听什么"，再给几个方向 -->
+          <!-- 空态：只给几个方向，正在播放的提示统一放在底部输入区上方 -->
           <div v-if="!messages.length" class="panel-intro">
-            <div v-if="nowSong.id" class="now-card">
-              <span class="now-label">{{ isPlaying ? '正在播放' : '已暂停' }}</span>
-              <strong class="now-name">{{ nowSong.name }}</strong>
-              <span v-if="nowSong.artist" class="now-artist">{{ nowSong.artist }}</span>
-              <button type="button" class="now-action" @click="askSameVibe">
-                <BaseIcon name="sparkles" :size="12"/><span>照着这首来一张</span>
-              </button>
-            </div>
-
             <p class="intro-title">想听点什么？</p>
             <div class="intro-presets">
               <button
@@ -188,8 +179,9 @@
         </div>
 
         <div class="panel-composer">
-          <!-- 聊到一半也能"照着这首来一张"：空态有卡片，这里给一个常驻入口 -->
-          <div v-if="messages.length && sameVibeText" class="vibe-row">
+          <!-- 正在播放的提示统一收在底部：一条虚线标签，不占对话区空间，
+               空态和有对话时都在同一个位置 -->
+          <div v-if="sameVibeText" class="vibe-row">
             <button type="button" class="vibe-chip" @click="askSameVibe">
               <BaseIcon name="sparkles" :size="10"/><span>照着《{{ nowSong.name }}》来一张</span>
             </button>
@@ -991,61 +983,6 @@ export default {
 .panel-intro {
   padding: 8px 2px 4px;
 
-  // 「正在听」卡片：把上下文摆在最前面，比一句"想听点什么"更具体
-  .now-card {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 10px 12px;
-    margin-bottom: 14px;
-    border-radius: 12px;
-    border: 1px solid var(--c-border);
-    background: var(--c-bg-sunken);
-  }
-
-  .now-label {
-    font-size: 10px;
-    letter-spacing: .06em;
-    color: $font-black-2;
-  }
-
-  .now-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: $font-black;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .now-artist {
-    font-size: 11px;
-    color: $font-black-2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .now-action {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 26px;
-    margin-top: 8px;
-    padding: 0 12px;
-    border: none;
-    border-radius: $radius-pill;
-    background: var(--c-button-primary);
-    color: var(--c-text-on-accent);
-    font-size: 11px;
-    font-weight: 500;
-    font-family: inherit;
-    cursor: pointer;
-    transition: opacity .18s ease;
-
-    &:hover { opacity: .9; }
-  }
 
   .intro-title {
     margin: 0 0 10px;
