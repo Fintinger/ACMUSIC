@@ -1068,10 +1068,12 @@ export default {
       if (id !== oldId) this._resetAb()
       this._syncTitle()
       this._syncMediaSession()
+      this._broadcastNowPlaying()
     },
     isPlay() {
       this._syncTitle()
       this._syncMediaSession()
+      this._broadcastNowPlaying()
     },
     /**
      * 屏蔽名单变了：当前这首刚被屏蔽就立刻跳走。
@@ -1226,6 +1228,22 @@ export default {
           this._seekBy(dir * 5)
         }
       }
+    },
+    /**
+     * 广播「现在在放什么」。
+     * currentSong / isPlay 都只存在于本组件，浮窗挂在 App 层拿不到，
+     * 所以由这里推出去 —— 换歌、播放/暂停各推一次。
+     * 只传浮窗要用的三个字段，别把整个歌曲对象丢过去。
+     */
+    _broadcastNowPlaying() {
+      const s = this.currentSong || {}
+      const ar = (s.ar && s.ar[0]) || (s.artists && s.artists[0]) || null
+      this.$bus.$emit('nowPlaying', {
+        id: s.id || 0,
+        name: s.name || '',
+        artist: (ar && ar.name) || '',
+        playing: !!this.isPlay
+      })
     },
     _syncTitle() {
       const s = this.currentSong

@@ -5,7 +5,7 @@
         v-show="!open"
         type="button"
         class="ai-fab"
-        :class="{ 'has-player': hasPlayer }"
+        :class="{ 'has-player': hasPlayer, 'is-playing': isPlaying, 'is-pulse': songPulse }"
         aria-label="打开 AI 点歌"
         title="AI 点歌"
         @click="openPanel"
@@ -26,7 +26,7 @@
           <img class="head-avatar" src="/favicon.ico" alt="">
           <div class="head-text">
             <strong>AI 点歌</strong>
-            <span>说一句，给你挑一张歌单</span>
+            <span>{{ headSub }}</span>
           </div>
           <button
               v-if="messages.length"
@@ -42,7 +42,17 @@
 
         <div ref="thread" class="panel-thread">
           <!-- 空态：窗口小，只给三个方向差异明显的例子 -->
+          <!-- 空态：先告诉用户"我知道你在听什么"，再给几个方向 -->
           <div v-if="!messages.length" class="panel-intro">
+            <div v-if="nowSong.id" class="now-card">
+              <span class="now-label">{{ isPlaying ? '正在播放' : '已暂停' }}</span>
+              <strong class="now-name">{{ nowSong.name }}</strong>
+              <span v-if="nowSong.artist" class="now-artist">{{ nowSong.artist }}</span>
+              <button type="button" class="now-action" @click="askSameVibe">
+                <BaseIcon name="sparkles" :size="12"/><span>照着这首来一张</span>
+              </button>
+            </div>
+
             <p class="intro-title">想听点什么？</p>
             <div class="intro-presets">
               <button
@@ -158,6 +168,13 @@
         </div>
 
         <div class="panel-composer">
+          <!-- 聊到一半也能"照着这首来一张"：空态有卡片，这里给一个常驻入口 -->
+          <div v-if="messages.length && sameVibeText" class="vibe-row">
+            <button type="button" class="vibe-chip" @click="askSameVibe">
+              <BaseIcon name="sparkles" :size="10"/><span>照着《{{ nowSong.name }}》来一张</span>
+            </button>
+          </div>
+
           <div v-if="exclude.length" class="exclude-row">
             <span class="ex-label">已排除</span>
             <button
@@ -221,6 +238,11 @@ export default {
       exclude: [],
       taste: [],
       tasteLoading: false,
+      // 当前播放：由 PlayerCore 通过 $bus('nowPlaying') 推过来（那两个字段不在 store 里）
+      nowSong: {id: 0, name: '', artist: ''},
+      isPlaying: false,
+      // 换歌时给入口一个短脉冲，让"它注意到你切歌了"这件事有反馈
+      songPulse: false,
       presets: ['下雨天写代码', '90 年代粤语金曲', '跑步时听的快节奏']
     }
   },
@@ -235,16 +257,49 @@ export default {
     userAvatar() {
       const p = this.$store.getters['UserAbout/userProfile']
       return (p && p.avatarUrl) || ''
+    },
+    /** 头部副标题：有歌时它就是"我此刻知道你在听什么"的证据 */
+    headSub() {
+      if (!this.nowSong.id) return '说一句，给你挑一张歌单'
+      if (!this.isPlaying) return `已暂停 · ${this.nowSong.name}`
+      return `正在听《${this.nowSong.name}》`
+    },
+    /** 一句话把当前歌曲交给模型 —— 复用现有链路，不需要任何新接口 */
+    sameVibeText() {
+      const s = this.nowSong
+      if (!s.id || !s.name) return ''
+      return `照着《${s.name}》${s.artist ? ' - ' + s.artist : ''} 这种感觉来一张`
     }
   },
   mounted() {
     // 全屏播放详情页上不显示入口
     this.$bus.$on('playerExpand', this.onPlayerExpand)
+    this.$bus.$on('nowPlaying', this.onNowPlaying)
   },
   beforeDestroy() {
     this.$bus.$off('playerExpand', this.onPlayerExpand)
+    this.$bus.$off('nowPlaying', this.onNowPlaying)
   },
   methods: {
+    onNowPlaying(payload) {
+      if (!payload) return
+      const changed = payload.id && payload.id !== this.nowSong.id
+      this.nowSong = {
+        id: payload.id || 0,
+        name: payload.name || '',
+        artist: payload.artist || ''
+      }
+      this.isPlaying = !!payload.playing
+      if (changed) {
+        this.songPulse = true
+        clearTimeout(this._pulseTimer)
+        this._pulseTimer = setTimeout(() => { this.songPulse = false }, 600)
+      }
+    },
+    askSameVibe() {
+      if (!this.sameVibeText || this.sending) return
+      this.ask(this.sameVibeText)
+    },
     onPlayerExpand(expanded) {
       this.hidden = !!expanded
       if (expanded) this.open = false
@@ -513,6 +568,19 @@ export default {
   // 有播放条时抬高，避免压在播放条上
   &.has-player { bottom: 104px; }
 
+  .ac-icon { transition: transform .35s ease; }
+
+  // 播放中：图标轻微呼吸。幅度刻意做小 —— 它只是"我在听"的信号，
+  // 不是要跟用户抢注意力
+  &.is-playing .ac-icon {
+    animation: fab-breath 2.6s ease-in-out infinite;
+  }
+
+  // 换歌：整个按钮脉冲一次，表示"我注意到你切歌了"
+  &.is-pulse {
+    animation: fab-pulse .55s ease;
+  }
+
   &:hover {
     transform: translateY(-2px) scale(1.04);
     box-shadow: 0 12px 30px rgba(var(--theme-accent-rgb), .48);
@@ -621,6 +689,62 @@ export default {
 
 .panel-intro {
   padding: 8px 2px 4px;
+
+  // 「正在听」卡片：把上下文摆在最前面，比一句"想听点什么"更具体
+  .now-card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    border-radius: 12px;
+    border: 1px solid var(--c-border);
+    background: var(--c-bg-sunken);
+  }
+
+  .now-label {
+    font-size: 10px;
+    letter-spacing: .06em;
+    color: $font-black-2;
+  }
+
+  .now-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: $font-black;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .now-artist {
+    font-size: 11px;
+    color: $font-black-2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .now-action {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    margin-top: 8px;
+    padding: 0 12px;
+    border: none;
+    border-radius: $radius-pill;
+    background: var(--c-button-primary);
+    color: var(--c-text-on-accent);
+    font-size: 11px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity .18s ease;
+
+    &:hover { opacity: .9; }
+  }
 
   .intro-title {
     margin: 0 0 10px;
@@ -917,6 +1041,37 @@ export default {
   background: var(--c-bg-elevated);
 }
 
+.vibe-row {
+  padding: 0 2px 8px;
+}
+
+// 虚线边框：和「已排除」的实线 chip 区分开 —— 一个是你定下的规则，
+// 一个是我主动给的建议
+.vibe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: $radius-pill;
+  border: 1px dashed rgba(var(--theme-accent-rgb), .55);
+  background: transparent;
+  color: $color-main-text;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .18s ease;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover { border-style: solid; }
+}
+
 .exclude-row {
   display: flex;
   align-items: center;
@@ -1010,5 +1165,24 @@ export default {
 .panel-pop-leave-to {
   opacity: 0;
   transform: translateY(8px) scale(.97);
+}
+
+@keyframes fab-breath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+
+@keyframes fab-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+// 系统开了"减少动态效果"就全部停掉：呼吸和脉冲都是装饰，不该强行播
+@media (prefers-reduced-motion: reduce) {
+  .ai-fab.is-playing .ac-icon,
+  .ai-fab.is-pulse {
+    animation: none;
+  }
 }
 </style>

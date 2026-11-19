@@ -4216,3 +4216,13 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - `set-key.sh` 改成只替换 `DEEPSEEK_API_KEY` 那一行，不再整文件覆盖 —— 否则改一次 key 就把白名单清空了。
 - 验证：白名单 IP 连发 8 次全 200（改动前第 7 次就 429）；服务器本地伪造 `X-Real-IP: 9.9.9.9` 连发 12 次，结果是前 10 个 200、第 11-12 个 429，证明应用层 10 次/分钟的额度对普通用户仍然有效。
 - 注意：1) 日配额按 IP 而非账号，同一 NAT 下的人共享额度；2) 白名单 uid 依赖前端传 `uid`，伪造只能「免限流」，拿不到任何数据，风险可接受；3) `AI_UNLIMITED_KEY` 一旦泄露，改 env 换一个即可，不需要动代码。
+
+### 2026-11-19 — AI 浮窗：播放状态联动与「照着这首来一张」（并入 v1.10.0）
+
+- 需求：用户希望浮窗更「动态」。评审后确认只做 A（状态联动）+ B（语义联动），不做音频分析驱动的节奏动画 —— 跨域音频分析恒为 0，且 `createMediaElementSource` 接错 destination 会让整个播放器静音，收益不值这个风险。
+- 桥接：`currentSong` / `isPlay` 都是 PlayerCore 的 data，store 里只有 currentPlaylist，浮窗在 App 层拿不到。在 PlayerCore 已有的两个 watch（`currentSong.id` / `isPlay`）里各加一次 `_broadcastNowPlaying()`，通过 `$bus` 推 `{id, name, artist, playing}` 四个字段，不传整个歌曲对象。
+- A 状态联动：头部副标题变「正在听《X》」/「已暂停 · X」；`.ai-fab` 播放时给图标加 2.6s 呼吸动画（只动图标不动按钮，避免和 hover 位移打架），换歌时按钮脉冲 0.55s。
+- B 语义联动：空态顶部给一张「正在播放」卡片（歌名 + 歌手 + 主色按钮），点击把 `照着《X》 - Y 这种感觉来一张` 直接发给现有链路 —— 不新增任何接口。有对话时在输入框上方给一个虚线 chip，和「已排除」的实线 chip 区分开（一个是用户定的规则，一个是系统给的建议）。
+- 无障碍：`prefers-reduced-motion: reduce` 下停掉呼吸与脉冲。
+- 验证：headless 注入 `$bus('nowPlaying')` 实测 —— 空闲时副标题为默认文案且无卡片；playing 后副标题 `正在听《Summer》`、fab class 含 `is-playing`、卡片三项与按钮齐全；暂停后变 `已暂停 · Summer` 且 `is-playing` 移除；换歌后 `is-pulse` 出现、卡片更新为 `Where Is Armo?`；无 console 报错。
+- 注意：`$bus` 事件只在换歌/播放状态变化时推，浮窗挂载时如果已经在播不会自动收到 —— 实际场景里刷新后不会自动播放，所以不影响；如果以后做「恢复上次播放」要补一次主动查询。
