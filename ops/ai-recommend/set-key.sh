@@ -19,11 +19,14 @@ if [ -z "${KEY}" ]; then
 fi
 
 umask 077
-cat > "${ENV_FILE}" <<EOF
-DEEPSEEK_API_KEY=${KEY}
-NETEASE_API_BASE=http://127.0.0.1:3000
-AI_PORT=3002
-EOF
+# 只替换 DEEPSEEK_API_KEY 那一行，其余配置（白名单、日配额、端口）原样保留 ——
+# 否则改一次 key 就把站长白名单清掉了
+TMP_FILE="$(mktemp)"
+if [ -f "${ENV_FILE}" ]; then
+    grep -v '^DEEPSEEK_API_KEY=' "${ENV_FILE}" > "${TMP_FILE}" || true
+fi
+printf 'DEEPSEEK_API_KEY=%s\n' "${KEY}" >> "${TMP_FILE}"
+mv "${TMP_FILE}" "${ENV_FILE}"
 chmod 600 "${ENV_FILE}"
 chown root:root "${ENV_FILE}"
 

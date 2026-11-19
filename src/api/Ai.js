@@ -10,11 +10,13 @@ import request from "./request";
  * @param {string} payload.message 用户原话
  * @param {Array}  [payload.history] 最近几轮对话，用于理解「再来点更吵的」这类追问
  */
-export function recommendPlaylist(payload) {
+export function recommendPlaylist(payload, authKey) {
     return request('/ai/playlist', {
         method: 'post',
         data: payload,
         // 冷启动时模型 + 5 个并发搜索要几秒，默认 10s 会误判超时
-        timeout: 45000
+        timeout: 45000,
+        // 白名单密钥：只有站长自己在浏览器里手动设置过才会有值，普通用户这里是空
+        headers: authKey ? {'X-AI-Key': authKey} : {}
     })
 }

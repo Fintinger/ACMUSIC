@@ -739,6 +739,56 @@ const RATE_LIMIT = 10
 const RATE_WINDOW_MS = 60 * 1000
 const rateBuckets = new Map()
 
+/**
+ * 每日配额。
+ *
+ * 分钟限流挡不住「慢慢刷」：10 次/分钟 × 1440 分钟，一个 IP 一天最多能打一万多次。
+ * 这条把最坏情况的成本从「无限」压到「一天几毛钱」。
+ *
+ * 只有真正要调模型的请求才扣 —— 缓存命中不花 token，不该占配额。
+ */
+const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 200)
+const dayBuckets = new Map()
+
+/**
+ * 白名单：不限流、不扣配额。
+ *
+ * 三种识别方式并存，覆盖不同场景：
+ *   IP  —— 在常用网络下，零配置自动生效
+ *   uid —— IP 变了但还登录着，认账号不认网络（前端只带一串数字）
+ *   key —— 既换了网络又没登录，手动在自己浏览器里塞一个，走 X-AI-Key 头
+ */
+const UNLIMITED_IPS = splitList(process.env.AI_UNLIMITED_IPS)
+const UNLIMITED_UIDS = splitList(process.env.AI_UNLIMITED_UIDS)
+const UNLIMITED_KEY = String(process.env.AI_UNLIMITED_KEY || '').trim()
+
+function splitList(raw) {
+    return String(raw || '').split(',').map(s => s.trim()).filter(Boolean)
+}
+
+function isUnlimited(ip, uid, req) {
+    if (UNLIMITED_IPS.includes(ip)) return true
+    if (uid && UNLIMITED_UIDS.includes(uid)) return true
+    if (UNLIMITED_KEY) {
+        const given = String(req.headers['x-ai-key'] || '').trim()
+        if (given && given === UNLIMITED_KEY) return true
+    }
+    return false
+}
+
+/** 服务器跑在 UTC，配额按北京时间切日，否则早上 8 点才「换天」 */
+function todayKey() {
+    return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Shanghai'})
+}
+
+function allowDaily(ip) {
+    const key = ip + '|' + todayKey()
+    const used = dayBuckets.get(key) || 0
+    if (used >= DAILY_LIMIT) return false
+    dayBuckets.set(key, used + 1)
+    return true
+}
+
 function allowRequest(ip) {
     const now = Date.now()
     let b = rateBuckets.get(ip)
@@ -810,11 +860,15 @@ function writeCache(key, value) {
     resultCache.set(key, {at: Date.now(), value})
 }
 
-// 定期清理限流表，避免长期运行后按 IP 无限增长
+// 定期清理限流表与过期日配额，避免长期运行后按 IP 无限增长
 const sweeper = setInterval(() => {
     const now = Date.now()
     for (const [ip, b] of rateBuckets) {
         if (now > b.resetAt + RATE_WINDOW_MS) rateBuckets.delete(ip)
+    }
+    const today = '|' + todayKey()
+    for (const key of dayBuckets.keys()) {
+        if (!key.endsWith(today)) dayBuckets.delete(key)
     }
 }, 10 * 60 * 1000)
 sweeper.unref()
@@ -879,6 +933,7 @@ const server = http.createServer(async (req, res) => {
             model: DEEPSEEK_API_KEY ? DEEPSEEK_MODEL : null,
             // 前端拿这个决定要不要提示「AI 未启用」
             aiEnabled: Boolean(DEEPSEEK_API_KEY),
+            dailyLimit: DAILY_LIMIT,
             upstream: NETEASE_API_BASE
         })
     }
@@ -891,16 +946,21 @@ const server = http.createServer(async (req, res) => {
     }
 
     const ip = clientIp(req)
-    if (!allowRequest(ip)) {
-        log('[rate] 触发限流:', ip)
-        return sendJson(res, 429, {ok: false, error: '问得有点快，歇一分钟再来'})
-    }
 
     let body
     try {
         body = await readBody(req)
     } catch (e) {
         return sendJson(res, 400, {ok: false, error: e.message})
+    }
+
+    // 白名单要认 uid，所以先读 body 再判限流。body 上限 8KB，提前读没有放大风险
+    const uid = String(body.uid || '').trim()
+    const unlimited = isUnlimited(ip, uid, req)
+
+    if (!unlimited && !allowRequest(ip)) {
+        log('[rate] 触发限流:', ip)
+        return sendJson(res, 429, {ok: false, error: '问得有点快，歇一分钟再来'})
     }
 
     const message = String(body.message || '').trim()
@@ -920,6 +980,12 @@ const server = http.createServer(async (req, res) => {
         log('[cache] 命中:', brief(message), `${Date.now() - started}ms`)
         // tookMs 用本次真实耗时，别把首次请求的耗时带出去，否则看起来像"缓存也要 2 秒"
         return sendJson(res, 200, {...cached, cached: true, tookMs: Date.now() - started})
+    }
+
+    // 缓存没命中 = 这次真要调模型了，才扣日配额
+    if (!unlimited && !allowDaily(ip)) {
+        log('[quota] 日配额用尽:', ip)
+        return sendJson(res, 429, {ok: false, error: `今天的 ${DAILY_LIMIT} 次已经用完了，明天再来`})
     }
 
     try {
@@ -956,4 +1022,6 @@ server.listen(PORT, '127.0.0.1', () => {
     log(`AI 选歌服务已启动 http://127.0.0.1:${PORT}`)
     log(`  上游曲库: ${NETEASE_API_BASE}`)
     log(`  模型: ${DEEPSEEK_API_KEY ? DEEPSEEK_MODEL : '未配置 DEEPSEEK_API_KEY（降级为原话直搜）'}`)
+    log(`  限流: ${RATE_LIMIT} 次/分钟，${DAILY_LIMIT} 次/天`)
+    log(`  白名单: IP ${UNLIMITED_IPS.length} 个 / uid ${UNLIMITED_UIDS.length} 个 / key ${UNLIMITED_KEY ? '已设置' : '未设置'}`)
 })

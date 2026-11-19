@@ -4206,3 +4206,13 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 删除：`src/pages/AiRadio.vue`、`/ai` 路由、导航栏 `.ai-entry` 及其 SCSS。功能全部迁到浮窗，没有减少。
 - 验证：`yarn lint` ✅；headless 实测 —— FAB 52px、距右 29 / 距底 24；面板 422×622、`fitsViewport: true`；`avatarSrc: /favicon.ico`；未登录头像为 DEFAULT_ICON；用户与 AI 各一条气泡；卡片标题正确；展开曲目两行齐整；`playerExpand=true` 时 wrapper `display:none`、`fabVisible:false`、panel 移除，恢复后重新出现；无 console 报错。
 - 注意：1) 浮窗的 `bottom` 会因是否有播放条在 24/104 之间切换，面板高度同步改为 `min(620px, calc(100vh - 240px))`，否则有播放条时会顶到导航栏；2) `.ai-fab` 上同时有 `v-show="!open"`，外层还有 `v-show="!hidden"`，判断可见性要看外层 `.ai-assistant` 的 display，看 FAB 自己的 computed style 永远是 grid；3) 本次改动按要求**只在本地提交，没有 push**。
+
+### 2026-11-19 — AI 点歌：日配额与站长白名单（并入 v1.10.0）
+
+- 需求：分钟限流挡不住「慢慢刷」（10 次/分钟 × 1440 分钟 ≈ 一天一万多次），要给个人加日额度；同时站长本人要能不受限。
+- 日配额：`DAILY_LIMIT` 默认 200，按 `ip|北京时间日期` 计数。**只在缓存未命中时扣** —— 缓存命中不花 token，不该占额度；分钟限流仍在缓存之前，防连点。
+- 白名单三种识别并存，覆盖不同场景：`AI_UNLIMITED_IPS`（常用网络，零配置）、`AI_UNLIMITED_UIDS`（换了网络但还登录着，前端只带一串数字 uid）、`AI_UNLIMITED_KEY`（既换网络又没登录，走 `X-AI-Key` 头，值存在自己浏览器的 localStorage 里，不进代码库）。
+- nginx 额度从 10r/m 放宽到 30r/m（burst 5→10）：精确控制已经挪到应用层，nginx 认不出「谁是站长」，继续卡 10r/m 会误伤换设备的站长。nginx 现在的角色是挡脚本洪水，30 次/分钟对真人绝对够。
+- `set-key.sh` 改成只替换 `DEEPSEEK_API_KEY` 那一行，不再整文件覆盖 —— 否则改一次 key 就把白名单清空了。
+- 验证：白名单 IP 连发 8 次全 200（改动前第 7 次就 429）；服务器本地伪造 `X-Real-IP: 9.9.9.9` 连发 12 次，结果是前 10 个 200、第 11-12 个 429，证明应用层 10 次/分钟的额度对普通用户仍然有效。
+- 注意：1) 日配额按 IP 而非账号，同一 NAT 下的人共享额度；2) 白名单 uid 依赖前端传 `uid`，伪造只能「免限流」，拿不到任何数据，风险可接受；3) `AI_UNLIMITED_KEY` 一旦泄露，改 env 换一个即可，不需要动代码。

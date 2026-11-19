@@ -303,12 +303,21 @@ export default {
       this.sending = true
       this.scrollToEnd()
 
+      const profile = this.$store.getters['UserAbout/userProfile'] || {}
+      // 白名单密钥由站长手动存在 localStorage（acmusic_ai_key），普通用户没有这个键
+      let authKey = ''
+      try {
+        authKey = localStorage.getItem('acmusic_ai_key') || ''
+      } catch (e) { /* 隐私模式读不到，按普通用户处理 */ }
+
       recommendPlaylist({
         message: text,
         history,
         constraints: {exclude: this.exclude},
-        taste: this.taste
-      })
+        taste: this.taste,
+        // 只带一串数字 uid 用于白名单比对，不带昵称、头像等任何资料
+        uid: profile.userId || undefined
+      }, authKey)
           .then(res => {
             const data = res && res.data
             if (!data || !data.ok) throw new Error((data && data.error) || '选歌失败')
