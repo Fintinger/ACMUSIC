@@ -119,6 +119,48 @@
             align-items: center;
             height: 100%;
 
+            // AI 点歌入口：与搜索同属"表达意图"，所以贴着它放；胶囊沿用次级按钮规格，
+            // 不加主色实底 —— 导航区已经有主题色开关，再多一个亮块会抢视线
+            .ai-entry {
+              flex: 0 0 auto;
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              height: 32px;
+              padding: 0 12px;
+              margin-right: 4px;
+              border-radius: $radius-pill;
+              border: 1px solid var(--c-border-strong);
+              color: $font-black-1;
+              font-size: 13px;
+              font-weight: 600;
+              white-space: nowrap;
+              transition: color .2s ease, border-color .2s ease, background .2s ease;
+
+              &:hover {
+                color: $color-main-text;
+                border-color: var(--c-accent);
+              }
+
+              // 当前就在这一页：淡主色底 + 主色描边，和其他导航项的「下划线」等价
+              &.router-link-active {
+                color: $color-main-text;
+                border-color: var(--c-accent);
+                background: rgba(var(--theme-accent-rgb), .10);
+              }
+
+              .ac-icon { flex-shrink: 0; }
+            }
+
+            // 窄屏优先保住搜索框和头像，AI 入口只留图标
+            @media (max-width: 1180px) {
+              .ai-entry {
+                padding: 0 9px;
+
+                span { display: none; }
+              }
+            }
+
             .search {
               flex: 1 1 auto;
               min-width: 0;

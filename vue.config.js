@@ -26,6 +26,13 @@ module.exports = defineConfig({
         //   开发 devServer：/api → https://music.archai.space（保留 /api 前缀，由线上 nginx 再分发）
         // 这样开发时不必再单独处理 CORS，前后端行为一致
         proxy: {
+            // AI 选歌是独立辅助服务，跑在本机 3002（node api/ai-recommend.mjs）。
+            // 必须排在 /api 前面：http-proxy-middleware 按对象键顺序匹配，写在后面会被 /api 抢先吃掉。
+            '/api/ai': {
+                target: 'http://127.0.0.1:3002',
+                changeOrigin: true,
+                logLevel: 'warn'
+            },
             '/api': {
                 target: 'https://music.archai.space',
                 changeOrigin: true,

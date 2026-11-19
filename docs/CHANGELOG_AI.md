@@ -4168,3 +4168,19 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 实现：`.lyricsScroll p.active ~ p { opacity: .58 }` —— 用**兄弟选择器**表达"当前行之后的所有行都是未到"，不给每行加 past/future 类。歌词是按时间顺序渲染的，当前行后面必然是未到的部分，省掉一份需要跟 `lastActiveIdx` 同步的状态；`p` 上原有的 `transition: all 400ms` 会把切换带成渐变，不需要额外动画。
 - 验证：headless Chromium 实测《左眼皮跳跳》——已唱行 `opacity: 1 / #b0b9c8 / 21.9px`，当前行 `1 / #edf1f7 / 30px`，未到行 `0.58 / #b0b9c8 / 21.9px`；截图层级自然，未到行仍可读。
 - 注意：文案区（`p.active ~ p` 也会命中 spacer 空行）不受影响；如果以后要"过去/未来/当前"三档以上，再考虑给行加类，不要叠加逐字透明度。
+
+### 2026-11-19 — 新增：AI 点歌（对话式歌单生成）v1.8.0
+
+- 需求：用户希望「发一段消息，AI 推荐歌曲」，并明确**不从头开发推荐系统**，优先整合已有项目。
+- 调研结论：WorkBuddy 侧没有任何音乐推荐 skill；开源侧找到三个同类项目 —— `music_wyy`（Kotlin/Compose 安卓端 + DeepSeek）、`MusiCue`（Node + Express + SQLite + WebSocket + 原生 JS 前端）、`shirley-Rir/-AI-`（Vue 3 + Flask + 通义千问 + COS）。三者**都是独立应用而非库**，自带路由、播放器、状态管理，硬搬要拆掉的东西比新写还多。真正可复用的是它们共用的那条流水线：**LLM 只输出搜索词，歌名一律回曲库校验**（music_wyy 作者的原话是「每首歌必须经过网易云 API 实际搜索验证，消除 100% 的 LLM 虚构歌曲」）。本实现按这个思路做，代码全部新写，没有引入任何项目依赖。
+- 架构：新增独立辅助服务 `api/ai-recommend.mjs`（单文件、零依赖、Node 18+ 内置 `fetch`），监听 3002；nginx 精确匹配 `/api/ai/playlist` 与 `/api/ai/health` 转发。前端 `src/pages/AiRadio.vue` 只调 `/api/ai/playlist`，key 不出服务端。
+- 为什么不用 `/recommend/category/set`：那条链路能拿到账号级个性化日推，但 `set` 会**写用户账号**（等价于官方客户端的「我喜欢的曲风」）。一次对话式请求顺手改掉用户偏好是不能接受的副作用，所以取歌全部走只读的 `/cloudsearch` + `/playlist/track/all`。
+- 取歌策略分三层：1) 3-5 个关键词并发 `cloudsearch`，按轮次交错合并（不按相关性拼，网易的分数不可比，第一个词会吃掉全部名额）；2) 曲目不足 60% 时用同一关键词搜**歌单**，取前两个高播放量歌单的曲目前 8 首补位 —— 单曲搜索的短板是边角料，歌单是人工编排过的；3) 全军覆没时用模型起的歌单名再捞一次。
+- 质量过滤（都是实测踩出来的，不是拍脑袋）：`JUNK_PATTERN` 挡伴奏/铃声/试听；`isSpamTitle` 挡「长标题 + 多空格」的 SEO 歌名（实测搜「氛围 电子」前排全是《氛围 电子 旋律说唱 TRAP 慢速度 沉浸（氛围2）》这类）；`isKeywordBait` 挡「歌名里含多词关键词但歌手名不含」的蹭词曲（《谁 钢琴独奏》《Maybe 钢琴独奏2》）；`MAX_PER_ARTIST = 2` 避免久石让一个人占满半张单；`identityOf`（歌名+主歌手）压掉同名不同版；`privilege.st < 0` 挡下架曲。
+- Prompt 侧的关键约束：**至少 2 个关键词必须是具体歌手名**。第一版允许模型给「氛围 电子」「治愈 抒情」这类抽象组合，实测搜出来的前排全是把关键词当歌名的批量上传，改成歌手锚点后同一句话的产出从 12 首里 5 首废曲降到 0 首废曲。词表（51 个官方标签）从 `/recommend/category/configs` 取，缓存 6 小时，取不到用内置兜底。
+- 交互：连续追问（history 只传文字、最多 6 条，不传歌单对象，避免复读）；歌单卡片默认收起曲目；播放复用 `TracksAbout/playAllTracks`（与每日推荐页同一套黑名单过滤）；收藏复用 `/playlist/create` + `/playlist/tracks`，未登录直接提示而不是静默失败。
+- 降级：没配 `DEEPSEEK_API_KEY` 时返回 `degraded: "no-key"` 并退出为「原话直搜」，页面照常可用但在卡片下方明说「这次是按原话直接搜的」。模型超时或报错同样降级为 `llm-failed`，不让用户面对一个报错页。
+- 成本控制：同句 5 分钟缓存（含 history 参与 hash）、每 IP 10 次/分钟（nginx 与应用层各一道）、`MAX_BODY_BYTES` 8KB。
+- 验证：`yarn lint` ✅；用 mock LLM（临时脚本，未入库）跑通「模型输出 → 并发搜索 → 合并去重」，三次迭代把废曲从 7 首压到 0 首；headless Edge + CDP 实测 `/ai` —— 空态居中、发送后卡片渲染 12 首、展开列表列对齐、点「播放全部」后 Vuex 队列 12 首、未登录点收藏弹出「登录后才能把歌单存到账号里」，控制台无报错（`PlayError` 是游客无版权音源的既有行为，与本次改动无关）。
+- 部署：`ops/ai-recommend/`（systemd unit + README）、`ops/nginx/music.conf` 加两个 location、`ops/nginx/acmusic-guard.conf` 加 `acmusic_ai` 限流 zone（10r/m）。**nginx 不由 CI 部署**，必须按 README 手动同步。
+- 注意：1) key 只能放 `/etc/acmusic-ai.env`（600），**不要**写进仓库的 `.env` —— 那个文件是 git 跟踪的；2) 本地开发时 devServer 的 `/api/ai` 必须排在 `/api` 前面，否则会被线上代理吃掉；3) 结果缓存是内存态，服务重启即清空，这是有意的（避免把过期结果长期钉住）；4) 如果以后换成不支持 `response_format` 的模型，`parseIntent` 里那个字段要去掉，代码已对「JSON 外裹文字」做了提取兜底。

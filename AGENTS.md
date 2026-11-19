@@ -9,6 +9,7 @@ NetEase Cloud Music third-party web client. Vue 2 SPA. No tests; deploy is GitHu
 - `yarn lint` — ESLint (config lives in `package.json` eslintConfig key)
 - `yarn changelog` — regenerate `src/data/changelog.generated.js` from `CHANGELOG.md` (also runs automatically via `prebuild` / `preserve`)
 - `yarn devlog` — regenerate `docs/DEVLOG_COMMITS.md` (git-derived commit list; run it after history-changing operations, don't hand-edit the output)
+- `yarn ai` — run the AI playlist helper (`api/ai-recommend.mjs`) on `127.0.0.1:3002`; needs `DEEPSEEK_API_KEY` to be useful, degrades to plain keyword search without it
 
 No test runner exists.
 
@@ -31,6 +32,7 @@ No test runner exists.
 - 9 search result sub-views share `searchMixin` in `src/mixins/searchMixin.js`
 - Reusable layout components in `src/components/layout/` (emit events via $bus)
 - Icons: `BaseIcon` + `src/config/icon.js` — **all inline SVG** (24×24 grid, 1.8px round stroke; state glyphs are filled). The old iconfont bundle (`src/assets/ac-font/`) was deleted in 2026-11; `type: 'font'` entries and font classes are gone, don't reintroduce them
+- AI 点歌 (`/ai`, `src/pages/AiRadio.vue`): talks to a **separate** helper service on `3002` (`api/ai-recommend.mjs`), not to the Netease gateway. The LLM only emits search keywords — every song in the response has already been verified against `/cloudsearch`, so the frontend never re-searches. Playback reuses `TracksAbout/playAllTracks`; "收藏" creates a real NetEase playlist via `/playlist/create` + `/playlist/tracks`.
 
 ## API
 
@@ -44,7 +46,7 @@ No test runner exists.
 - nginx runs on the same VPS as the API gateway (Ubuntu, nginx 1.24; host in `.github/workflows/deploy.yml` → `SSH_HOST` — docs deliberately don't repeat the IP, the repo is public). Live site config: `/etc/nginx/sites-available/music` (symlinked from `sites-enabled/`); the repo mirror is `ops/nginx/`.
 - **nginx is not deployed by CI.** Editing `ops/nginx/*.conf` changes nothing on the server — follow the deploy + verify steps in `ops/nginx/README.md`.
 - API abuse guard (per-IP rate limit, CORS pinning, audio throttle, `MUSIC_U` log redaction) lives in `ops/nginx/acmusic-guard.conf` + `ops/nginx/acmusic-api-common.conf`. Read that README before touching nginx.
-- Backend ports are firewalled to localhost only (ufw allows 80/443/22 `/`): `3000` = NeteaseCloudMusicApi, `3001` = audio-proxy + ip-location helper.
+- Backend ports are firewalled to localhost only (ufw allows 80/443/22 `/`): `3000` = NeteaseCloudMusicApi, `3001` = audio-proxy + ip-location helper, `3002` = AI playlist helper (`ops/ai-recommend/`). The DeepSeek key lives only in `/etc/acmusic-ai.env` (600) — **never** in `.env`, which is git-tracked.
 
 ## Key conventions
 

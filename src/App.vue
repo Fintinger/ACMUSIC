@@ -29,6 +29,11 @@
                 :aria-label="themeDark ? '深色模式，切换为浅色' : '浅色模式，切换为深色'" :class="{ 'is-dark': themeDark }" @click="toggleTheme">
                 <BaseIcon name="sun" :size="16"/><BaseIcon name="moon" :size="16"/><span class="theme-switch-thumb"></span>
               </button>
+              <!-- AI 点歌入口：放在搜索前面而不是塞进三栏导航 —— 三栏已经是 8+8+8，
+                   再加一格会破坏居中对称；这里和搜索同属「表达意图」的入口，位置也更顺手 -->
+              <router-link to="/ai" class="ai-entry" title="AI 点歌：说一句话，给你整理成歌单">
+                <BaseIcon name="sparkles" :size="16"/><span>AI 点歌</span>
+              </router-link>
               <div class="search">
                 <div class="input-container">
                   <input placeholder="搜索单曲、歌手、专辑、MV等" type="text"

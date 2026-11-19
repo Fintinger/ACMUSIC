@@ -1,6 +1,6 @@
 {
   "name": "cloudmusic",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "scripts": {
     "changelog": "node scripts/build-changelog.mjs",
@@ -8,6 +8,7 @@
     "serve": "vue-cli-service serve",
     "serve:stop": "node scripts/dev-stop.js 8080",
     "serve:restart": "node scripts/dev-stop.js 8080 && vue-cli-service serve",
+    "ai": "node api/ai-recommend.mjs",
     "prebuild": "node scripts/build-changelog.mjs",
     "build": "vue-cli-service build",
     "lint": "vue-cli-service lint",

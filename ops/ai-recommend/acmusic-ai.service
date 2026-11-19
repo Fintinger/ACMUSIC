@@ -1,0 +1,31 @@
+[Unit]
+Description=ACMUSIC AI 点歌辅助服务
+Documentation=https://github.com/ (见 ops/ai-recommend/README.md)
+# 依赖本机 3000 端口的 NeteaseCloudMusicApi，但不强绑：
+# 上游没起来时服务照样启动，只是搜索全部失败、歌单为空，恢复后自动正常
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/acmusic-ai
+# key 只存在这个文件里，权限 600，不进 git、不进 .env、不进 systemd unit
+EnvironmentFile=/etc/acmusic-ai.env
+ExecStart=/usr/bin/node /opt/acmusic-ai/ai-recommend.mjs
+Restart=on-failure
+RestartSec=3
+
+# 只监听 127.0.0.1，外部访问一律走 nginx；这里再收一遍权限，
+# 即使 node 被投毒也读不到 /etc 之外的系统文件
+User=www-data
+Group=www-data
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# 服务不写任何文件（缓存全在内存），所以整个文件系统只读也够用
+
+[Install]
+WantedBy=multi-user.target

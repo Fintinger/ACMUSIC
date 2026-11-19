@@ -22,6 +22,7 @@ const mvPlay = () => import(/* webpackChunkName: "page-mv" */ "@/pages/mvPlay");
 const VideoPlay = () => import(/* webpackChunkName: "page-video" */ "@/pages/VideoPlay");
 const SearchResult = () => import(/* webpackChunkName: "page-search" */ "@/pages/SearchResult");
 const DailySongs = () => import(/* webpackChunkName: "page-daily-songs" */ "@/pages/DailySongs");
+const AiRadio = () => import(/* webpackChunkName: "page-ai-radio" */ "@/pages/AiRadio");
 const Blacklist = () => import(/* webpackChunkName: "page-blacklist" */ "@/pages/Blacklist");
 const UserDetail = () => import(/* webpackChunkName: "page-user-detail" */ "@/pages/UserDetail");
 const AnnualReport = () => import(/* webpackChunkName: "page-annual" */ "@/pages/AnnualReport");
@@ -234,6 +235,7 @@ const router = new VueRouter({
             },
         },
         {path: '/daily', name: "dailySongs", component: DailySongs, props: true, meta: {level: 2, title: '每日推荐'}},
+        {path: '/ai', name: "aiRadio", component: AiRadio, meta: {level: 2, title: 'AI 点歌'}},
         // 音乐黑名单：屏蔽歌曲/歌手的管理页，入口在头像菜单
         {path: '/blacklist', name: "blacklist", component: Blacklist, meta: {level: 2, title: '音乐黑名单'}},
         // 年度听歌报告：本人数据，页面内部自行判断登录态

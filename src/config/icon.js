@@ -126,6 +126,9 @@ export default {
     likeFill: { type: 'svg', class: 'ac-likefill', fill: 'currentColor', stroke: 'none', path: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z' },
     comment: { type: 'svg', strokeWidth: 1.8, path: 'M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-1 1V11.5a9 9 0 0 1 18 0z M7 9h10 M7 13h7' },
     search: { type: 'svg', strokeWidth: 1.8, path: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5L21 21' },
+    // AI 点歌：一大一小两颗四角闪光。刻意不用五角星 —— star 已经是「收藏」，
+    // 两个入口并排出现在歌单卡片上时，形状必须能一眼分开
+    sparkles: { type: 'svg', strokeWidth: 1.8, path: 'M11 3.5l1.7 4.4 4.4 1.7-4.4 1.7L11 15.7 9.3 11.3 4.9 9.6l4.4-1.7z M18 14.5l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z' },
     share: { type: 'svg', strokeWidth: 1.8, path: 'M12 15V3 M7.5 7.5L12 3l4.5 4.5 M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8' },
     radio: { type: 'svg', strokeWidth: 1.8, path: 'M12 3v12 M8 7a6 6 0 0 0 0 8 M16 7a6 6 0 0 1 0 8 M5 4a10 10 0 0 0 0 14 M19 4a10 10 0 0 1 0 14 M8 21l4-6 4 6' },
     loader: { type: 'svg', strokeWidth: 1.8, path: 'M21 12a9 9 0 1 1-9-9' },
