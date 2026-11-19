@@ -10,7 +10,16 @@
         title="AI 点歌"
         @click="openPanel"
     >
-      <BaseIcon name="sparkles" :size="22"/>
+      <!-- 不用 BaseIcon：那颗星是单条 path，没法把大小两颗分开做动画。
+           这里手写填充版双星，各自绕自身中心呼吸/闪烁，相位错开才像"活着" -->
+      <svg class="fab-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path class="glyph-main"
+              d="M11.5 2.8Q12.7 9.4 19.3 10.6Q12.7 11.8 11.5 18.4Q10.3 11.8 3.7 10.6Q10.3 9.4 11.5 2.8Z"
+              fill="currentColor"/>
+        <path class="glyph-mini"
+              d="M18.2 12.8Q19.1 16.1 22.4 17Q19.1 17.9 18.2 21.2Q17.3 17.9 14 17Q17.3 16.1 18.2 12.8Z"
+              fill="currentColor"/>
+      </svg>
     </button>
 
     <!-- 面板：宽度和高度都设上限，窄屏时自动收到视口内 -->
@@ -568,12 +577,41 @@ export default {
   // 有播放条时抬高，避免压在播放条上
   &.has-player { bottom: 104px; }
 
-  .ac-icon { transition: transform .35s ease; }
+  .fab-glyph {
+    width: 23px;
+    height: 23px;
+    display: block;
+    overflow: visible;
+    // 图标本身用白色，而不是 on-accent —— 主题算出来的是黑色，
+    // 压在主色圆上又闷又脏。图形元素按 WCAG 只要 3:1，白字在这里够用，
+    // 再加一层极淡的投影兜住浅色主题下对比度不足的情况
+    color: #fff;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .22));
+  }
 
-  // 播放中：图标轻微呼吸。幅度刻意做小 —— 它只是"我在听"的信号，
-  // 不是要跟用户抢注意力
-  &.is-playing .ac-icon {
-    animation: fab-breath 2.6s ease-in-out infinite;
+  // 两颗星各自绕自身中心动、相位错开：一起动会像整个图标在呼吸，
+  // 错开才像真实的星光闪烁
+  .glyph-main {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: glyph-breathe 3.4s ease-in-out infinite;
+  }
+
+  .glyph-mini {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: glyph-twinkle 3.4s ease-in-out infinite;
+    animation-delay: .55s;
+  }
+
+  // 播放中：节奏整体加快一倍，让"正在放歌"从图标上就能看出来
+  &.is-playing {
+    .glyph-main { animation-duration: 1.9s; }
+
+    .glyph-mini {
+      animation-duration: 1.9s;
+      animation-delay: .3s;
+    }
   }
 
   // 换歌：整个按钮脉冲一次，表示"我注意到你切歌了"
@@ -1167,9 +1205,14 @@ export default {
   transform: translateY(8px) scale(.97);
 }
 
-@keyframes fab-breath {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.14); }
+@keyframes glyph-breathe {
+  0%, 100% { transform: scale(.94); opacity: .88; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes glyph-twinkle {
+  0%, 100% { transform: scale(.82); opacity: .32; }
+  45% { transform: scale(1.12); opacity: 1; }
 }
 
 @keyframes fab-pulse {
@@ -1178,9 +1221,10 @@ export default {
   100% { transform: scale(1); }
 }
 
-// 系统开了"减少动态效果"就全部停掉：呼吸和脉冲都是装饰，不该强行播
+// 系统开了"减少动态效果"就全部停掉：呼吸和闪烁都是装饰，不该强行播
 @media (prefers-reduced-motion: reduce) {
-  .ai-fab.is-playing .ac-icon,
+  .ai-fab .glyph-main,
+  .ai-fab .glyph-mini,
   .ai-fab.is-pulse {
     animation: none;
   }
