@@ -43,6 +43,7 @@
 | 版权可用性 ✅ | `/check/music` | 已接入取流失败路径：直接显示上游"暂无版权"结论，不再靠 `fee` 字段猜 |
 | 会员信息 ✅ | `/vip/info`、`/vip/info/v2` | 音质菜单用 v1 做门控（确认非会员时无损/臻音标 VIP 并阻断，拉取失败记为未知不误拦）；用户主页昵称后挂会员徽章（黑胶SVIP / 黑胶VIP / 已过期，SVIP 靠 v2 的 `redplus` 区分），hover 查看到期时间与数字专辑、音乐包、有声书权益（非本人不显示日期） |
 | 收藏计数 ✅ | `/user/subcount` | 已接入本人主页：创建歌单 / 收藏歌单数量 |
+| 音乐黑名单 ✅ | `/api/music/dislike/get`、`/api/music-blacklist/add`、`/api/music-blacklist/delete` | 后端已加 3 个 module（`music_dislike_get` / `music_blacklist_add` / `music_blacklist_delete`），支持屏蔽歌曲与歌手、账号级同步；参数格式与缓存坑见 `API_BLACKLIST.md` |
 
 ## P1：把"能听"变成"能管理"
 
