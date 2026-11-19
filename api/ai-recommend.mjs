@@ -33,8 +33,15 @@ const MAX_BODY_BYTES = 8 * 1024
 const LLM_TIMEOUT_MS = 30000
 /** 单次搜索超时：网关对 /cloudsearch 有 60s 缓存，这里 8s 足够 */
 const SEARCH_TIMEOUT_MS = 8000
-/** 一张歌单最多多少首：太多会稀释"精选感"，18 首正好一小时的量 */
-const MAX_TRACKS = 18
+/**
+ * 两阶段的规模参数。
+ *
+ * 阶段一按关键词宽召回，故意比最终歌单多一倍以上 —— 候选太少，第二阶段没有挑选余地，
+ * 模型只能"矮子里拔将军"，那还不如不挑。
+ */
+const MAX_RECALL = 40
+/** 最终歌单首数：太多会稀释"精选感"，16 首约一小时的量 */
+const MAX_TRACKS = 16
 /** 每个关键词取几条候选，用于轮转合并 */
 const PER_KEYWORD = 6
 
@@ -121,7 +128,8 @@ function vocabLines(vocab) {
 // 意图解析
 // ---------------------------------------------------------------------------
 
-function systemPrompt(vocab) {
+function systemPrompt(vocab, exclude) {
+    const current = Array.isArray(exclude) && exclude.length ? exclude.join('、') : '（无）'
     return `你是网易云音乐的选歌编辑。用户会用一句口语说出想听什么，你的任务不是列举歌名，而是把它翻译成「能被曲库搜到的意图」。
 
 只输出一个 JSON 对象，不要 markdown 代码块，不要任何解释文字：
@@ -129,42 +137,40 @@ function systemPrompt(vocab) {
   "title": "歌单名，6-10 个汉字，有画面感，不加书名号或引号",
   "desc": "一句话说明这张歌单的选歌逻辑，不超过 30 个汉字",
   "reply": "回给用户的一句话，口语化，不超过 20 个汉字",
-  "keywords": ["3-5 个搜索词"]
+  "keywords": ["6-10 个搜索词"],
+  "exclude": ["1-3 个要排除的方向"]
 }
 
 keywords 是唯一会被拿去搜曲库的东西，规则很硬：
-- 3-5 个关键词里，至少 2 个必须是具体的歌手名/乐队名。歌手是最可靠的检索锚点：按人搜出来的歌，质量远高于按抽象风格词搜出来的
-- 剩下 1-2 个给「风格 + 乐器/语种」这种能落到具体作品上的方向（如「粤语 老歌」「钢琴 独奏」「爵士 人声」）
-- 「学习」「运动」「助眠」这类纯场景标签**不要单独**当关键词：它们搜出来的是标题里堆满这些字的批量上传垫音。要用就和风格绑死（如「钢琴 助眠」）
-- 不要用两个抽象概念硬拼（「氛围 电子」「治愈 抒情」「安静 钢琴」）。这类词搜出来的前排都是把关键词直接当歌名的批量上传垫音，不是真的歌
+- 给 6-10 个，其中**至少 4 个必须是具体的歌手名/乐队名**。歌手是最可靠的检索锚点：按人搜出来的歌，质量远高于按抽象风格词搜出来的
+- 风格词最多 2 个，且要落到具体作品形态上（「钢琴 独奏」「粤语 老歌」「90 年代 摇滚」）
+- **不要用「风格 + 语种」这种宽组合**（「摇滚 华语」「电音 英语」「说唱 国语」）：它们搜出来的前排是批量上传的合辑和搬运号，连一首正经单曲都没有
+- 「学习」「运动」「助眠」这类纯场景标签**不要单独**当关键词：它们搜出来的同样是标题里堆满这些字的批量上传垫音。要用就和风格绑死（如「钢琴 助眠」）
+- 不要用两个抽象概念硬拼（「氛围 电子」「治愈 抒情」「安静 钢琴」）
 - 绝对不要写具体歌名。你记忆里的歌名有相当一部分在曲库里不存在或对不上，写了就是浪费一次搜索
 - 不要含「推荐」「好听」「歌曲」「音乐」「来点」这类没有检索价值的词
 - 几个词之间要拉开方向，不要同义反复：「安静的钢琴」和「钢琴 安静」是同一个词
 - 中文优先；用户点名了外语歌手才用原文名
+
+exclude 是用户明确否定的方向，会被用来过滤结果：
+- 只写**能被明确定位**的方向：风格（电子/摇滚/说唱）、版本类型（live/翻唱/remix/伴奏）、语种（英语/日语）、有没有人声
+- 不要写情绪形容词（抒情/治愈/温暖/怀旧）—— 它们没法用来判断某一首歌，写进去只会自相矛盾
+- 「太吵了」→ ["人声","电子","摇滚"]；「不要翻唱」→ ["翻唱"]；「别放英文」→ ["英语"]
+- 上一轮生效的是：${current}
+  这**只是参考，不是必须保留**。判断标准永远是这一轮的原话：
+  原话与某项冲突就删掉（用户要「安静」，上一轮的「慢歌」就必须删），原话再次印证就保留，原话没提到就默认删掉。
+  输出调整后的完整列表，不允许出现互相矛盾的项。
 
 曲库官方标签如下，风格词尽量从这里选，命中率明显更高：
 ${vocabLines(vocab)}`
 }
 
 /**
- * 调 DeepSeek 解析意图。
- * 失败一律抛错，由上层决定降级——这里不做静默兜底，免得把"模型挂了"伪装成"模型说没听懂"。
+ * 统一的大模型请求出口。
+ * 两阶段都要用，抽出来免得 headers / 超时 / 错误处理抄两遍走样。
  */
-async function parseIntent(message, history) {
-    const vocab = await getVocab()
-    const payload = {
-        model: DEEPSEEK_MODEL,
-        messages: [
-            {role: 'system', content: systemPrompt(vocab)},
-            ...normalizeHistory(history),
-            {role: 'user', content: message}
-        ],
-        // json_object 模式要求 prompt 里出现 "json" 字样，system 里已经写了
-        response_format: {type: 'json_object'},
-        temperature: 1.0,
-        max_tokens: 600
-    }
-    const json = await fetchJson(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+function llmRequest(payload) {
+    return fetchJson(`${DEEPSEEK_BASE_URL}/chat/completions`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -172,20 +178,41 @@ async function parseIntent(message, history) {
         },
         body: JSON.stringify(payload)
     }, LLM_TIMEOUT_MS)
+}
 
+/** 从模型响应里取出 JSON 对象。极少数情况下它会在 JSON 外面裹一层文字，捞最外层花括号重试一次 */
+function readJsonContent(json) {
     const content = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content
     if (!content) throw new Error('模型返回空内容')
-
-    let parsed
     try {
-        parsed = JSON.parse(content)
+        return JSON.parse(content)
     } catch (e) {
-        // 极少数情况下模型会在 JSON 外面包一层文字，捞最外层花括号再试一次
         const m = content.match(/\{[\s\S]*\}/)
         if (!m) throw new Error('模型输出不是 JSON')
-        parsed = JSON.parse(m[0])
+        return JSON.parse(m[0])
     }
-    return sanitizeIntent(parsed, message)
+}
+
+/**
+ * 调 DeepSeek 解析意图。
+ * 失败一律抛错，由上层决定降级——这里不做静默兜底，免得把"模型挂了"伪装成"模型说没听懂"。
+ */
+async function parseIntent(message, history, exclude) {
+    const vocab = await getVocab()
+    const payload = {
+        model: DEEPSEEK_MODEL,
+        messages: [
+            {role: 'system', content: systemPrompt(vocab, exclude)},
+            ...normalizeHistory(history),
+            {role: 'user', content: message}
+        ],
+        // json_object 模式要求 prompt 里出现 "json" 字样，system 里已经写了
+        response_format: {type: 'json_object'},
+        temperature: 1.0,
+        max_tokens: 700
+    }
+    const json = await llmRequest(payload)
+    return sanitizeIntent(readJsonContent(json), message)
 }
 
 /** 历史只留最近 6 条、每条 200 字：够理解「再来点更吵的」这类追问，又不至于把歌单塞进 prompt */
@@ -212,11 +239,58 @@ function sanitizeIntent(raw, message) {
     keywords = keywords
         .map(k => String(k == null ? '' : k).trim())
         .filter(k => k.length >= 2 && k.length <= 24)
-    keywords = [...new Set(keywords)].slice(0, 5)
+    // 上限从 5 提到 10：宽召回是第二阶段能挑得准的前提
+    keywords = [...new Set(keywords)].slice(0, 10)
     // 模型没给出可用词时退回原话：搜索质量差，但总比返回空歌单强
     if (!keywords.length) keywords = [message.slice(0, 24)]
 
-    return {title, desc, reply, keywords}
+    // 排除项最多 4 个，每个 8 字以内：再长就不是"方向"而是句子了，没法用来过滤
+    let exclude = Array.isArray(o.exclude) ? o.exclude : []
+    exclude = exclude
+        .map(x => String(x == null ? '' : x).trim())
+        .filter(x => x.length >= 1 && x.length <= 8)
+        // 情绪形容词判断不了任何一首歌，模型偶尔还是会写进来（"抒情""治愈"），
+        // 一旦进入"已排除"的展示就会和结果自相矛盾，这里兜一道
+        .filter(x => !/^(抒情|治愈|温暖|怀旧|安静|好听|悲伤|快乐|舒缓|轻柔|浪漫)$/.test(x))
+    exclude = [...new Set(exclude)].slice(0, 4)
+
+    return {title, desc, reply, keywords, exclude}
+}
+
+// ---------------------------------------------------------------------------
+// 排除项：把"太吵了""不要翻唱"这类否定，变成可以在检索阶段执行的规则
+// ---------------------------------------------------------------------------
+
+/**
+ * 否定词 → 标题正则。
+ *
+ * 只有能从**标题**判断的才写成正则；"人声""电子""英语"这类需要听或需要元数据的，
+ * re 留空 —— 它们交给第二阶段由模型按歌名/歌手判断，硬套正则会大面积误伤。
+ */
+const EXCLUDE_RULES = [
+    {keys: ['live', '现场', '演唱会'], re: /(\blive\b|演唱会|现场版|concert|unplugged)/i},
+    {keys: ['翻唱', 'cover', '原唱', '致敬'], re: /(翻唱|cover|原唱|致敬|改编版)/i},
+    {keys: ['remix', '混音', 'dj'], re: /(remix|混音|dj\s*版)/i},
+    {keys: ['伴奏', 'instrumental'], re: /(伴奏|instrumental|karaoke)/i},
+    {keys: ['纯音乐', '器乐', '人声', '电子', '摇滚', '说唱', '英语', '英文'], re: null}
+]
+
+/**
+ * 把模型给的排除词编译成可执行的正则列表。
+ * 模型可能给"电音"也可能给"电子"，所以用 includes 做双向松匹配，不要求字面完全相等。
+ */
+function compileExclude(exclude) {
+    const words = Array.isArray(exclude) ? exclude : []
+    const res = []
+    for (const raw of words) {
+        const w = String(raw == null ? '' : raw).toLowerCase().trim()
+        if (!w) continue
+        for (const rule of EXCLUDE_RULES) {
+            if (!rule.re) continue
+            if (rule.keys.some(k => w.includes(k) || k.includes(w))) res.push(rule.re)
+        }
+    }
+    return [...new Set(res)]
 }
 
 // ---------------------------------------------------------------------------
@@ -240,8 +314,13 @@ const TITLE_SEPARATORS = /[\s丨|｜/／·・\-—]+/
 function isSpamTitle(name) {
     const s = String(name || '').trim()
     if (!s) return false
+    // 超长标题：中文歌名极少超过 26 字。到这个长度基本都是「描述型」标题
+    // （带括号补充说明、堆卖点），例如《时代在召唤（第二套广播体操）轻电音 不带鬼畜和运动》
+    if (s.length > 26) return true
     const parts = s.split(TITLE_SEPARATORS).filter(Boolean)
-    return s.length > 18 && parts.length >= 4
+    // 切出 4 段以上就不像歌名了。阈值从 18 降到 14：实测《运动 节奏感 活力 -电音燃曲》
+    // 只有 15 字，照样是堆词合辑
+    return parts.length >= 4 && s.length > 14
 }
 
 /** 同一个歌手的上限：不设的话，"久石让"一个关键词就能把半张歌单占满 */
@@ -287,7 +366,7 @@ function isKeywordBait(song, keywords) {
     return false
 }
 
-function isUsable(song, allowJunk, keywords) {
+function isUsable(song, allowJunk, keywords, excludeRes) {
     if (!song || !song.id) return false
     // 时长异常：短于 30s 多半是铃声/片段，长于 15min 多半是电台节目
     const dt = durationOf(song)
@@ -295,11 +374,14 @@ function isUsable(song, allowJunk, keywords) {
     // privilege.st < 0 是下架/无版权，能搜到但播不了，进歌单只会让人点一下失败
     const privilege = song.privilege
     if (privilege && typeof privilege.st === 'number' && privilege.st < 0) return false
-    if (!allowJunk && JUNK_PATTERN.test(String(song.name || ''))) return false
+    const name = String(song.name || '')
+    if (!allowJunk && JUNK_PATTERN.test(name)) return false
     if (isSpamTitle(song.name)) return false
+    // 用户明确排除的方向（live / 翻唱 / remix / 伴奏），能在标题上判定的在这里就拦掉
+    if (excludeRes && excludeRes.length && excludeRes.some(re => re.test(name))) return false
     // 歌手名和歌名一模一样：正常作品不会这样填，基本都是上传者的占位写法
     const lead = leadArtistOf(song)
-    if (lead && String(song.name || '').trim() === lead.trim()) return false
+    if (lead && name.trim() === lead.trim()) return false
     if (keywords && keywords.length && isKeywordBait(song, keywords)) return false
     return true
 }
@@ -365,7 +447,7 @@ async function searchPlaylistBuckets(keyword, want = 8) {
  * 造一个「收歌器」：把去重、过滤、歌手配额这些规则收在一处，
  * 让「轮转填充」和「歌单补位」共用同一套判定，不会出现补位把重复歌塞回来的情况。
  */
-function createPicker(allowJunk, keywords = []) {
+function createPicker(allowJunk, keywords = [], excludeRes = []) {
     const out = []
     const seenId = new Set()
     const seenIdentity = new Set()
@@ -373,8 +455,8 @@ function createPicker(allowJunk, keywords = []) {
 
     return {
         add(song) {
-            if (out.length >= MAX_TRACKS) return false
-            if (!song || seenId.has(song.id) || !isUsable(song, allowJunk, keywords)) return false
+            if (out.length >= MAX_RECALL) return false
+            if (!song || seenId.has(song.id) || !isUsable(song, allowJunk, keywords, excludeRes)) return false
 
             const identity = identityOf(song)
             if (seenIdentity.has(identity)) return false
@@ -409,9 +491,76 @@ function fillRoundRobin(picker, buckets) {
     for (let i = 0; i < depth; i++) {
         for (const bucket of buckets) {
             picker.add(bucket[i])
-            if (picker.list.length >= MAX_TRACKS) return
+            if (picker.list.length >= MAX_RECALL) return
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 第二阶段：精挑
+// ---------------------------------------------------------------------------
+
+/**
+ * 从召回的候选里挑出最终歌单。
+ *
+ * 这是整条链路里唯一让模型「动用音乐知识」的地方 —— 第一阶段禁止它写歌名（会编），
+ * 这里却要靠它认歌名（只有它知道《Summer》是钢琴曲、《Where Is Armo?》是弦乐）。
+ * 同一份知识放在不同位置，一个带来幻觉，一个带来判断力。
+ */
+async function pickFromCandidates(message, candidates, exclude, taste) {
+    if (!candidates.length) return {picks: [], reason: ''}
+
+    const list = candidates.map((song, i) => {
+        const artist = artistsOf(song).map(a => a.name).filter(Boolean).join('/')
+        return `${i + 1}. ${song.name || '未知'}${artist ? ' - ' + artist : ''}`
+    }).join('\n')
+
+    const rules = [
+        '只能选给定候选里的序号，不要编造',
+        '宁缺毋滥：风格明显不符的直接跳过，凑不满就少给，不要为了凑数硬塞',
+        '同一歌手最多 2 首',
+        '候选只有歌名和歌手，你无法试听。靠你对这些作品的了解判断；完全没把握的不要赌',
+        // 这两条是实测出来的「搬运号指纹」：曲库里大量这种条目靠堆关键词骗曝光
+        '歌手名像工作室/合辑号的（XX音乐、XX工作室、XX官方、XX传媒、XX Melodies），基本是搬运号，不要选',
+        '歌名里堆了多个风格词或卖点的（「运动 节奏感 活力」「XX精选集」），是批量上传的垫音，不要选'
+    ]
+    if (Array.isArray(exclude) && exclude.length) {
+        rules.push(`用户要排除：${exclude.join('、')}。和这些冲突的一律不选；但如果某个排除项和用户当前原话明显矛盾（例如原话要「安静」而排除项里有「慢歌」），以原话为准`)
+    }
+    // 画像是软约束：只在同等贴合度下起作用，不能让它把话题带偏
+    if (Array.isArray(taste) && taste.length) {
+        rules.push(`这个用户平时常听：${taste.slice(0, 12).join('；')}。同等贴合度下可以优先他熟悉的，但不要仅仅因为他常听就选不贴题的`)
+    }
+
+    const prompt = `你是一位挑剔的选歌编辑。用户的原话是：「${message}」
+
+下面是从曲库召回的一批候选，格式为「序号. 歌名 - 歌手」。从中挑出最贴合的 ${MAX_TRACKS} 首，按贴合度从高到低排序。
+
+只输出 JSON：
+{"picks": [序号...], "reason": "一句话说明取舍，20 字以内"}
+
+规则：
+${rules.map(r => '- ' + r).join('\n')}
+
+候选：
+${list}`
+
+    const json = await llmRequest({
+        model: DEEPSEEK_MODEL,
+        messages: [{role: 'user', content: prompt}],
+        response_format: {type: 'json_object'},
+        // 选歌要稳定：同一批候选每次挑出来不该差太多，所以温度压到 0.3
+        temperature: 0.3,
+        max_tokens: 500
+    })
+
+    const parsed = readJsonContent(json)
+    let picks = Array.isArray(parsed.picks) ? parsed.picks : []
+    picks = picks
+        .map(n => Number(n))
+        .filter(n => Number.isInteger(n) && n >= 1 && n <= candidates.length)
+    picks = [...new Set(picks)].slice(0, MAX_TRACKS)
+    return {picks, reason: String(parsed.reason || '').trim().slice(0, 40)}
 }
 
 // ---------------------------------------------------------------------------
@@ -425,12 +574,15 @@ function fallbackIntent(message) {
         title: text.slice(0, 12) || '按你说的找',
         desc: '没接上大模型，先按你的原话搜了一遍',
         reply: '先按原话搜的，可能不太准',
-        keywords: [text.slice(0, 24)].filter(Boolean)
+        keywords: [text.slice(0, 24)].filter(Boolean),
+        exclude: []
     }
 }
 
-async function buildPlaylist(message, history) {
+async function buildPlaylist(message, history, constraints, taste) {
     const allowJunk = JUNK_PATTERN.test(message)
+    // 上一轮累积的排除项：即使这一轮模型挂了，也不能把用户的纠正丢掉
+    const pendingExclude = Array.isArray(constraints && constraints.exclude) ? constraints.exclude : []
     let intent
     let degraded = null
 
@@ -439,20 +591,24 @@ async function buildPlaylist(message, history) {
         intent = fallbackIntent(message)
     } else {
         try {
-            intent = await parseIntent(message, history)
+            intent = await parseIntent(message, history, pendingExclude)
         } catch (e) {
             degraded = 'llm-failed'
             log('[llm] 解析失败，降级为直搜:', e.message)
             intent = fallbackIntent(message)
+            intent.exclude = pendingExclude
         }
     }
 
+    const excludeRes = compileExclude(intent.exclude)
+
+    // ---- 第一阶段：宽召回（目标 MAX_RECALL，故意多于最终歌单） ----
     const buckets = await Promise.all(intent.keywords.map(k => searchOnce(k)))
-    const picker = createPicker(allowJunk, intent.keywords)
+    const picker = createPicker(allowJunk, intent.keywords, excludeRes)
     fillRoundRobin(picker, buckets)
 
     // 曲目不够就补：场景/情绪类请求靠单曲搜索经常凑不满，歌单种子能把这一档质量拉回来
-    if (picker.list.length < Math.ceil(MAX_TRACKS * 0.6)) {
+    if (picker.list.length < Math.ceil(MAX_RECALL * 0.5)) {
         log('[seed] 单曲不足（' + picker.list.length + ' 首），用歌单补位')
         const seedBuckets = await Promise.all(
             intent.keywords.slice(0, 2).map(k => searchPlaylistBuckets(k))
@@ -462,19 +618,38 @@ async function buildPlaylist(message, history) {
         }
     }
 
-    const tracks = picker.list
+    let candidates = picker.list
 
     // 关键词全军覆没时用歌单名再捞一次：模型起的名字往往就是最贴近的检索词
-    if (!tracks.length && intent.title) {
+    if (!candidates.length && intent.title) {
         log('[search] 关键词无结果，用歌单名兜底:', brief(intent.title))
-        const retry = createPicker(allowJunk, [intent.title])
+        const retry = createPicker(allowJunk, [intent.title], excludeRes)
         await Promise.all([
-            searchOnce(intent.title, MAX_TRACKS).then(b => fillRoundRobin(retry, [b])),
+            searchOnce(intent.title, MAX_RECALL).then(b => fillRoundRobin(retry, [b])),
             searchPlaylistBuckets(intent.title, 6).then(bs => {
                 for (const b of bs) for (const s of b) retry.add(s)
             })
         ])
-        tracks = retry.list
+        candidates = retry.list
+    }
+
+    // ---- 第二阶段：精挑 ----
+    let tracks = candidates.slice(0, MAX_TRACKS)
+    let pickReason = ''
+    // 候选本来就不多时不必再调一次模型：没有挑选余地，只是白烧一次钱
+    if (!degraded && candidates.length > MAX_TRACKS) {
+        try {
+            const {picks, reason} = await pickFromCandidates(message, candidates, intent.exclude, taste)
+            if (picks.length >= 6) {
+                tracks = picks.map(i => candidates[i - 1]).filter(Boolean)
+                pickReason = reason
+            } else {
+                // 模型只勉强挑出几首，通常意味着候选整体不对路；退回召回顺序至少有 16 首可用
+                log('[pick] 模型只选出', picks.length, '首，保留召回顺序')
+            }
+        } catch (e) {
+            log('[pick] 精挑失败，退回召回顺序:', e.message)
+        }
     }
 
     return {
@@ -483,8 +658,11 @@ async function buildPlaylist(message, history) {
             desc: intent.desc,
             reply: intent.reply,
             keywords: intent.keywords,
-            tracks
+            exclude: intent.exclude,
+            tracks,
+            pickReason
         },
+        stats: {recall: candidates.length, final: tracks.length},
         degraded
     }
 }
@@ -517,9 +695,37 @@ const CACHE_TTL_MS = 5 * 60 * 1000
 const CACHE_MAX = 200
 const resultCache = new Map()
 
-function cacheKey(message, history) {
+/**
+ * 收口前端传来的会话约束。
+ * 这是外部输入，长度和条数都要卡住 —— 排除项会被直接拼进 prompt，不能让它变成一句话。
+ */
+function normalizeConstraints(raw) {
+    const o = raw && typeof raw === 'object' ? raw : {}
+    const list = Array.isArray(o.exclude) ? o.exclude : []
+    const exclude = [...new Set(
+        list.map(x => String(x == null ? '' : x).trim()).filter(x => x.length >= 1 && x.length <= 8)
+    )].slice(0, 6)
+    return {exclude}
+}
+
+/**
+ * 用户常听的抽样（画像）。
+ * 只收「歌名 - 歌手」这种短文本、最多 20 条 —— 这是唯一会把用户数据带出前端的通道，量必须可控。
+ */
+function normalizeTaste(raw) {
+    if (!Array.isArray(raw)) return []
+    return raw
+        .map(x => String(x == null ? '' : x).trim())
+        .filter(x => x.length >= 2 && x.length <= 60)
+        .slice(0, 20)
+}
+
+function cacheKey(message, history, constraints, taste) {
     const h = normalizeHistory(history).map(m => m.role + ':' + m.content).join('|')
-    return createHash('sha1').update(message + '\n' + h).digest('hex').slice(0, 16)
+    // 排除项和画像都会改变结果，必须进 key —— 否则"太吵了"会命中上一轮那份不排除人声的缓存
+    const c = constraints && constraints.exclude ? constraints.exclude.join(',') : ''
+    const t = Array.isArray(taste) ? taste.slice(0, 5).join(',') : ''
+    return createHash('sha1').update(message + '\n' + h + '\n' + c + '\n' + t).digest('hex').slice(0, 16)
 }
 
 function readCache(key) {
@@ -643,7 +849,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     const history = Array.isArray(body.history) ? body.history : []
-    const key = cacheKey(message, history)
+    const constraints = normalizeConstraints(body.constraints)
+    const taste = normalizeTaste(body.taste)
+    const key = cacheKey(message, history, constraints, taste)
     const cached = readCache(key)
     if (cached) {
         log('[cache] 命中:', brief(message), `${Date.now() - started}ms`)
@@ -652,17 +860,21 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-        const result = await buildPlaylist(message, history)
+        const result = await buildPlaylist(message, history, constraints, taste)
         const payload = {
             ok: true,
             ...result,
+            // 把合并后的排除项回给前端，由它累积到下一轮 —— "太吵了"要能被记住，否则每轮都在重新猜
+            constraints: {exclude: result.playlist.exclude || []},
             cached: false,
             tookMs: Date.now() - started
         }
         writeCache(key, payload)
         log('[ok]', brief(message), '→', brief(result.playlist.title),
             `keywords=${result.playlist.keywords.length}`,
-            `tracks=${result.playlist.tracks.length}`,
+            `recall=${result.stats.recall}`,
+            `final=${result.playlist.tracks.length}`,
+            (result.playlist.exclude || []).length ? `exclude=${result.playlist.exclude.join(',')}` : '',
             result.degraded ? `degraded=${result.degraded}` : '',
             `${payload.tookMs}ms`)
         return sendJson(res, 200, payload)

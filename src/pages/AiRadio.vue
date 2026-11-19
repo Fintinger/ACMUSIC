@@ -60,6 +60,7 @@
 
             <div class="sheet-meta">
               <span class="sheet-count">{{ m.playlist.tracks.length }} 首</span>
+              <span v-if="m.playlist.pickReason" class="sheet-pick">{{ m.playlist.pickReason }}</span>
               <span v-if="m.playlist.keywords.length" class="sheet-keys" :title="m.playlist.keywords.join(' / ')">
                 {{ m.playlist.keywords.join(' · ') }}
               </span>
@@ -115,6 +116,18 @@
 
     <!-- 输入区：sticky 贴在视口底部；页面有播放器时由 hasPlayer 抬高，避免被盖住 -->
     <div class="ai-composer" :class="{ 'has-player': hasPlayer }">
+      <!-- 结构化纠正要可见：用户说「太吵了」之后，得能看见系统到底记住了什么，也能手动撤掉 -->
+      <div v-if="exclude.length" class="composer-exclude">
+        <span class="ce-label">已排除</span>
+        <button
+            v-for="x in exclude"
+            :key="x"
+            type="button"
+            class="ce-chip"
+            :title="'点掉就不再排除「' + x + '」'"
+            @click="removeExclude(x)"
+        >{{ x }}<i class="ce-x">×</i></button>
+      </div>
       <div class="composer-inner">
         <textarea
             v-model="draft"
@@ -140,6 +153,7 @@
 import TracksLayout from "@/components/layout/TracksLayout";
 import {recommendPlaylist} from "@/api/Ai";
 import {create, addTracks} from "@/api/Playlist";
+import {likelist, detail as songDetail} from "@/api/Tracks";
 import {isLoggedIn} from "@/utils/auth";
 
 /**
@@ -160,6 +174,11 @@ export default {
       messages: [],
       draft: '',
       sending: false,
+      // 会话级排除项：由模型的 exclude 输出累积而来，用户可以手动移除
+      exclude: [],
+      // 用户常听的抽样（歌名 - 歌手），只在登录时拉一次，作为第二阶段的软约束
+      taste: [],
+      tasteLoading: false,
       presets: [
         '下雨天在窗边写代码',
         '90 年代粤语金曲',
@@ -178,7 +197,70 @@ export default {
       return Array.isArray(list) && list.length > 0
     }
   },
+  created() {
+    this.loadTaste()
+  },
+  activated() {
+    // keep-alive 回来时如果上次还是游客，补一次（登录后重新进本页要能用上画像）
+    if (!this.taste.length) this.loadTaste()
+  },
   methods: {
+    /**
+     * 拉一次「我喜欢的音乐」抽样，作为第二阶段的软约束。
+     *
+     * 只取 20 首、只发「歌名 - 歌手」—— 这是整条链路里唯一会离开前端的用户数据，
+     * 量必须可控。失败就静默跳过：画像只是加分项，没有它照样能选歌。
+     */
+    loadTaste() {
+      if (this.tasteLoading || this.taste.length) return
+      if (!isLoggedIn()) return
+      const cached = this.readTasteCache()
+      if (cached) {
+        this.taste = cached
+        return
+      }
+      this.tasteLoading = true
+      likelist()
+          .then(res => {
+            const ids = ((res.data && res.data.ids) || []).slice(0, 20)
+            if (!ids.length) return null
+            return songDetail(ids.join(','))
+          })
+          .then(res => {
+            if (!res) return
+            const songs = (res.data && res.data.songs) || []
+            const list = songs.map(s => {
+              const ar = (s.ar && s.ar[0] && s.ar[0].name) || (s.artists && s.artists[0] && s.artists[0].name) || ''
+              return ar ? `${s.name} - ${ar}` : String(s.name || '')
+            }).filter(Boolean)
+            if (!list.length) return
+            this.taste = list
+            this.writeTasteCache(list)
+          })
+          .catch(() => { /* 游客 / 未开红心歌单 / 接口异常：都按"没有画像"处理 */ })
+          .finally(() => { this.tasteLoading = false })
+    },
+    /** 画像缓存 24 小时：口味不会一天一变，但也不该用到天荒地老 */
+    readTasteCache() {
+      try {
+        const raw = localStorage.getItem('acmusic_ai_taste')
+        if (!raw) return null
+        const o = JSON.parse(raw)
+        if (!o || !Array.isArray(o.list) || !o.list.length) return null
+        if (Date.now() - Number(o.at || 0) > 24 * 60 * 60 * 1000) return null
+        return o.list
+      } catch (e) {
+        return null
+      }
+    },
+    writeTasteCache(list) {
+      try {
+        localStorage.setItem('acmusic_ai_taste', JSON.stringify({at: Date.now(), list}))
+      } catch (e) { /* 隐私模式写不进去，忽略 */ }
+    },
+    removeExclude(word) {
+      this.exclude = this.exclude.filter(x => x !== word)
+    },
     /**
      * 历史只取已完成的问答，且只传文字。
      * 歌单对象不进 history —— 模型不需要知道上一轮具体是哪 18 首，
@@ -226,12 +308,22 @@ export default {
       this.sending = true
       this.scrollToEnd()
 
-      recommendPlaylist({message: text, history})
+      recommendPlaylist({
+        message: text,
+        history,
+        // 上一轮累积的排除项带回去：模型据此判断这轮是纠正还是换话题
+        constraints: {exclude: this.exclude},
+        taste: this.taste
+      })
           .then(res => {
             const data = res && res.data
             if (!data || !data.ok) throw new Error((data && data.error) || '选歌失败')
             const pl = data.playlist
             if (!pl || !Array.isArray(pl.tracks)) throw new Error('返回结构异常')
+            // 服务端回传合并后的排除项，前端存下来给下一轮用
+            if (data.constraints && Array.isArray(data.constraints.exclude)) {
+              this.exclude = data.constraints.exclude
+            }
             aiMsg.pending = false
             aiMsg.reply = pl.reply || ''
             aiMsg.playlist = pl
@@ -327,6 +419,9 @@ export default {
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - 300px);
+  // 这段留白是给输入区的 sticky 用的活动空间：sticky 不能越出包含块，
+  // 没有它的话，长对话滚到中间时输入框会跟着容器末尾一起被推到视口外
+  padding-bottom: 88px;
 }
 
 // 中间的消息流吃掉剩余空间，把输入区压到底部
@@ -554,6 +649,16 @@ export default {
 
   .sheet-count { flex-shrink: 0; }
 
+  // 第二阶段的挑选理由：一行小字，说明模型为什么这么取舍
+  .sheet-pick {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    border-radius: 4px;
+    background: rgba(var(--theme-accent-rgb), .10);
+    color: $color-main-text;
+    font-size: 11px;
+  }
+
   .sheet-keys {
     min-width: 0;
     overflow: hidden;
@@ -628,6 +733,47 @@ export default {
   background-color: transparent;
 
   &.has-player { bottom: 64px; }
+
+  // 「已排除」的 chips：让结构化纠正可见、可撤销，否则用户没法知道系统记住了什么
+  .composer-exclude {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 4px 8px;
+  }
+
+  .ce-label {
+    font-size: 12px;
+    color: $font-black-2;
+  }
+
+  .ce-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px 0 10px;
+    border-radius: $radius-pill;
+    border: 1px solid rgba(var(--theme-accent-rgb), .35);
+    background: rgba(var(--theme-accent-rgb), .10);
+    color: $color-main-text;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color .18s ease;
+
+    .ce-x {
+      font-style: normal;
+      opacity: .55;
+    }
+
+    &:hover {
+      border-color: var(--c-accent);
+
+      .ce-x { opacity: 1; }
+    }
+  }
 
   .composer-inner {
     display: flex;
