@@ -10,11 +10,12 @@
         title="AI 点歌"
         @click="openPanel"
     >
-      <!-- 三层各管一个 transform，互不覆盖：光晕层只缩、光环层只转、本体层只微缩放。
-           每帧由 rAF 直接写 style，不走响应式数据 —— 否则 60fps 就是 60 次 re-render -->
-      <span ref="fabGlow" class="fab-glow" aria-hidden="true"></span>
-      <span ref="fabRing" class="fab-ring" aria-hidden="true">
-        <svg viewBox="0 0 100 100" focusable="false"><circle cx="50" cy="50" r="46"/></svg>
+      <!-- 只有两层：气态光晕在外、图标本体在内。
+           光晕由两层不同模糊半径的雾叠出来 —— 一层收得紧、一层散得开，
+           两者呼吸相位错开，看起来才像气体在涌动，而不是一圈光 -->
+      <span class="fab-glow" aria-hidden="true">
+        <i ref="fabCore" class="glow-core"></i>
+        <i ref="fabHaze" class="glow-haze"></i>
       </span>
       <span ref="fabBody" class="fab-body">
         <!-- 大小两颗星仍旧由 CSS 各自呼吸：这是质感层，和整体缩放叠加不冲突 -->
@@ -40,11 +41,11 @@
       >
         <header class="panel-head">
           <span class="head-avatar">
-            <span ref="headGlow" class="ha-glow" aria-hidden="true"></span>
-            <span class="ha-img"><img src="/favicon.ico" alt=""></span>
-            <span ref="headRing" class="ha-ring" aria-hidden="true">
-              <svg viewBox="0 0 100 100" focusable="false"><circle cx="50" cy="50" r="46"/></svg>
+            <span class="ha-glow" aria-hidden="true">
+              <i ref="headCore" class="glow-core"></i>
+              <i ref="headHaze" class="glow-haze"></i>
             </span>
+            <span class="ha-img"><img src="/favicon.ico" alt=""></span>
           </span>
           <div class="head-text">
             <strong>AI 点歌</strong>
@@ -318,8 +319,6 @@ export default {
       raf: 0,
       last: 0,
       phase: 0,
-      angleFab: 0,
-      angleHead: 0,
       breathe: 2.4,
       amp: 0.2,
       glow: 0.15,
@@ -387,12 +386,9 @@ export default {
       const curve = this.breathCurve(m.phase)
       const level = 0.18 + 0.82 * m.amp * curve
 
-      m.angleFab = (m.angleFab + dt * (360 / 6.5) * m.spin) % 360
-      m.angleHead = (m.angleHead + dt * (360 / 9.5) * m.spin) % 360
-
       // 浮窗关着时只有按钮需要动，降到约 20fps：
       // 呼吸周期以秒计，20 帧足够平滑，而写 DOM 的次数降到三分之一。
-      // 相位和角度上面已经按真实 dt 累积过，这里跳过的只是"写字"这一下
+      // 相位上面已经按真实 dt 累积过，这里跳过的只是"写字"这一下
       const minGap = this.open ? 0 : 45
       if (minGap && ts - (m.wroteAt || 0) < minGap) {
         this._raf = requestAnimationFrame(this.tickMotion)
@@ -400,30 +396,42 @@ export default {
       }
       m.wroteAt = ts
 
-      const fabRing = this.$refs.fabRing
-      if (fabRing) fabRing.style.transform = `rotate(${m.angleFab.toFixed(2)}deg)`
+      // 第二层雾用滞后一点的相位：两层同步就只是"一圈光在缩放"，
+      // 错开才有气体互相推挤的感觉
+      const hazeCurve = this.breathCurve((m.phase + 0.78) % 1)
+      // 缓慢游移，幅度很小 —— 大了会像果冻
+      const driftAmt = (0.5 + 0.5 * m.spin) * (0.6 + 0.4 * m.amp)
+      const dx = Math.cos(m.phase * Math.PI * 2) * 2.2 * driftAmt
+      const dy = Math.sin(m.phase * Math.PI * 2) * 1.8 * driftAmt
 
-      const fabGlow = this.$refs.fabGlow
-      if (fabGlow) {
-        fabGlow.style.opacity = (m.glow * level * 0.75).toFixed(3)
-        fabGlow.style.transform = `scale(${(0.84 + 0.2 * level * m.amp).toFixed(3)})`
+      const core = this.$refs.fabCore
+      if (core) {
+        core.style.opacity = (m.glow * level * 0.95).toFixed(3)
+        core.style.transform = `scale(${(0.9 + 0.16 * level * m.amp).toFixed(3)})`
+      }
+
+      const haze = this.$refs.fabHaze
+      if (haze) {
+        haze.style.opacity = (m.glow * (0.18 + 0.82 * hazeCurve) * 0.88).toFixed(3)
+        haze.style.transform =
+          `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(${(0.92 + 0.26 * hazeCurve * m.amp).toFixed(3)})`
       }
 
       const fabBody = this.$refs.fabBody
       if (fabBody) fabBody.style.transform = `scale(${(1 + 0.04 * m.amp * curve).toFixed(4)})`
 
       // 头像只在面板打开时存在，refs 为空就跳过 —— 不为看不见的元素算动画
-      const headRing = this.$refs.headRing
-      if (headRing) {
-        headRing.style.transform = `rotate(${m.angleHead.toFixed(2)}deg)`
-        // 头像幅度按 0.62 倍、转速慢 1.4 倍，共享同一相位
-        headRing.style.opacity = (0.3 + 0.7 * m.amp * 0.62 * curve).toFixed(3)
+      const headCore = this.$refs.headCore
+      if (headCore) {
+        headCore.style.opacity = (m.glow * level * 0.55).toFixed(3)
+        headCore.style.transform = `scale(${(0.92 + 0.12 * level * m.amp).toFixed(3)})`
       }
 
-      const headGlow = this.$refs.headGlow
-      if (headGlow) {
-        headGlow.style.opacity = (m.glow * level * 0.7).toFixed(3)
-        headGlow.style.transform = `scale(${(0.88 + 0.16 * level * m.amp).toFixed(3)})`
+      const headHaze = this.$refs.headHaze
+      if (headHaze) {
+        headHaze.style.opacity = (m.glow * (0.2 + 0.8 * hazeCurve) * 0.45).toFixed(3)
+        headHaze.style.transform =
+          `translate(${(dx * 0.6).toFixed(2)}px, ${(dy * 0.6).toFixed(2)}px) scale(${(0.94 + 0.2 * hazeCurve * m.amp).toFixed(3)})`
       }
 
       this._raf = requestAnimationFrame(this.tickMotion)
@@ -742,18 +750,30 @@ export default {
   height: 52px;
   display: grid;
   place-items: center;
-  border: none;
+  // 玻璃：半透明主色 + 背后模糊，上面再压一层左上到右下的高光。
+  // 不透明的纯色无论怎么加阴影都像"塑料片"，必须有东西透出来才是玻璃
+  border: 1px solid rgba(255, 255, 255, .24);
   border-radius: 50%;
-  background: var(--c-button-primary);
-  color: var(--c-text-on-accent);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, .04) 30%, rgba(255, 255, 255, 0) 52%),
+    rgba(var(--theme-accent-rgb), .9);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  color: #fff;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(var(--theme-accent-rgb), .38), inset 0 1px 0 rgba(255, 255, 255, .18);
-  transition: transform .2s ease, box-shadow .2s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .55),
+    inset 0 -12px 20px rgba(0, 0, 0, .14),
+    0 10px 30px rgba(var(--theme-accent-rgb), .32);
+  transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
 
   // 只保留 hover 的位移；呼吸缩放交给内层 .fab-body，两个 transform 不再互相覆盖
   &:hover {
     transform: translateY(-2px) scale(1.04);
-    box-shadow: 0 12px 30px rgba(var(--theme-accent-rgb), .48);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .6),
+      inset 0 -12px 22px rgba(0, 0, 0, .16),
+      0 14px 36px rgba(var(--theme-accent-rgb), .42);
   }
 
   &:active { transform: scale(.96); }
@@ -761,50 +781,51 @@ export default {
   // 有播放条时抬高，避免压在播放条上
   &.has-player { bottom: 104px; }
 
-  // ---- 层 3：光晕。只做 scale + opacity，这两个属性走合成层 ----
-  // 从 50% 才开始有颜色：中心透明，避免和按钮同色叠加成一片糊
+  // ---- 气态光晕：两层不同模糊半径的雾，相位错开 ----
+  // 一层收得紧（光源本体），一层散得开（被吹散的雾）。
+  // 只用一层的话无论怎么调都像"一圈光"，两层叠加才有体积感
   .fab-glow {
-    position: absolute;
-    inset: -10px;
-    border-radius: 50%;
-    pointer-events: none;
-    background: radial-gradient(circle,
-        rgba(var(--theme-accent-rgb), 0) 0%,
-        rgba(var(--theme-accent-rgb), 0) 52%,
-        rgba(var(--theme-accent-rgb), .6) 66%,
-        rgba(var(--theme-accent-rgb), 0) 84%);
-    opacity: 0;
-    will-change: transform, opacity;
-  }
-
-  // ---- 层 2：光弧。只做 rotate ----
-  .fab-ring {
     display: block;
     position: absolute;
-    inset: -5px;
+    // 光晕层要足够大，否则渐变在元素边界被截断，根本没有地方扩散
+    inset: -24px;
     pointer-events: none;
-    opacity: .42;
-    will-change: transform;
 
-    svg {
+    i {
+      position: absolute;
+      inset: 0;
       display: block;
-      width: 100%;
-      height: 100%;
-      overflow: visible;
+      border-radius: 50%;
+      pointer-events: none;
+      opacity: 0;
+      will-change: transform, opacity;
     }
 
-    circle {
-      fill: none;
-      // viewBox 100 对 68px 元素，4.4 约等于视觉上的 3px
-      stroke: rgba(255, 255, 255, .96);
-      stroke-width: 4.4;
-      stroke-linecap: round;
-      // 圆周长 2π×46 ≈ 289，取 62 约等于 77° 的弧
-      stroke-dasharray: 62 227;
+    // 中心必须完全透明：光晕和按钮同色，画在按钮上只会显得"按钮变大了一圈"。
+    // 从按钮边缘（52%）之外才开始发光，颜色由白过渡到主色
+    .glow-core {
+      background: radial-gradient(circle,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0) 52%,
+          rgba(255, 255, 255, .38) 62%,
+          rgba(var(--theme-accent-rgb), .75) 78%,
+          rgba(var(--theme-accent-rgb), 0) 94%);
+      filter: blur(10px);
+    }
+
+    .glow-haze {
+      inset: -14px;
+      background: radial-gradient(circle,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0) 46%,
+          rgba(255, 255, 255, .24) 58%,
+          rgba(var(--theme-accent-rgb), .5) 74%,
+          rgba(var(--theme-accent-rgb), 0) 92%);
+      filter: blur(20px);
     }
   }
 
-  // ---- 层 1：本体。只做微缩放 ----
+  // ---- 本体。只做微缩放 ----
   .fab-body {
     position: relative;
     display: grid;
@@ -843,13 +864,6 @@ export default {
   &.is-pulse {
     animation: fab-pulse .55s ease;
   }
-
-  &:hover {
-    transform: translateY(-2px) scale(1.04);
-    box-shadow: 0 12px 30px rgba(var(--theme-accent-rgb), .48);
-  }
-
-  &:active { transform: scale(.96); }
 }
 
 // ---- 面板 ----
@@ -905,46 +919,43 @@ export default {
       }
     }
 
-    // 头像的三层：光晕 / 图片 / 光弧。和按钮共享同一相位，但幅度只有 0.62 倍，
-    // 转速慢 1.4 倍 —— 它的角色是陪伴，不是吸引注意
+    // 头像只有两层：雾 + 图片。雾比按钮更散更淡 —— 它的角色是陪伴，
+    // 不能和按钮一样抢眼
     .ha-glow {
-      position: absolute;
-      inset: -10px;
-      border-radius: 50%;
-      pointer-events: none;
-      background: radial-gradient(circle,
-          rgba(var(--theme-accent-rgb), 0) 0%,
-          rgba(var(--theme-accent-rgb), 0) 46%,
-          rgba(var(--theme-accent-rgb), .5) 62%,
-          rgba(var(--theme-accent-rgb), 0) 84%);
-      opacity: 0;
-      will-change: transform, opacity;
-    }
-
-    .ha-ring {
       display: block;
       position: absolute;
-      inset: -5px;
+      inset: -12px;
       pointer-events: none;
-      opacity: .3;
-      will-change: transform;
 
-      svg {
+      i {
+        position: absolute;
+        inset: 0;
         display: block;
-        width: 100%;
-        height: 100%;
-        overflow: visible;
+        border-radius: 50%;
+        pointer-events: none;
+        opacity: 0;
+        will-change: transform, opacity;
       }
 
-      circle {
-        fill: none;
-        stroke: rgba(var(--theme-accent-rgb), 1);
-        // 40px 元素上 7 约等于 2.8px 的视觉粗细
-        stroke-width: 7;
-        stroke-linecap: round;
-        // dasharray 的单位是 viewBox 长度，不是像素：周长 2π×46 ≈ 289，
-        // 取 62 才等于 77°（第一版按渲染像素算成 25，弧短到只有 31°）
-        stroke-dasharray: 62 227;
+      .glow-core {
+        background: radial-gradient(circle,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0) 50%,
+            rgba(255, 255, 255, .34) 62%,
+            rgba(var(--theme-accent-rgb), .55) 77%,
+            rgba(var(--theme-accent-rgb), 0) 96%);
+        filter: blur(8px);
+      }
+
+      .glow-haze {
+        inset: -6px;
+        background: radial-gradient(circle,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0) 48%,
+            rgba(255, 255, 255, .22) 60%,
+            rgba(var(--theme-accent-rgb), .4) 75%,
+            rgba(var(--theme-accent-rgb), 0) 94%);
+        filter: blur(12px);
       }
     }
   }
