@@ -1,42 +1,11 @@
 <template>
-  <div v-show="!hidden" class="ai-assistant">
-    <!-- 浮动入口：右下角，避开底部播放条 -->
-    <button
-        v-show="!open"
-        ref="fabRoot"
-        type="button"
-        class="ai-fab"
-        :class="{ 'has-player': hasPlayer, 'is-pulse': songPulse }"
-        aria-label="打开 AI 点歌"
-        title="AI 点歌"
-        @click="openPanel"
-    >
-      <!-- Glass Orb：质感做在玻璃本体上。
-           层级从下到上：玻璃球 → 表面高光 / 内部漫射 / 弧形反射 → 图标 -->
-      <span class="orb-glass">
-        <span class="orb-inner-glow" aria-hidden="true"></span>
-        <span class="orb-highlight" aria-hidden="true"></span>
-        <span class="orb-reflection" aria-hidden="true"></span>
-        <svg class="orb-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path class="glyph-main"
-                d="M11.5 2.8Q12.7 9.4 19.3 10.6Q12.7 11.8 11.5 18.4Q10.3 11.8 3.7 10.6Q10.3 9.4 11.5 2.8Z"
-                fill="currentColor"/>
-          <path class="glyph-mini"
-                d="M18.2 12.8Q19.1 16.1 22.4 17Q19.1 17.9 18.2 21.2Q17.3 17.9 14 17Q17.3 16.1 18.2 12.8Z"
-                fill="currentColor"/>
-        </svg>
-      </span>
-
-      <!-- 外沿一道很细的弧光，转速固定（BPM 只驱动呼吸，不驱动转速） -->
-      <span class="orb-arc" aria-hidden="true"></span>
-    </button>
-
-    <!-- 面板：宽度和高度都设上限，窄屏时自动收到视口内 -->
+  <div class="ai-assistant">
+    <!-- 面板：锚在搜索框下方，宽度和高度都有上限 -->
     <transition name="panel-pop">
       <section
           v-if="open"
           class="ai-panel"
-          :class="{ 'has-player': hasPlayer }"
+          :style="panelStyle"
           role="dialog"
           aria-label="AI 点歌"
       >
@@ -243,7 +212,6 @@ export default {
   name: "AiAssistant",
   data() {
     return {
-      hidden: false,
       open: false,
       messages: [],
       draft: '',
@@ -258,8 +226,8 @@ export default {
       pending: false,
       // 当前歌曲 BPM。0 表示还在查，查不到统一回退 100
       bpm: 0,
-      // 换歌时给入口一个短脉冲，让"它注意到你切歌了"这件事有反馈
-      songPulse: false,
+      // 面板锚点：搜索框的矩形，由 App.vue 点击时传过来
+      panelPos: null,
       presets: ['下雨天写代码', '90 年代粤语金曲', '跑步时听的快节奏']
     }
   },
@@ -267,13 +235,18 @@ export default {
     canSend() {
       return !this.sending && this.draft.trim().length >= 2
     },
-    /**
-     * 播放条是否在屏幕上。
-     * 判据是「有当前歌」而不是「播放列表非空」—— 播放条显示的条件就是 currentSong.id，
-     * 球要吸附的是那条真实的条，不是一个可能存在的列表
-     */
-    hasPlayer() {
-      return !!this.nowSong.id
+    /** 面板位置：贴搜索框下沿，右边缘和它对�� */
+    panelStyle() {
+      const p = this.panelPos
+      if (!p) return null
+      const top = Math.round(p.top)
+      const right = Math.round(p.right)
+      const height = Math.max(280, Math.min(440, p.vh - top - 20))
+      return {
+        top: top + 'px',
+        right: right + 'px',
+        height: height + 'px'
+      }
     },
     userAvatar() {
       const p = this.$store.getters['UserAbout/userProfile']
@@ -306,43 +279,50 @@ export default {
     /**
      * 动画状态全部放在非响应式对象里。
      * 每帧写 this.$data 会触发 watcher → 虚拟 DOM diff，60fps 就是 60 次重渲染，
-     * 所以相位、角度、当前周期都挂在 _motion 上，只把结果直接写进 DOM style。
+     * 所以相位、当前周期都挂在 _motion 上，只把结果直接写进 DOM style。
      */
     this._motion = {
       raf: 0,
       last: 0,
-      frame: 0,
       phase: 0,
       breathe: 2.4,
       amp: 0.2,
       glow: 0.15,
-      spin: 0.3,
-      // 引力偏移：鼠标靠近时球会被"拽"过去一点
-      pullX: 0,
-      pullY: 0
+      spin: 0.3
     }
-    this._pointer = {x: -1, y: -1}
-    this._orbCenter = null
     this._raf = 0
   },
   mounted() {
     // 全屏播放详情页上不显示入口
     this.$bus.$on('playerExpand', this.onPlayerExpand)
     this.$bus.$on('nowPlaying', this.onNowPlaying)
+    this.$bus.$on('ai-open', this.onAiOpen)
     document.addEventListener('visibilitychange', this.onVisibility)
-    window.addEventListener('mousemove', this.onPointerMove, {passive: true})
-    window.addEventListener('resize', this.invalidateOrbCenter)
-    this.startMotion()
+    document.addEventListener('mousedown', this.onDocMouseDown)
+    document.addEventListener('keydown', this.onDocKeydown)
+    window.addEventListener('resize', this.onResize)
   },
   beforeDestroy() {
     this.$bus.$off('playerExpand', this.onPlayerExpand)
     this.$bus.$off('nowPlaying', this.onNowPlaying)
+    this.$bus.$off('ai-open', this.onAiOpen)
     document.removeEventListener('visibilitychange', this.onVisibility)
-    window.removeEventListener('mousemove', this.onPointerMove)
-    window.removeEventListener('resize', this.invalidateOrbCenter)
+    document.removeEventListener('mousedown', this.onDocMouseDown)
+    document.removeEventListener('keydown', this.onDocKeydown)
+    window.removeEventListener('resize', this.onResize)
     this.stopMotion()
   },
   methods: {
+    /** 点面板外收起。搜索框里那个 ✦ 除外 —— 它自己负责开关，别在这里抢着关 */
+    onDocMouseDown(e) {
+      if (!this.open) return
+      const t = e.target
+      if (t && t.closest && (t.closest('.ai-panel') || t.closest('.ai-search-btn'))) return
+      this.closePanel()
+    },
+    onDocKeydown(e) {
+      if (e.key === 'Escape' && this.open) this.closePanel()
+    },
     /** 尊重系统「减少动态效果」：不开 rAF，只留静态样式 */
     prefersReduced() {
       try {
@@ -351,27 +331,16 @@ export default {
         return false
       }
     },
-    /** 只记坐标，不做计算 —— mousemove 每秒能来上百次，重活留给 rAF */
-    onPointerMove(e) {
-      this._pointer.x = e.clientX
-      this._pointer.y = e.clientY
+    /** 导航栏的 ✦ 被点击：rect 是搜索框的矩形，面板要锚在它下方 */
+    onAiOpen(rect) {
+      if (this.open) {
+        this.closePanel()
+        return
+      }
+      this.openPanel(rect)
     },
-    invalidateOrbCenter() {
-      this._orbCenter = null
-    },
-    /**
-     * 球心的屏幕坐标。
-     * 缓存是为了避免每帧 getBoundingClientRect 触发同步布局；
-     * rAF 里每 15 帧失效一次，位置过渡（滑到播放条旁边）也能被跟上
-     */
-    orbCenter() {
-      if (this._orbCenter) return this._orbCenter
-      const el = this.$refs.fabRoot
-      if (!el) return null
-      const r = el.getBoundingClientRect()
-      if (!r.width) return null
-      this._orbCenter = {x: r.left + r.width / 2, y: r.top + r.height / 2}
-      return this._orbCenter
+    onResize() {
+      if (this.open) this.closePanel()
     },
     onVisibility() {
       // 标签页切到后台就停：rAF 会被浏览器节流成 1fps，留着只会让相位和音乐脱节
@@ -411,65 +380,8 @@ export default {
       const curve = this.breathCurve(m.phase)
       const level = 0.18 + 0.82 * m.amp * curve
 
-      // 每 15 帧让球心缓存失效一次：位置过渡期间也能跟上，
-      // 又不必每帧都做一次会触发同步布局的 getBoundingClientRect
-      m.frame = (m.frame + 1) % 15
-      if (m.frame === 0) this._orbCenter = null
-
-      // 浮窗关着时只有按钮需要动，降到约 20fps：
-      // 呼吸周期以秒计，20 帧足够平滑，而写 DOM 的次数降到三分之一。
-      // 相位上面已经按真实 dt 累积过，这里跳过的只是"写字"这一下
-      const minGap = this.open ? 0 : 45
-      if (minGap && ts - (m.wroteAt || 0) < minGap) {
-        this._raf = requestAnimationFrame(this.tickMotion)
-        return
-      }
-      m.wroteAt = ts
-
-      // 第二层雾的相位差已经不需要了（外部柔光整层删掉），
-      // 只保留一个缓慢位移给玻璃反射用
-      const driftAmt = (0.5 + 0.5 * m.spin) * (0.6 + 0.4 * m.amp)
-      const dx = Math.cos(m.phase * Math.PI * 2) * 2.2 * driftAmt
-      const dy = Math.sin(m.phase * Math.PI * 2) * 1.8 * driftAmt
-
-      // 玻璃本体的呼吸全部走 CSS 变量：球内漫射光、弧形反射、整体通透度
-      const fab = this.$refs.fabRoot
-      if (fab) {
-        // 引力：鼠标进入 170px 内，球会朝鼠标方向偏最多 8px。
-        // 距离越近引力越强（平方衰减），离开后回弹 —— 因为它是球，
-        // 这点位移读起来是"被吸引"，不会像"位置抖了"
-        const pointer = this._pointer
-        if (!this.open && pointer.x >= 0) {
-          const c = this.orbCenter()
-          if (c) {
-            const vx = pointer.x - c.x
-            const vy = pointer.y - c.y
-            const dist = Math.sqrt(vx * vx + vy * vy)
-            const R = 180
-            const k = dist < R ? Math.pow(1 - dist / R, 2) : 0
-            const tx = dist > 1 ? (vx / dist) * 10 * k : 0
-            const ty = dist > 1 ? (vy / dist) * 10 * k : 0
-            const ease = Math.min(1, dt / 0.16)
-            m.pullX += (tx - m.pullX) * ease
-            m.pullY += (ty - m.pullY) * ease
-          }
-        } else {
-          m.pullX += (0 - m.pullX) * Math.min(1, dt / 0.2)
-          m.pullY += (0 - m.pullY) * Math.min(1, dt / 0.2)
-        }
-        fab.style.setProperty('--pull-x', m.pullX.toFixed(2) + 'px')
-        fab.style.setProperty('--pull-y', m.pullY.toFixed(2) + 'px')
-
-        fab.style.setProperty('--breath-intensity', (0.3 + 0.6 * level).toFixed(3))
-        fab.style.setProperty('--breath-scale', (0.9 + 0.16 * level * m.amp).toFixed(3))
-        fab.style.setProperty('--reflection-opacity', (0.35 + 0.5 * level).toFixed(3))
-        fab.style.setProperty('--reflection-offset', `${(dx * 1.1).toFixed(2)}px`)
-        fab.style.setProperty('--reflection-lift', `${(dy * 0.7).toFixed(2)}px`)
-        fab.style.setProperty('--glass-opacity', (0.88 + 0.12 * m.amp).toFixed(3))
-      }
-
-      // 头像只在面板打开时存在，refs 为空就跳过 —— 不为看不见的元素算动画
-      // 头像不再扩散光晕，只做亮度呼吸 —— 陪伴感不需要发光，亮一点就够
+      // 球没了之后，这是唯一的逐帧动画：头像亮度跟着节奏呼吸一小点。
+      // 不再需要降频那套 —— 循环本身只在面板打开时运行
       const headImg = this.$refs.headImg
       if (headImg) {
         headImg.style.filter = `brightness(${(0.94 + 0.14 * level * m.amp).toFixed(3)})`
@@ -521,9 +433,6 @@ export default {
       this.isPlaying = !!payload.playing
       this.pending = !!payload.pending
       if (changed) {
-        this.songPulse = true
-        clearTimeout(this._pulseTimer)
-        this._pulseTimer = setTimeout(() => { this.songPulse = false }, 600)
         // 换歌先退回默认 100（2.4s），不继承上一首 —— 两首速度差太多时会明显错位。
         // 查到新 BPM 后由 rAF 平滑插值过去，不重启动画
         this.bpm = 0
@@ -535,17 +444,39 @@ export default {
       this.ask(this.sameVibeText)
     },
     onPlayerExpand(expanded) {
-      this.hidden = !!expanded
-      if (expanded) this.open = false
+      // 全屏播放页是 z-index 200 的整屏覆盖，面板会被盖住；
+      // 与其让它留在下面"看不见但还在"，不如直接收起
+      if (expanded) this.closePanel()
     },
-    openPanel() {
+    /**
+     * 打开面板。
+     * rect 来自导航栏那个 ✦ 按钮（它自己的矩形），面板贴着它下沿展开 ——
+     * 这样面板和入口在空间上连贯，不会像从屏幕角落突然冒出来
+     */
+    openPanel(rect) {
+      if (rect && rect.width) {
+        // 用 clientWidth 而不是 innerWidth：后者含滚动条，右边会差出 15px
+        const vw = document.documentElement.clientWidth
+        this.panelPos = {
+          top: rect.bottom + 10,
+          right: Math.max(12, vw - rect.right),
+          vh: window.innerHeight
+        }
+      } else {
+        this.panelPos = {top: 64, right: 24, vh: window.innerHeight}
+      }
       this.open = true
       this.loadTaste()
+      this.startMotion()
+      this.$bus.$emit('ai-panel-state', true)
       if (!this.messages.length) return
       this.$nextTick(() => this.scrollToEnd())
     },
     closePanel() {
+      if (!this.open) return
       this.open = false
+      this.stopMotion()
+      this.$bus.$emit('ai-panel-state', false)
     },
     ask(text) {
       this.draft = text
@@ -781,188 +712,20 @@ export default {
   box-sizing: border-box;
 }
 
-// ---- 浮动按钮（Glass Orb）----
-.ai-fab {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 90;
-  width: 64px;
-  height: 64px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  // 位移留给"引力"（rAF 每帧写变量），缩放交给内层玻璃 ——
-  // 两者分开，才不会像之前那样互相覆盖
-  transform: translate3d(var(--pull-x, 0px), var(--pull-y, 0px), 0);
-  --pull-x: 0px;
-  --pull-y: 0px;
-  // 位置切换要有过渡：有歌时它会从角落"滑"到播放条旁边
-  transition: right .34s cubic-bezier(.22, .61, .36, 1), bottom .34s cubic-bezier(.22, .61, .36, 1);
-
-  // rAF 每帧只改这几个变量，玻璃本体据此呼吸；不直接改属性值，
-  // 是为了让"呼吸"这件事由一份配置驱动，而不是散落在各处
-  --breath-intensity: .5;
-  --breath-scale: 1;
-  --reflection-opacity: .7;
-  --reflection-offset: 0px;
-  --reflection-lift: 0px;
-  --glass-opacity: 1;
-  // 球体三段渐变的浓度，浅色主题下会整体覆盖（见文件末尾）
-  --orb-top: rgba(255, 255, 255, .42);
-  --orb-core: rgba(var(--theme-accent-rgb), .48);
-  --orb-bottom: rgba(30, 24, 62, .45);
-  --orb-border: rgba(255, 255, 255, .3);
-
-  // 有歌时贴到播放条（60px 高）右端，像一个从条上长出来的旋钮；
-  // 没歌时回到角落。之前是 bottom 104，离条 44px，悬在半空才显得多余
-  &.has-player {
-    bottom: 72px;
-    right: 20px;
-  }
-
-  // 缩放做在玻璃上，外层留给引力位移
-  &:hover .orb-glass { transform: scale(1.05); }
-  &:active .orb-glass { transform: scale(.96); }
-
-  &.is-pulse .orb-glass {
-    animation: fab-pulse .55s ease;
-  }
-
-  // ---- 玻璃球本体 ----
-  .orb-glass {
-    position: relative;
-    display: block;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    overflow: hidden;
-    // 三段渐变：顶部被光照亮、中间是主色、底部压暗表现玻璃的厚度。
-    // 三个 alpha 都提成变量，浅色主题下要整体加浓，否则半透明球在浅背景上会被"透白"
-    background: linear-gradient(145deg,
-        var(--orb-top, rgba(255, 255, 255, .42)) 0%,
-        var(--orb-core, rgba(var(--theme-accent-rgb), .48)) 44%,
-        var(--orb-bottom, rgba(30, 24, 62, .45)) 100%);
-    border: 1px solid var(--orb-border, rgba(255, 255, 255, .3));
-    box-shadow:
-      inset 0 1px 2px rgba(255, 255, 255, .5),
-      // 底部只留一点内壁的暗，压太重会像塑料壳的厚度
-      inset 0 -8px 16px rgba(40, 30, 90, .16),
-      // 落地阴影用中性黑：主色投影在浅色背景上会糊成一圈光晕，用户不要那个
-      0 6px 16px rgba(0, 0, 0, .22);
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
-    opacity: var(--glass-opacity, 1);
-    transition: transform .22s ease;
-  }
-
-  // 内部漫射光：球心那团亮，随呼吸缩放 —— 这是"玻璃里有光"的来源
-  .orb-inner-glow {
-    position: absolute;
-    inset: 8px;
-    border-radius: 50%;
-    background: radial-gradient(circle,
-        rgba(255, 255, 255, .52) 0%,
-        rgba(var(--theme-accent-rgb), .32) 48%,
-        rgba(var(--theme-accent-rgb), 0) 75%);
-    filter: blur(5px);
-    opacity: var(--breath-intensity, .5);
-    transform: scale(var(--breath-scale, 1));
-    will-change: transform, opacity;
-  }
-
-  // 表面高光：左上亮、右下极淡，制造球面的弧度
-  .orb-highlight {
-    position: absolute;
-    inset: 1px;
-    border-radius: 50%;
-    pointer-events: none;
-    background: linear-gradient(155deg,
-        rgba(255, 255, 255, .4) 0%,
-        rgba(255, 255, 255, 0) 38%,
-        rgba(255, 255, 255, 0) 70%,
-        rgba(255, 255, 255, .1) 100%);
-  }
-
-  // 弧形玻璃反射：顶部那道弯月形亮边，是"玻璃"最直接的证据
-  .orb-reflection {
-    position: absolute;
-    top: 5px;
-    left: 8px;
-    width: 42px;
-    height: 18px;
-    border-top: 2px solid rgba(255, 255, 255, .55);
-    border-radius: 50%;
-    filter: blur(1px);
-    pointer-events: none;
-    transform: rotate(-25deg) translate(var(--reflection-offset, 0px), var(--reflection-lift, 0px));
-    opacity: var(--reflection-opacity, .7);
-    will-change: transform, opacity;
-  }
-
-  // 外沿一道细弧光。转速固定 —— BPM 只决定呼吸快慢，不决定转速
-  .orb-arc {
-    position: absolute;
-    inset: -5px;
-    border-radius: 50%;
-    pointer-events: none;
-    background: conic-gradient(from 0deg,
-        rgba(255, 255, 255, 0) 0deg,
-        rgba(255, 255, 255, 0) 272deg,
-        rgba(226, 220, 255, .55) 308deg,
-        rgba(255, 255, 255, 0) 344deg);
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
-    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
-    animation: orb-orbit 7s linear infinite;
-  }
-
-  .orb-icon {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 26px;
-    height: 26px;
-    transform: translate(-50%, -50%);
-    overflow: visible;
-    color: #fff;
-    filter: drop-shadow(0 1px 2px rgba(20, 12, 50, .45));
-  }
-
-  // 两颗星各自绕自身中心动、相位错开：一起动会像整个图标在呼吸，
-  // 错开才像真实的星光闪烁
-  .glyph-main {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: glyph-breathe 3.4s ease-in-out infinite;
-  }
-
-  .glyph-mini {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: glyph-twinkle 3.4s ease-in-out infinite;
-    animation-delay: .55s;
-  }
-}
-
 // ---- 面板 ----
 .ai-panel {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 90;
-  width: min(420px, calc(100vw - 32px));
-  // 高度上限：再高就顶到导航栏了
-  height: min(620px, calc(100vh - 160px));
+  // 层级要压过导航栏和页面内容：它从搜索框下面长出来，顶部会贴着导航栏下沿
+  z-index: 120;
+  width: min(360px, calc(100vw - 28px));
+  // top / right / height 由 panelStyle 按搜索框位置算好，写在内联样式里
   display: flex;
   flex-direction: column;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--c-border-strong);
   background: var(--c-bg-elevated);
   box-shadow: 0 18px 48px rgba(0, 0, 0, .34);
   overflow: hidden;
-
-  &.has-player { bottom: 104px; height: min(620px, calc(100vh - 240px)); }
 }
 
 .panel-head {
@@ -1475,7 +1238,8 @@ export default {
 .panel-pop-enter-active,
 .panel-pop-leave-active {
   transition: opacity .18s ease, transform .18s ease;
-  transform-origin: bottom right;
+  // 从右上角展开：面板贴的是搜索框，锚点在那一侧
+  transform-origin: top right;
 }
 
 .panel-pop-enter,
@@ -1484,46 +1248,4 @@ export default {
   transform: translateY(8px) scale(.97);
 }
 
-@keyframes glyph-breathe {
-  0%, 100% { transform: scale(.94); opacity: .88; }
-  50% { transform: scale(1.06); opacity: 1; }
-}
-
-@keyframes glyph-twinkle {
-  0%, 100% { transform: scale(.82); opacity: .32; }
-  45% { transform: scale(1.12); opacity: 1; }
-}
-
-@keyframes fab-pulse {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.12); }
-  100% { transform: scale(1); }
-}
-
-// 外沿细弧光：匀速绕圈，和呼吸解耦
-@keyframes orb-orbit {
-  to { transform: rotate(360deg); }
-}
-
-// 系统开了「减少动态效果」：双星的 CSS 动画和换歌脉冲都停掉；
-// 光环那边由 JS 判断，prefersReduced() 为真时干脆不启动 rAF
-@media (prefers-reduced-motion: reduce) {
-  .ai-fab .glyph-main,
-  .ai-fab .glyph-mini,
-  .ai-fab .orb-arc,
-  .ai-fab.is-pulse {
-    animation: none;
-  }
-}
-
-// 浅色主题下球体必须加浓。
-// 玻璃是半透明 + backdrop-filter，背景越亮透进来越多 —— 白底上原来的浓度
-// 会淡成一个灰紫球，白色图标也跟着糊掉。这里只调浓度，不动结构
-html[data-theme="light"] .ai-fab {
-  --orb-top: rgba(255, 255, 255, .62);
-  --orb-core: rgba(var(--theme-accent-rgb), .92);
-  --orb-bottom: rgba(56, 44, 120, .68);
-  // 浅底上白边框会糊出一圈光晕感，收细一点
-  --orb-border: rgba(255, 255, 255, .38);
-}
 </style>

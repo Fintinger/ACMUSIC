@@ -134,7 +134,8 @@
                 background: $color-theme-sec;
                 border-radius: 5px;
                 text-indent: 1rem;
-                padding-right: 32px;
+                // 56 = 右侧两个图标（AI ✦ 在 32，放大镜在 8）
+                padding-right: 56px;
                 box-sizing: border-box;
 
               }
@@ -155,6 +156,36 @@
                   font:{
                     size: 1.1rem;
                   };
+                }
+
+                // AI 点歌：嵌在搜索框里，视觉重量为零 —— 它就是搜索的一部分，
+                // 不是另一个悬浮入口
+                .ai-search-btn {
+                  position: absolute;
+                  right: 30px;
+                  top: 50%;
+                  transform: translateY(-50%);
+                  width: 24px;
+                  height: 24px;
+                  display: grid;
+                  place-items: center;
+                  padding: 0;
+                  border: none;
+                  border-radius: 6px;
+                  background: transparent;
+                  color: $font-black-2;
+                  cursor: pointer;
+                  transition: color .18s ease, background .18s ease;
+
+                  &:hover {
+                    color: $color-main-text;
+                    background: rgba(var(--theme-accent-rgb), .14);
+                  }
+
+                  &.is-open {
+                    color: $color-main-text;
+                    background: rgba(var(--theme-accent-rgb), .18);
+                  }
                 }
               }
 
@@ -188,8 +219,8 @@
                 }
                 /* 无头像时的兜底：保证下拉触发器始终有内容，避免 ElDropdown 空插槽崩溃 */
                 .avatar-fallback{
-                  width: 64px;
-                  height: 64px;
+                  width: 48px;
+                  height: 48px;
                   border-radius: 50%;
                   background: #ececf2;
                   color: #9c9cb0;
@@ -199,8 +230,8 @@
                   cursor: pointer;
                 }
                 img{
-                  width: 64px;
-                  height: 64px;
+                  width: 48px;
+                  height: 48px;
                   border-radius: 50%;
                   cursor: pointer;
                   display: block;

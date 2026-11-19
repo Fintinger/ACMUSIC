@@ -33,6 +33,18 @@
                 <div class="input-container">
                   <input placeholder="搜索单曲、歌手、专辑、MV等" type="text"
                          @focus="showSearch=true">
+                  <!-- AI 点歌做进搜索框：它本质就是"不用想关键词的搜索"，
+                       放在这里视觉重量为零，语义也对得上 -->
+                  <button
+                      type="button"
+                      class="ai-search-btn"
+                      :class="{ 'is-open': aiOpen }"
+                      title="AI 点歌：说一句想听什么"
+                      aria-label="AI 点歌"
+                      @click.stop="openAi"
+                  >
+                    <BaseIcon name="sparkles" :size="15"/>
+                  </button>
                   <BaseIcon name="search"/>
                 </div>
               </div>
@@ -134,6 +146,8 @@ export default {
       showSearch: false,
       showAccentPicker: false,
       showChangelog: false,
+      // AI 面板是否打开：只用来点亮搜索框里那个 ✦
+      aiOpen: false,
       // 有新版本的更新日志未读时，头像与菜单项上点一个小红点
       changelogUnread: false,
       //keep-alive 缓存页面实例上限（模板中 :max 绑定）
@@ -176,6 +190,19 @@ export default {
     }
   },
   methods: {
+    /**
+     * 打开 AI 点歌面板。
+     * 把搜索框的矩形一并传过去 —— 面板要锚在它下方。
+     * 让 AiAssistant 自己去 querySelector 也能做，但那样就把组件耦合到导航栏的 DOM 结构上了
+     */
+    openAi(e) {
+      const el = e && e.currentTarget
+      const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null
+      this.$bus.$emit('ai-open', rect)
+    },
+    onAiPanelState(open) {
+      this.aiOpen = !!open
+    },
     /** 已登录且还没同步过时拉一次名单；未登录不发请求，避免 301 噪音 */
     syncBlocklist() {
       const st = this.$store.state.BlockAbout
@@ -331,6 +358,8 @@ export default {
     // 有未读的更新日志时，头像上点一个小红点（版本号来自 package.json）
     this.changelogUnread = isChangelogUnread()
     this._stopThemeWatch = watchTheme(mode => { this.themePreference = mode; this.themeDark = document.documentElement.dataset.theme === 'dark' })
+    // 面板自己会在开关时广播状态，这里只负责点亮/熄灭入口图标
+    this.$bus.$on('ai-panel-state', this.onAiPanelState)
     this.$bus.$on('plClk', this.playlistClick)
     this.$bus.$on('alClk', this.albumClick)
     this.$bus.$on('arClk', this.artistClick)
@@ -371,6 +400,7 @@ export default {
   beforeDestroy() {
     if (this._stopAccentWatch) this._stopAccentWatch()
     if (this._stopThemeWatch) this._stopThemeWatch()
+    this.$bus.$off('ai-panel-state', this.onAiPanelState)
     window.removeEventListener('scroll', this._onScroll)
     window.removeEventListener('pagehide', this._onPageHide)
     if (this._scrollTimer) { clearTimeout(this._scrollTimer); this._scrollTimer = null }
