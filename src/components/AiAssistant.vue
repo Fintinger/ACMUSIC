@@ -470,6 +470,19 @@ export default {
 <style scoped lang="scss">
 @import "src/assets/scss/base/variables";
 
+/**
+ * 组件内统一 border-box。
+ * 项目的 reset 没有设全局盒模型，而这里的卡片和气泡全是
+ * 「width:100% + padding + border」的组合 —— content-box 下每一条都会比容器宽 20 多像素，
+ * 叠起来就是底部那条横向滚动条。
+ */
+.ai-assistant,
+.ai-assistant *,
+.ai-assistant *::before,
+.ai-assistant *::after {
+  box-sizing: border-box;
+}
+
 // ---- 浮动按钮 ----
 .ai-fab {
   position: fixed;
@@ -585,6 +598,8 @@ export default {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  // 兜底：这个窗口只有 420px 宽，任何一处溢出都会立刻变成横条，宁可裁掉也不给横向滚动
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 14px;
 
