@@ -293,6 +293,32 @@ function compileExclude(exclude) {
     return [...new Set(res)]
 }
 
+/**
+ * 原话里有没有否定意图。
+ *
+ * 必须要有这道代码兜底：模型很爱「为了质量」主动加排除项 —— 让它推荐民谣，
+ * 它会顺手返回 exclude:["翻唱","电音"]，理由是"民谣推荐当然不要翻唱"。
+ * 逻辑上没错，但它把你没说过的话显示成了「已排除」，用户只会觉得莫名其妙。
+ * prompt 里已经写了「不要自己加戏」，模型并不总是听。
+ */
+const NEGATION_HINT = /(不要|不想|不用|别再|别放|别来|别整|换个|换点|换一|太吵|太闹|太难听|受不了|听腻|腻了|排除|去掉|除了|太困|太嗨|太重|太轻|不太|还是不行|不满意|不对味)/
+
+function hasNegation(text) {
+    return NEGATION_HINT.test(String(text || ''))
+}
+
+/**
+ * 排除项必须有依据：当前这句，或者最近一条用户消息。
+ * 只看最近一条而不是整段历史 —— 「你在干什么」这种跟点歌无关的话，
+ * 不该继承三轮以前那句「太吵了」留下的排除项。
+ */
+function excludeHasBasis(message, history) {
+    if (hasNegation(message)) return true
+    const list = Array.isArray(history) ? history : []
+    const lastUser = [...list].reverse().find(m => m && m.role === 'user' && typeof m.content === 'string')
+    return !!(lastUser && hasNegation(lastUser.content))
+}
+
 // ---------------------------------------------------------------------------
 // 曲库检索
 // ---------------------------------------------------------------------------
@@ -598,6 +624,13 @@ async function buildPlaylist(message, history, constraints, taste) {
             intent = fallbackIntent(message)
             intent.exclude = pendingExclude
         }
+    }
+
+    // 原话和最近一条用户消息里都没有否定意图时，不采纳模型主动加的排除项：
+    // 否则「推荐点民谣」也会显示「已排除 翻唱 电音」，用户根本没说过
+    if (intent.exclude && intent.exclude.length && !excludeHasBasis(message, history)) {
+        log('[exclude] 原话无否定意图，丢弃模型主动加的:', intent.exclude.join(','))
+        intent.exclude = []
     }
 
     const excludeRes = compileExclude(intent.exclude)
