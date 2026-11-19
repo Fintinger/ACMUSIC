@@ -182,7 +182,7 @@
                 </el-radio-group>
                 <template v-if="mixed.list.length">
                   <!-- 收起：头像墙（本页私有形态，不占用公共组件） -->
-                  <div v-if="!expand.follows" class="wallGrid">
+                  <div v-if="showFollowWall" class="wallGrid">
                     <button v-for="w in wallMixed" :key="w.key" class="wallItem" @click="openUser(w.id)">
                       <img :src="w.avatar | imgParam('100y100')" :alt="w.name + '的头像'" loading="lazy">
                       <span class="wallName" :title="w.name">{{ w.name }}<i v-if="w.tag" class="wallTag">{{ w.tag }}</i></span>
@@ -195,7 +195,7 @@
                       <LoadMore :loading="mixed.loading" :noMore="mixed.noMore" :load="loadMixed" noMoreText="没有更多了"/>
                     </div>
                   </template>
-                  <div v-if="!expand.follows && mixed.list.length > denseLimit" class="listFoot">
+                  <div v-if="showFollowWall" class="listFoot">
                     <button class="expandBtn" @click="expandList('follows')">
                       查看全部 {{ mixed.list.length }} 位 <span class="caret">▾</span>
                     </button>
@@ -205,7 +205,7 @@
               </template>
               <template v-else>
                 <template v-if="social.follows.list.length">
-                  <div v-if="!expand.follows" class="wallGrid">
+                  <div v-if="showFollowWall" class="wallGrid">
                     <button v-for="w in wallFollows" :key="w.key" class="wallItem" @click="openUser(w.id)">
                       <img :src="w.avatar | imgParam('100y100')" :alt="w.name + '的头像'" loading="lazy">
                       <span class="wallName" :title="w.name">{{ w.name }}</span>
@@ -218,7 +218,7 @@
                                 :load="loadFollows" noMoreText="没有更多了"/>
                     </div>
                   </template>
-                  <div v-if="!expand.follows && social.follows.list.length > denseLimit" class="listFoot">
+                  <div v-if="showFollowWall" class="listFoot">
                     <button class="expandBtn" @click="expandList('follows')">
                       查看全部 {{ social.follows.list.length }} 位 <span class="caret">▾</span>
                     </button>
@@ -230,7 +230,7 @@
             <el-tab-pane :label="socialLabels.followeds" name="followeds" lazy>
               <!-- self：本人的粉丝列表才显示「回关」；他人粉丝列表里的人关注的是页面主人，只能「关注」 -->
               <template v-if="social.followeds.list.length">
-                <div v-if="!expand.followeds" class="wallGrid">
+                <div v-if="showFollowedsWall" class="wallGrid">
                   <button v-for="w in wallFolloweds" :key="w.key" class="wallItem" @click="openUser(w.id)">
                     <img :src="w.avatar | imgParam('100y100')" :alt="w.name + '的头像'" loading="lazy">
                     <span class="wallName" :title="w.name">{{ w.name }}</span>
@@ -244,7 +244,7 @@
                   </div>
                 </template>
                 <p v-if="social.followeds.cap" class="cap-hint">接口只返回最近的前 30 位粉丝，更早的粉丝暂时取不到</p>
-                <div v-if="!expand.followeds && social.followeds.list.length > denseLimit" class="listFoot">
+                <div v-if="showFollowedsWall" class="listFoot">
                   <button class="expandBtn" @click="expandList('followeds')">
                     查看全部 {{ social.followeds.list.length }} 位 <span class="caret">▾</span>
                   </button>
@@ -419,6 +419,26 @@ export default {
     // 他人页面拿不到歌手关注，退回 /user/follows（只有用户），因此也不显示分类条。
     useMixedFollow() {
       return this.isSelf
+    },
+    /** 关注列表当前渲染源：本人走混排（用户 + 歌手），他人只有用户 */
+    followsList() {
+      return this.useMixedFollow ? (this.mixed.list || []) : (this.social.follows.list || [])
+    },
+    followedsList() {
+      return this.social.followeds.list || []
+    },
+    /**
+     * 是否用头像墙（收起态）。
+     *
+     * 只有「还没展开 **且** 超过一屏」才收起；12 位以内直接给完整卡片 ——
+     * 否则「互相关注 / 回关」按钮永远没机会出现（它只存在于卡片形态里），
+     * 而「查看全部」按钮又因为条数不够而不显示，用户就被困在只能看头像的状态。
+     */
+    showFollowWall() {
+      return !this.expand.follows && this.followsList.length > this.denseLimit
+    },
+    showFollowedsWall() {
+      return !this.expand.followeds && this.followedsList.length > this.denseLimit
     },
     // 登录态自己读，不用 UserAbout/isLogin getter：那个 getter 内部直接调 isLoggedIn()，
     // 没有任何响应式依赖，Vue 会把它永久缓存 —— 会话中途登录后仍然返回 false。
