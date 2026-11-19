@@ -250,6 +250,8 @@ export default {
     isExpand(val) {
       val ? this.expanded() : this.minified()
       this._rememberUi()
+      // 广播全屏状态：AI 浮窗要靠它决定显不显示（不指望 z-index 层级"碰巧"盖住）
+      this.$bus.$emit('playerExpand', val)
     },
     'currentSong.id'(id) {
       if (!id) return

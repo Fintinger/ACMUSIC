@@ -4195,3 +4195,14 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 三次实测暴露的问题（都改了）：a) 堆词标题用全角竖线分隔（《学习丨阅读丨刷题…》）漏过 `isSpamTitle`，补上 `丨|｜/·-` 作分隔符，并把阈值从「>18 字且 4 段」调成「>14 字且 4 段 / >26 字直接判死」；b) 纠正时模型保留上一轮已失效的「慢歌」排除项，导致 exclude 与结果自相矛盾，prompt 里改成「旧项默认删除、只在原话再次印证时保留」；c) 模型会输出「抒情」这类情绪形容词，无法用来判断任何一首歌，服务端 `sanitizeIntent` 加了一道情绪词黑名单兜底。
 - 验证：`yarn lint` ✅；线上真实模型跑通「跑步快节奏 → 太吵了换安静」的纠正链路，第二轮 exclude 从 `["抒情","慢歌"]` 正确变为 `["电子","摇滚","说唱"]`，结果切换为民谣+钢琴；两阶段耗时 3.5-3.6s（原 1.7s），召回 24-29 首、精挑 16 首。
 - 注意：1) `MAX_TRACKS` 从 18 降到 16，`createPicker` 的上限改成了 `MAX_RECALL`，两处别混；2) 第二阶段只在 `candidates.length > MAX_TRACKS` 且模型选出 ≥6 首时生效，否则退回召回顺序（候选本来就少时挑不出东西，白烧一次调用）；3) 画像缓存 24h，换账号要清 `acmusic_ai_taste`；4) `exclude` 进了缓存 key，否则「太吵了」会命中上一轮那份不排除人声的缓存。
+
+### 2026-11-19 — AI 点歌改成浮窗（v1.10.0）
+
+- 需求：用户明确「不要把 AI 推荐做成单独页面入口」，改为浮动小图标 + 弹窗；除全屏播放详情页外都显示；气泡展示双方对话；AI 头像用站点 favicon，用户头像用登录态头像（未登录用默认，不许借用 favicon）。
+- 形态：新增 `src/components/AiAssistant.vue`，挂在 `App.vue` 根部（不在 router-view 内，所以不随路由切换销毁，对话天然保留）。右下角 52px 圆形按钮 → 420×620 面板，窄屏用 `min()` 自动收进视口。
+- 隐藏：全屏播放页是 `position:fixed; inset:0; z-index:200` 的整屏覆盖，浮窗层级（90）本来就在它下面；但仍然在 `MusicPlayer` 的 `watch isExpand` 里加了一行 `$bus.$emit('playerExpand', val)`，由浮窗监听后显式隐藏 —— 不依赖 z-index 高低这种"碰巧成立"的约定。
+- 头像：AI 用 `/favicon.ico`（实测该 ico 是单张 256×256，放大到 26–30px 仍清晰）；用户用 `profile.avatarUrl | https`，未登录渲染 `BaseIcon user` 的占位圆底，刻意不借用站点图标。favicon 是深色图，深色主题下会糊进背景，头像统一垫了一层白底。
+- 卡片重排：浮窗内不再用 `TracksLayout`（封面/歌名/专辑/时长四列在 420px 里会挤成一团），改成「序号 + 歌名/歌手」两行精简列表，滚到底部内滚；点单曲走 `$bus.$emit('songClk')`，与列表页同一套行为。
+- 删除：`src/pages/AiRadio.vue`、`/ai` 路由、导航栏 `.ai-entry` 及其 SCSS。功能全部迁到浮窗，没有减少。
+- 验证：`yarn lint` ✅；headless 实测 —— FAB 52px、距右 29 / 距底 24；面板 422×622、`fitsViewport: true`；`avatarSrc: /favicon.ico`；未登录头像为 DEFAULT_ICON；用户与 AI 各一条气泡；卡片标题正确；展开曲目两行齐整；`playerExpand=true` 时 wrapper `display:none`、`fabVisible:false`、panel 移除，恢复后重新出现；无 console 报错。
+- 注意：1) 浮窗的 `bottom` 会因是否有播放条在 24/104 之间切换，面板高度同步改为 `min(620px, calc(100vh - 240px))`，否则有播放条时会顶到导航栏；2) `.ai-fab` 上同时有 `v-show="!open"`，外层还有 `v-show="!hidden"`，判断可见性要看外层 `.ai-assistant` 的 display，看 FAB 自己的 computed style 永远是 grid；3) 本次改动按要求**只在本地提交，没有 push**。

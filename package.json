@@ -1,6 +1,6 @@
 {
   "name": "cloudmusic",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
   "scripts": {
     "changelog": "node scripts/build-changelog.mjs",
