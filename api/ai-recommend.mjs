@@ -134,12 +134,22 @@ function systemPrompt(vocab, exclude) {
 
 只输出一个 JSON 对象，不要 markdown 代码块，不要任何解释文字：
 {
+  "intent": "music 或 chat",
   "title": "歌单名，6-10 个汉字，有画面感，不加书名号或引号",
   "desc": "一句话说明这张歌单的选歌逻辑，不超过 30 个汉字",
-  "reply": "回给用户的一句话，口语化，不超过 20 个汉字",
+  "reply": "回给用户的一句话",
   "keywords": ["6-10 个搜索词"],
   "exclude": ["1-3 个要排除的方向"]
 }
+
+先判断 intent：
+- music：用户在点歌、要歌单、描述想听什么。包括「随便来点」「再来一张」「换一批」这类省略式请求
+- chat：用户在问你能做什么、打招呼、闲聊、问和听歌无关的事（例：「你在干什么」「你是谁」「今天天气怎么样」）
+
+判定门槛要**保守**：只要沾一点「想听什么」的意思就判 music。
+用户打开这个页面八成是来点歌的，误判成闲聊比误判成点歌更烦人。
+判 chat 时：keywords 和 exclude 都给空数组，title 和 desc 留空，reply 写成一句自然的话（可长一点，60 字以内），
+像人在聊天，不要提「歌单」「推荐」这些词。
 
 keywords 是唯一会被拿去搜曲库的东西，规则很硬：
 - 给 6-10 个，其中**至少 4 个必须是具体的歌手名/乐队名**。歌手是最可靠的检索锚点：按人搜出来的歌，质量远高于按抽象风格词搜出来的
@@ -231,9 +241,22 @@ function normalizeHistory(history) {
  */
 function sanitizeIntent(raw, message) {
     const o = raw && typeof raw === 'object' ? raw : {}
+
+    // 只有明确返回 chat 才算闲聊：字段缺失、值写错，一律按点歌处理。
+    // 这是保守方向 —— 把点歌误判成闲聊，用户会觉得系统不听他说话
+    const mode = o.intent === 'chat' ? 'chat' : 'music'
+    // 闲聊的回复要像人说话，30 字装不下一句完整的解释
+    const replyLimit = mode === 'chat' ? 140 : 30
+    const reply = String(o.reply || '').trim().slice(0, replyLimit)
+        || (mode === 'chat' ? '在的，想听点什么？' : '按你说的挑了一些')
+
+    // 闲聊不检索，也不需要任何意图字段
+    if (mode === 'chat') {
+        return {mode, title: '', desc: '', reply, keywords: [], exclude: []}
+    }
+
     const title = String(o.title || '').replace(/[《》"“”]/g, '').trim().slice(0, 16) || '给你挑的歌'
     const desc = String(o.desc || '').trim().slice(0, 40)
-    const reply = String(o.reply || '').trim().slice(0, 30) || '按你说的挑了一些'
 
     let keywords = Array.isArray(o.keywords) ? o.keywords : []
     keywords = keywords
@@ -254,7 +277,7 @@ function sanitizeIntent(raw, message) {
         .filter(x => !/^(抒情|治愈|温暖|怀旧|安静|好听|悲伤|快乐|舒缓|轻柔|浪漫)$/.test(x))
     exclude = [...new Set(exclude)].slice(0, 4)
 
-    return {title, desc, reply, keywords, exclude}
+    return {mode, title, desc, reply, keywords, exclude}
 }
 
 // ---------------------------------------------------------------------------
@@ -626,6 +649,12 @@ async function buildPlaylist(message, history, constraints, taste) {
         }
     }
 
+    // 闲聊直接回一句话，不进检索 —— 「你在干什么」不该换来一张 16 首的歌单
+    if (intent.mode === 'chat') {
+        log('[chat]', brief(message), '→', brief(intent.reply, 30))
+        return {mode: 'chat', reply: intent.reply, degraded}
+    }
+
     // 原话和最近一条用户消息里都没有否定意图时，不采纳模型主动加的排除项：
     // 否则「推荐点民谣」也会显示「已排除 翻唱 电音」，用户根本没说过
     if (intent.exclude && intent.exclude.length && !excludeHasBasis(message, history)) {
@@ -686,6 +715,7 @@ async function buildPlaylist(message, history, constraints, taste) {
     }
 
     return {
+        mode: 'music',
         playlist: {
             title: intent.title,
             desc: intent.desc,
@@ -894,22 +924,27 @@ const server = http.createServer(async (req, res) => {
 
     try {
         const result = await buildPlaylist(message, history, constraints, taste)
+        const pl = result.playlist
         const payload = {
             ok: true,
             ...result,
-            // 把合并后的排除项回给前端，由它累积到下一轮 —— "太吵了"要能被记住，否则每轮都在重新猜
-            constraints: {exclude: result.playlist.exclude || []},
+            // 闲聊没有歌单，但也要把当前的排除项原样回传，别让前端把会话状态清空了
+            constraints: {exclude: (pl && pl.exclude) || (result.mode === 'chat' ? constraints.exclude : [])},
             cached: false,
             tookMs: Date.now() - started
         }
         writeCache(key, payload)
-        log('[ok]', brief(message), '→', brief(result.playlist.title),
-            `keywords=${result.playlist.keywords.length}`,
-            `recall=${result.stats.recall}`,
-            `final=${result.playlist.tracks.length}`,
-            (result.playlist.exclude || []).length ? `exclude=${result.playlist.exclude.join(',')}` : '',
-            result.degraded ? `degraded=${result.degraded}` : '',
-            `${payload.tookMs}ms`)
+        if (result.mode === 'chat') {
+            log('[ok]', brief(message), '→ chat | reply=' + brief(result.reply, 24), `${payload.tookMs}ms`)
+        } else {
+            log('[ok]', brief(message), '→', brief(pl.title),
+                `keywords=${pl.keywords.length}`,
+                `recall=${result.stats.recall}`,
+                `final=${pl.tracks.length}`,
+                (pl.exclude || []).length ? `exclude=${pl.exclude.join(',')}` : '',
+                result.degraded ? `degraded=${result.degraded}` : '',
+                `${payload.tookMs}ms`)
+        }
         return sendJson(res, 200, payload)
     } catch (e) {
         log('[err]', brief(message), e && e.stack ? e.stack.split('\n')[0] : e)

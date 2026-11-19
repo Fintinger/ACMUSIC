@@ -40,7 +40,12 @@
 
         <!-- AI：一句话回应 + 歌单卡片 -->
         <div v-else class="ai-answer">
-          <p v-if="m.reply" class="ai-reply">{{ m.reply }}</p>
+          <!-- 闲聊时模型只回一句话，没有歌单：渲染成左侧气泡，而不是一张空卡片 -->
+          <p
+              v-if="m.reply"
+              class="ai-reply"
+              :class="{ 'is-chat': !m.playlist && !m.pending && !m.error }"
+          >{{ m.reply }}</p>
 
           <div v-if="m.pending" class="ai-thinking">
             <BaseIcon name="loader" class="is-spinning"/>
@@ -318,13 +323,19 @@ export default {
           .then(res => {
             const data = res && res.data
             if (!data || !data.ok) throw new Error((data && data.error) || '选歌失败')
-            const pl = data.playlist
-            if (!pl || !Array.isArray(pl.tracks)) throw new Error('返回结构异常')
-            // 服务端回传合并后的排除项，前端存下来给下一轮用
+            aiMsg.pending = false
+            // 服务端回传合并后的排除项，前端存下来给下一轮用（闲聊也会原样带回，别把状态清空）
             if (data.constraints && Array.isArray(data.constraints.exclude)) {
               this.exclude = data.constraints.exclude
             }
-            aiMsg.pending = false
+            // 闲聊：只显示一句话，不进歌单流程
+            if (data.mode === 'chat') {
+              aiMsg.reply = data.reply || ''
+              aiMsg.playlist = null
+              return
+            }
+            const pl = data.playlist
+            if (!pl || !Array.isArray(pl.tracks)) throw new Error('返回结构异常')
             aiMsg.reply = pl.reply || ''
             aiMsg.playlist = pl
             aiMsg.degraded = data.degraded || ''
@@ -558,6 +569,18 @@ export default {
   font-size: 14px;
   line-height: 1.6;
   color: $font-black;
+}
+
+// 闲聊回复：左侧气泡，和用户右侧气泡对称。没有卡片托底时，
+// 一行裸文字会显得像没加载完，必须给它一个可以站住的形状
+.ai-reply.is-chat {
+  display: inline-block;
+  max-width: min(560px, 100%);
+  margin: 0;
+  padding: 11px 16px;
+  border-radius: 16px 16px 16px 4px;
+  background: var(--c-bg-sunken);
+  border: 1px solid var(--c-border);
 }
 
 .ai-thinking {
