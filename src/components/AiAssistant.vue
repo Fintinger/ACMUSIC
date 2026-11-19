@@ -267,9 +267,13 @@ export default {
     canSend() {
       return !this.sending && this.draft.trim().length >= 2
     },
+    /**
+     * 播放条是否在屏幕上。
+     * 判据是「有当前歌」而不是「播放列表非空」—— 播放条显示的条件就是 currentSong.id，
+     * 球要吸附的是那条真实的条，不是一个可能存在的列表
+     */
     hasPlayer() {
-      const list = this.$store.state.TracksAbout.currentPlaylist
-      return Array.isArray(list) && list.length > 0
+      return !!this.nowSong.id
     },
     userAvatar() {
       const p = this.$store.getters['UserAbout/userProfile']
@@ -307,12 +311,18 @@ export default {
     this._motion = {
       raf: 0,
       last: 0,
+      frame: 0,
       phase: 0,
       breathe: 2.4,
       amp: 0.2,
       glow: 0.15,
-      spin: 0.3
+      spin: 0.3,
+      // 引力偏移：鼠标靠近时球会被"拽"过去一点
+      pullX: 0,
+      pullY: 0
     }
+    this._pointer = {x: -1, y: -1}
+    this._orbCenter = null
     this._raf = 0
   },
   mounted() {
@@ -320,12 +330,16 @@ export default {
     this.$bus.$on('playerExpand', this.onPlayerExpand)
     this.$bus.$on('nowPlaying', this.onNowPlaying)
     document.addEventListener('visibilitychange', this.onVisibility)
+    window.addEventListener('mousemove', this.onPointerMove, {passive: true})
+    window.addEventListener('resize', this.invalidateOrbCenter)
     this.startMotion()
   },
   beforeDestroy() {
     this.$bus.$off('playerExpand', this.onPlayerExpand)
     this.$bus.$off('nowPlaying', this.onNowPlaying)
     document.removeEventListener('visibilitychange', this.onVisibility)
+    window.removeEventListener('mousemove', this.onPointerMove)
+    window.removeEventListener('resize', this.invalidateOrbCenter)
     this.stopMotion()
   },
   methods: {
@@ -336,6 +350,28 @@ export default {
       } catch (e) {
         return false
       }
+    },
+    /** 只记坐标，不做计算 —— mousemove 每秒能来上百次，重活留给 rAF */
+    onPointerMove(e) {
+      this._pointer.x = e.clientX
+      this._pointer.y = e.clientY
+    },
+    invalidateOrbCenter() {
+      this._orbCenter = null
+    },
+    /**
+     * 球心的屏幕坐标。
+     * 缓存是为了避免每帧 getBoundingClientRect 触发同步布局；
+     * rAF 里每 15 帧失效一次，位置过渡（滑到播放条旁边）也能被跟上
+     */
+    orbCenter() {
+      if (this._orbCenter) return this._orbCenter
+      const el = this.$refs.fabRoot
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      if (!r.width) return null
+      this._orbCenter = {x: r.left + r.width / 2, y: r.top + r.height / 2}
+      return this._orbCenter
     },
     onVisibility() {
       // 标签页切到后台就停：rAF 会被浏览器节流成 1fps，留着只会让相位和音乐脱节
@@ -375,6 +411,11 @@ export default {
       const curve = this.breathCurve(m.phase)
       const level = 0.18 + 0.82 * m.amp * curve
 
+      // 每 15 帧让球心缓存失效一次：位置过渡期间也能跟上，
+      // 又不必每帧都做一次会触发同步布局的 getBoundingClientRect
+      m.frame = (m.frame + 1) % 15
+      if (m.frame === 0) this._orbCenter = null
+
       // 浮窗关着时只有按钮需要动，降到约 20fps：
       // 呼吸周期以秒计，20 帧足够平滑，而写 DOM 的次数降到三分之一。
       // 相位上面已经按真实 dt 累积过，这里跳过的只是"写字"这一下
@@ -394,6 +435,31 @@ export default {
       // 玻璃本体的呼吸全部走 CSS 变量：球内漫射光、弧形反射、整体通透度
       const fab = this.$refs.fabRoot
       if (fab) {
+        // 引力：鼠标进入 170px 内，球会朝鼠标方向偏最多 8px。
+        // 距离越近引力越强（平方衰减），离开后回弹 —— 因为它是球，
+        // 这点位移读起来是"被吸引"，不会像"位置抖了"
+        const pointer = this._pointer
+        if (!this.open && pointer.x >= 0) {
+          const c = this.orbCenter()
+          if (c) {
+            const vx = pointer.x - c.x
+            const vy = pointer.y - c.y
+            const dist = Math.sqrt(vx * vx + vy * vy)
+            const R = 180
+            const k = dist < R ? Math.pow(1 - dist / R, 2) : 0
+            const tx = dist > 1 ? (vx / dist) * 10 * k : 0
+            const ty = dist > 1 ? (vy / dist) * 10 * k : 0
+            const ease = Math.min(1, dt / 0.16)
+            m.pullX += (tx - m.pullX) * ease
+            m.pullY += (ty - m.pullY) * ease
+          }
+        } else {
+          m.pullX += (0 - m.pullX) * Math.min(1, dt / 0.2)
+          m.pullY += (0 - m.pullY) * Math.min(1, dt / 0.2)
+        }
+        fab.style.setProperty('--pull-x', m.pullX.toFixed(2) + 'px')
+        fab.style.setProperty('--pull-y', m.pullY.toFixed(2) + 'px')
+
         fab.style.setProperty('--breath-intensity', (0.3 + 0.6 * level).toFixed(3))
         fab.style.setProperty('--breath-scale', (0.9 + 0.16 * level * m.amp).toFixed(3))
         fab.style.setProperty('--reflection-opacity', (0.35 + 0.5 * level).toFixed(3))
@@ -727,7 +793,13 @@ export default {
   border: none;
   background: transparent;
   cursor: pointer;
-  transition: transform .2s ease;
+  // 位移留给"引力"（rAF 每帧写变量），缩放交给内层玻璃 ——
+  // 两者分开，才不会像之前那样互相覆盖
+  transform: translate3d(var(--pull-x, 0px), var(--pull-y, 0px), 0);
+  --pull-x: 0px;
+  --pull-y: 0px;
+  // 位置切换要有过渡：有歌时它会从角落"滑"到播放条旁边
+  transition: right .34s cubic-bezier(.22, .61, .36, 1), bottom .34s cubic-bezier(.22, .61, .36, 1);
 
   // rAF 每帧只改这几个变量，玻璃本体据此呼吸；不直接改属性值，
   // 是为了让"呼吸"这件事由一份配置驱动，而不是散落在各处
@@ -743,12 +815,18 @@ export default {
   --orb-bottom: rgba(30, 24, 62, .45);
   --orb-border: rgba(255, 255, 255, .3);
 
-  &.has-player { bottom: 104px; }
+  // 有歌时贴到播放条（60px 高）右端，像一个从条上长出来的旋钮；
+  // 没歌时回到角落。之前是 bottom 104，离条 44px，悬在半空才显得多余
+  &.has-player {
+    bottom: 72px;
+    right: 20px;
+  }
 
-  &:hover { transform: translateY(-2px) scale(1.05); }
-  &:active { transform: scale(.96); }
+  // 缩放做在玻璃上，外层留给引力位移
+  &:hover .orb-glass { transform: scale(1.05); }
+  &:active .orb-glass { transform: scale(.96); }
 
-  &.is-pulse {
+  &.is-pulse .orb-glass {
     animation: fab-pulse .55s ease;
   }
 
@@ -776,6 +854,7 @@ export default {
     backdrop-filter: blur(12px) saturate(140%);
     -webkit-backdrop-filter: blur(12px) saturate(140%);
     opacity: var(--glass-opacity, 1);
+    transition: transform .22s ease;
   }
 
   // 内部漫射光：球心那团亮，随呼吸缩放 —— 这是"玻璃里有光"的来源
