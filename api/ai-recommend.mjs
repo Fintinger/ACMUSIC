@@ -128,7 +128,7 @@ function vocabLines(vocab) {
 // 意图解析
 // ---------------------------------------------------------------------------
 
-function systemPrompt(vocab, exclude) {
+function systemPrompt(vocab, exclude, recentKeywords) {
     const current = Array.isArray(exclude) && exclude.length ? exclude.join('、') : '（无）'
     return `你是网易云音乐的选歌编辑。用户会用一句口语说出想听什么，你的任务不是列举歌名，而是把它翻译成「能被曲库搜到的意图」。
 
@@ -171,6 +171,11 @@ exclude 是用户明确否定的方向，会被用来过滤结果：
   原话与某项冲突就删掉（用户要「安静」，上一轮的「慢歌」就必须删），原话再次印证就保留，原话没提到就默认删掉。
   输出调整后的完整列表，不允许出现互相矛盾的项。
 
+${Array.isArray(recentKeywords) && recentKeywords.length
+    ? `最近几轮已经用过这些搜索词：${recentKeywords.join('、')}。
+这些词搜出来的结果用户都看过了，这一轮尽量换方向——换歌手、换年代、换乐器都可以，除非用户点名要同一个。`
+    : ''}
+
 曲库官方标签如下，风格词尽量从这里选，命中率明显更高：
 ${vocabLines(vocab)}`
 }
@@ -207,12 +212,12 @@ function readJsonContent(json) {
  * 调 DeepSeek 解析意图。
  * 失败一律抛错，由上层决定降级——这里不做静默兜底，免得把"模型挂了"伪装成"模型说没听懂"。
  */
-async function parseIntent(message, history, exclude) {
+async function parseIntent(message, history, exclude, recentKeywords) {
     const vocab = await getVocab()
     const payload = {
         model: DEEPSEEK_MODEL,
         messages: [
-            {role: 'system', content: systemPrompt(vocab, exclude)},
+            {role: 'system', content: systemPrompt(vocab, exclude, recentKeywords)},
             ...normalizeHistory(history),
             {role: 'user', content: message}
         ],
@@ -496,16 +501,30 @@ async function searchPlaylistBuckets(keyword, want = 8) {
  * 造一个「收歌器」：把去重、过滤、歌手配额这些规则收在一处，
  * 让「轮转填充」和「歌单补位」共用同一套判定，不会出现补位把重复歌塞回来的情况。
  */
-function createPicker(allowJunk, keywords = [], excludeRes = []) {
+function createPicker(allowJunk, keywords = [], excludeRes = [], recentIds = []) {
     const out = []
     const seenId = new Set()
     const seenIdentity = new Set()
     const artistCount = new Map()
+    // 「最近给过」的过滤：这些歌用户都看过了，先拦下来。
+    // 但不能直接扔 —— 如果过滤完候选太少，还要按顺序放回一部分
+    const recentSet = new Set(recentIds.map(String))
+    const skippedRecent = []
+    const skippedSeen = new Set()
 
     return {
         add(song) {
             if (out.length >= MAX_RECALL) return false
             if (!song || seenId.has(song.id) || !isUsable(song, allowJunk, keywords, excludeRes)) return false
+
+            // 质量检查都过了才轮到"最近给过"的判断：被质量规则拦下的不补回
+            if (recentSet.size && recentSet.has(String(song.id))) {
+                if (!skippedSeen.has(String(song.id)) && skippedRecent.length < 30) {
+                    skippedRecent.push(song)
+                    skippedSeen.add(String(song.id))
+                }
+                return false
+            }
 
             const identity = identityOf(song)
             if (seenIdentity.has(identity)) return false
@@ -524,6 +543,10 @@ function createPicker(allowJunk, keywords = [], excludeRes = []) {
         },
         get list() {
             return out
+        },
+        // 被「最近给过」拦下的歌，按遇到顺序排列 —— 过滤后不够数时按这个顺序放回
+        get skippedRecent() {
+            return skippedRecent
         }
     }
 }
@@ -628,7 +651,7 @@ function fallbackIntent(message) {
     }
 }
 
-async function buildPlaylist(message, history, constraints, taste) {
+async function buildPlaylist(message, history, constraints, taste, recent) {
     const allowJunk = JUNK_PATTERN.test(message)
     // 上一轮累积的排除项：即使这一轮模型挂了，也不能把用户的纠正丢掉
     const pendingExclude = Array.isArray(constraints && constraints.exclude) ? constraints.exclude : []
@@ -640,7 +663,7 @@ async function buildPlaylist(message, history, constraints, taste) {
         intent = fallbackIntent(message)
     } else {
         try {
-            intent = await parseIntent(message, history, pendingExclude)
+            intent = await parseIntent(message, history, pendingExclude, recent.keywords)
         } catch (e) {
             degraded = 'llm-failed'
             log('[llm] 解析失败，降级为直搜:', e.message)
@@ -666,7 +689,7 @@ async function buildPlaylist(message, history, constraints, taste) {
 
     // ---- 第一阶段：宽召回（目标 MAX_RECALL，故意多于最终歌单） ----
     const buckets = await Promise.all(intent.keywords.map(k => searchOnce(k)))
-    const picker = createPicker(allowJunk, intent.keywords, excludeRes)
+    const picker = createPicker(allowJunk, intent.keywords, excludeRes, recent.ids)
     fillRoundRobin(picker, buckets)
 
     // 曲目不够就补：场景/情绪类请求靠单曲搜索经常凑不满，歌单种子能把这一档质量拉回来
@@ -685,7 +708,7 @@ async function buildPlaylist(message, history, constraints, taste) {
     // 关键词全军覆没时用歌单名再捞一次：模型起的名字往往就是最贴近的检索词
     if (!candidates.length && intent.title) {
         log('[search] 关键词无结果，用歌单名兜底:', brief(intent.title))
-        const retry = createPicker(allowJunk, [intent.title], excludeRes)
+        const retry = createPicker(allowJunk, [intent.title], excludeRes, recent.ids)
         await Promise.all([
             searchOnce(intent.title, MAX_RECALL).then(b => fillRoundRobin(retry, [b])),
             searchPlaylistBuckets(intent.title, 6).then(bs => {
@@ -693,6 +716,15 @@ async function buildPlaylist(message, history, constraints, taste) {
             })
         ])
         candidates = retry.list
+    }
+
+    // 「最近给过」的过滤可能把候选砍得太狠（比如用户连着点了五次钢琴）。
+    // 候选少于 8 首时按遇到顺序放回一部分 —— 宁可给重复的，也不能没歌可推
+    if (candidates.length < 8 && picker.skippedRecent.length) {
+        const need = 8 - candidates.length
+        const back = picker.skippedRecent.slice(0, need)
+        log('[recent] 候选不足，放回', back.length, '首看过的')
+        candidates = candidates.concat(back)
     }
 
     // ---- 第二阶段：精挑 ----
@@ -833,12 +865,40 @@ function normalizeTaste(raw) {
         .slice(0, 20)
 }
 
-function cacheKey(message, history, constraints, taste) {
+/**
+ * 前端带来的「最近给过什么」。
+ *
+ * ids 是最近推荐过的歌曲 id（前端存 localStorage，最多 60 个），召回时直接过滤——
+ * 否则同样的关键词永远搜出同样的前排，用户每次都看到卡农和菊次郎。
+ * keywords 是最近用过的搜索词，传给模型让它换方向。
+ *
+ * 这是外部输入，ids 只收纯数字、keywords 限长，防止有人拿它当自由文本注入。
+ */
+function normalizeRecent(raw) {
+    const o = raw && typeof raw === 'object' ? raw : {}
+    const ids = Array.isArray(o.ids)
+        ? o.ids
+              .map(x => String(x == null ? '' : x).trim())
+              .filter(x => /^\d{1,20}$/.test(x))
+              .slice(0, 60)
+        : []
+    const keywords = Array.isArray(o.keywords)
+        ? o.keywords
+              .map(x => String(x == null ? '' : x).trim())
+              .filter(x => x.length >= 2 && x.length <= 24)
+              .slice(0, 5)
+        : []
+    return {ids, keywords}
+}
+
+function cacheKey(message, history, constraints, taste, recent) {
     const h = normalizeHistory(history).map(m => m.role + ':' + m.content).join('|')
     // 排除项和画像都会改变结果，必须进 key —— 否则"太吵了"会命中上一轮那份不排除人声的缓存
     const c = constraints && constraints.exclude ? constraints.exclude.join(',') : ''
     const t = Array.isArray(taste) ? taste.slice(0, 5).join(',') : ''
-    return createHash('sha1').update(message + '\n' + h + '\n' + c + '\n' + t).digest('hex').slice(0, 16)
+    // recent.ids 也必须进 key：排除列表每次都在变，命中旧缓存会让"去重"完全失效
+    const r = recent && recent.ids ? recent.ids.join(',') : ''
+    return createHash('sha1').update(message + '\n' + h + '\n' + c + '\n' + t + '\n' + r).digest('hex').slice(0, 16)
 }
 
 function readCache(key) {
@@ -974,7 +1034,8 @@ const server = http.createServer(async (req, res) => {
     const history = Array.isArray(body.history) ? body.history : []
     const constraints = normalizeConstraints(body.constraints)
     const taste = normalizeTaste(body.taste)
-    const key = cacheKey(message, history, constraints, taste)
+    const recent = normalizeRecent(body.recent)
+    const key = cacheKey(message, history, constraints, taste, recent)
     const cached = readCache(key)
     if (cached) {
         log('[cache] 命中:', brief(message), `${Date.now() - started}ms`)
@@ -989,7 +1050,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-        const result = await buildPlaylist(message, history, constraints, taste)
+        const result = await buildPlaylist(message, history, constraints, taste, recent)
         const pl = result.playlist
         const payload = {
             ok: true,

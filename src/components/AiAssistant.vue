@@ -535,6 +535,8 @@ export default {
         history,
         constraints: {exclude: this.exclude},
         taste: this.taste,
+        // 最近给过的歌与用过的词：服务端据此去重，避免每次都搜出同一批
+        recent: {ids: this.readRecentIds(), keywords: this.readRecentKeys()},
         // 只带一串数字 uid 用于白名单比对，不带昵称、头像等任何资料
         uid: profile.userId || undefined
       }, authKey)
@@ -558,6 +560,9 @@ export default {
             aiMsg.playlist = pl
             aiMsg.degraded = data.degraded || ''
             aiMsg.open = false
+            // 记下这次给过什么：下一轮请求带回去，服务端就不会再推同一批
+            this.pushRecentIds(pl.tracks.map(t => String(t.id)))
+            this.pushRecentKeys(pl.keywords || [])
           })
           .catch(err => {
             aiMsg.pending = false
@@ -639,6 +644,40 @@ export default {
     },
     removeExclude(word) {
       this.exclude = this.exclude.filter(x => x !== word)
+    },
+    /** 最近推荐过的歌曲 id（localStorage，最多 60 个）—— 服务端召回时会过滤掉 */
+    readRecentIds() {
+      try {
+        const arr = JSON.parse(localStorage.getItem('acmusic_ai_recent_ids') || '[]')
+        return Array.isArray(arr) ? arr.slice(0, 60) : []
+      } catch (e) {
+        return []
+      }
+    },
+    pushRecentIds(ids) {
+      if (!Array.isArray(ids) || !ids.length) return
+      try {
+        const merged = [...ids.map(String), ...this.readRecentIds()]
+            .filter((v, i, a) => a.indexOf(v) === i)
+            .slice(0, 60)
+        localStorage.setItem('acmusic_ai_recent_ids', JSON.stringify(merged))
+      } catch (e) { /* 写不进去就当没有 */ }
+    },
+    /** 最近用过的搜索词（最多 5 轮）—— 传给模型让它换方向 */
+    readRecentKeys() {
+      try {
+        const arr = JSON.parse(localStorage.getItem('acmusic_ai_recent_keys') || '[]')
+        return Array.isArray(arr) ? arr.slice(0, 5) : []
+      } catch (e) {
+        return []
+      }
+    },
+    pushRecentKeys(keys) {
+      if (!Array.isArray(keys) || !keys.length) return
+      try {
+        const merged = [...keys.map(String), ...this.readRecentKeys()].slice(0, 5)
+        localStorage.setItem('acmusic_ai_recent_keys', JSON.stringify(merged))
+      } catch (e) { /* 同上 */ }
     },
     loadTaste() {
       if (this.tasteLoading || this.taste.length) return
