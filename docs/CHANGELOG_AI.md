@@ -4282,3 +4282,9 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - `originSongSimpleData` 不是每个翻唱都有（实测部分翻唱没有），没有就跳过，不影响其余结果；不做二次搜索兜底。
 - 3003 对游客按完整 query 缓存 60s，带 `cookie` 的请求不缓存；nginx 层不缓存新接口。
 - 回滚：`systemctl disable --now acmusic-search-enhanced` + 恢复 nginx 配置；前端不用回滚（接口 404 会自动回退 `/cloudsearch`）。
+
+### 2026-11-23 — 搜索角标收敛：只保留「原唱 / 翻唱」
+
+- 按用户要求移除搜索单曲行末的「无版权」角标，只保留「原唱 / 翻唱」；`isNoCopyright` 与 `.noCopyrightTag` 一并删除。
+- 线上更新日志（`CHANGELOG.md` / 应用内更新日志）按要求**不改**：1.9.0 条目仍保留原文。
+- 影响范围：仅 `src/components/layout/TracksLayout.vue`；接口、3003 服务、取源链路均未改。

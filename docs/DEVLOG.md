@@ -213,6 +213,7 @@ this.sel.addEventListener('canplay', this._durationTime)
 - **11-23** 单曲搜索走 `/api/search/enhanced`，3003 不可用时前端自动回退 `/cloudsearch`；其余 8 个搜索 tab 不受影响
 - **11-23** 搜索结果行末标注「原唱 / 翻唱 / 无版权」；点无版权原唱沿用现有 `/song/url/match` 解灰链路，取源顺序与默认音质未变
 - **11-23** 部署面：`ops/search-enhanced/`（systemd + 服务）、nginx `location = /api/search/enhanced`。版本 1.9.0
+- **11-23** 角标收敛：移除「无版权」，只保留「原唱 / 翻唱」；线上更新日志未改
 
 ---
 
