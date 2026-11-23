@@ -1,0 +1,29 @@
+[Unit]
+Description=ACMUSIC 搜索增强辅助服务（3003）
+# 依赖本机 3000 的 NeteaseCloudMusicApi，但不强绑：上游没起来时服务照常启动，
+# 只是搜索增强全部失败、前端自动回退 /cloudsearch。
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/acmusic-search-enhanced
+EnvironmentFile=/etc/acmusic-search-enhanced.env
+# node 在这台机器上是解压安装在 /opt/node，不在默认 PATH 里；换机器时按
+# `command -v node` 的结果改这一行，否则服务会以 status=203/EXEC 反复重启。
+ExecStart=/opt/node/bin/node /opt/acmusic-search-enhanced/server.mjs
+Restart=on-failure
+RestartSec=3
+
+# 只监听 127.0.0.1，外部访问一律走 nginx
+User=www-data
+Group=www-data
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -4240,3 +4240,45 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 踩坑：SVG `getTotalLength()` 返回的是 **viewBox 单位**（r=46 → 289），不是渲染像素。头像环第一版按像素算成 `25 91`，弧短到只有 31°；改成 `62 227` 才是 77°。另外 `span` 做 SVG 容器要显式 `display: block`，否则尺寸被内容撑开。
 - 验证：headless 注入 `nowPlaying` 实测 —— 成都 62 → breathe 3.60、晴天 136 → 1.87、海阔天空 76 → 3.11（插值中）；暂停 amp 1→0.19、加载 amp 0.06；环角度持续变化；模拟 `prefers-reduced-motion: reduce` 后 `prefers: true, rafRunning: false`；无 console 报错。
 - 待观察：P1 只做骨架，光带粗细、边缘流动、切歌跃升、结束消散留到 P2/P3。用户要求先看慢/中/快各一首和切歌过渡，再决定是否进 P2。
+
+### 2026-11-23 — 搜索单曲补回无版权原唱（v1.9.0）
+
+### 修改内容
+
+- 新增独立辅助服务 `ops/search-enhanced/`（3003，零依赖）：只读 `/cloudsearch` + `/song/detail`，从翻唱结果的 `originSongSimpleData.songId` 批量反查原唱，按「首次出现位置」插到同曲翻唱之前，并给注入项打 `_acOrigin`、合并 `privilege`、把 `songCount` 同步加回。
+- 单曲搜索（`type=1`）改走 `/api/search/enhanced`，失败/超时自动回退 `/cloudsearch`；其余 8 个搜索 tab 继续走原接口。
+- `TracksLayout` 新增 `showOriginTags`（默认 false），搜索单曲页打开后行末显示 `原唱 / 翻唱 / 无版权`；`无版权` 只看 `privilege.st < 0`（实测 `song.st` 可能是 0）。
+- nginx 新增 `location = /api/search/enhanced`（精确匹配，不抢 `^~ /api/search`），include 现有 common 片段。
+- `package.json` 1.8.0 → 1.9.0，`CHANGELOG.md` 同步；`src/data/changelog.generated.js` 由 `yarn changelog` 生成。
+
+### 修改文件
+
+- `ops/search-enhanced/server.mjs`（新增）
+- `ops/search-enhanced/acmusic-search-enhanced.service`（新增）
+- `ops/nginx/music.conf`
+- `src/api/Search.js`
+- `src/mixins/searchMixin.js`
+- `src/pages/search/TrackRes.vue`
+- `src/components/layout/TracksLayout.vue`
+- `package.json`、`CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 无版权原唱会被网易云降权，普通关键词前几页全是可播翻唱；但翻唱对象自带 `originSongSimpleData`（原唱 id / 歌手 / 专辑），是现成的反查线索。
+- `/song/detail?ids=` 能拿到无版权原唱的完整元数据（`privilege.st = -200`），项目现有 `/song/url/match` 解灰能给它取到 320k 第三方源，所以补回原唱后播放链路不需要改。
+- 不改 `api-enhanced`：它是 fork，改它要重启 3000（中断所有 API）并增加以后 rebase 的冲突面；独立 3003 零中断、可单独回滚。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- 3003 本地冒烟：`/search/enhanced?keywords=晴天&type=1&limit=5` 返回 186016（周杰伦《晴天》）为首条，`_acOrigin=true`、`privilege.st=-200`，`songCount` 同步 +1
+- 线上接口：见部署后验证
+- 浏览器手动核查：搜索单曲页「晴天」出现原唱 + 无版权角标；其余 8 个 tab 正常；点原唱走解灰出声
+
+### 注意事项
+
+- 红线：新服务不调用 `/song/url*`、不出现 `unblock`，`PlayerCore` 与 `src/config.js` 的默认音质未改 —— 取源顺序与档位不受影响。
+- `originSongSimpleData` 不是每个翻唱都有（实测部分翻唱没有），没有就跳过，不影响其余结果；不做二次搜索兜底。
+- 3003 对游客按完整 query 缓存 60s，带 `cookie` 的请求不缓存；nginx 层不缓存新接口。
+- 回滚：`systemctl disable --now acmusic-search-enhanced` + 恢复 nginx 配置；前端不用回滚（接口 404 会自动回退 `/cloudsearch`）。

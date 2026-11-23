@@ -49,6 +49,10 @@
                不占固定列宽，避免整列留白 -->
           <div class="titleRow">
             <button type="button" class="name" :title="'播放 ' + (entry.track.name || '未知')" @click="songClk(entry.track)">{{ entry.track.name || '未知' }}</button>
+            <!-- 搜索单曲的「原唱 / 翻唱 / 无版权」标注：只在 showOriginTags 打开时出现 -->
+            <span v-if="showOriginTags && isOriginal(entry.track)" class="originTag">原唱</span>
+            <span v-else-if="showOriginTags && isCover(entry.track)" class="coverTag">翻唱</span>
+            <span v-if="showOriginTags && isNoCopyright(entry.track)" class="noCopyrightTag">无版权</span>
             <span v-if="effectiveBlockedMode === 'mark' && isBlocked(entry.track)" class="blockedTag">已屏蔽</span>
             <button v-if="mvOf(entry.track)" type="button" class="mvTag" :title="'播放《' + (entry.track.name || '未知') + '》的 MV'" @click.stop="mvClk(mvOf(entry.track))">MV</button>
           </div>
@@ -154,6 +158,15 @@ export default {
     blockedMode: {
       type: String,
       default: 'hide'
+    },
+    /**
+     * 是否展示「原唱 / 翻唱 / 无版权」角标。
+     * 默认 false：TracksLayout 全站复用，只有搜索单曲页需要这套标注，
+     * 避免歌单/专辑/每日推荐等页面无端多出角标。
+     */
+    showOriginTags: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -231,6 +244,21 @@ export default {
     isBlocked(t) {
       if (this.effectiveBlockedMode === 'none') return false
       return !!this.$store.getters['BlockAbout/isTrackBlocked'](t)
+    },
+    /** 3003 注入的原唱，或接口原生返回的原唱 */
+    isOriginal(t) {
+      return !!(t && (t._acOrigin || Number(t.originCoverType) === 1))
+    },
+    /** 翻唱：originCoverType 2/3，或带 originSongSimpleData 的同曲版本 */
+    isCover(t) {
+      if (!t || this.isOriginal(t)) return false
+      return Number(t.originCoverType) === 2
+          || Number(t.originCoverType) === 3
+          || !!t.originSongSimpleData
+    },
+    /** 版权判定只看 privilege.st：实测搜索结果里 song.st 可能是 0，但 privilege.st 是 -200 */
+    isNoCopyright(t) {
+      return !!(t && t.privilege && Number(t.privilege.st) < 0)
     },
     /** 第一个带 id 的歌手：屏蔽歌手必须用真实 id，缺 id 的（恢复队列里的旧存档）不给入口 */
     primaryArtist(t) {
@@ -519,5 +547,31 @@ export default {
   color: var(--c-text-secondary);
   background: var(--c-bg-sunken, rgba(127, 127, 127, .12));
   border: 1px solid var(--c-border, rgba(127, 127, 127, .25));
+}
+
+// 搜索单曲的「原唱 / 翻唱 / 无版权」角标：与 blockedTag 同尺寸，不抢歌名
+.originTag,
+.coverTag,
+.noCopyrightTag {
+  flex-shrink: 0;
+  padding: 0 .28rem;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  border: 1px solid var(--c-border, rgba(127, 127, 127, .25));
+}
+
+.originTag {
+  color: var(--c-accent);
+  border-color: currentColor;
+}
+
+.coverTag {
+  color: var(--c-text-secondary);
+}
+
+.noCopyrightTag {
+  color: var(--c-text-secondary);
+  background: var(--c-bg-sunken, rgba(127, 127, 127, .12));
 }
 </style>

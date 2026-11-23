@@ -17,6 +17,15 @@ export function searchV2(params) {
 }
 
 /**
+ * 搜索增强（只读）：在 /cloudsearch 结果里补回被降权的无版权原唱。
+ * 仅单曲搜索（type=1）使用；3003 不可用时调用方回退 searchV2。
+ * 后端：127.0.0.1:3003（ops/search-enhanced/），经 nginx 暴露为 /api/search/enhanced
+ */
+export function searchEnhanced(params) {
+    return request('/search/enhanced', { params })
+}
+
+/**
  * 搜索建议（搜索框下拉）
  * @param keywords
  */

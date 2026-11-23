@@ -1,4 +1,4 @@
-import { searchV2 } from "@/api/Search"
+import { searchV2, searchEnhanced } from "@/api/Search"
 import EmptyState from '@/components/common/EmptyState'
 
 export const searchMixin = {
@@ -33,7 +33,21 @@ export const searchMixin = {
     methods: {
         getList(params) {
             const config = {keywords: this.keyword, limit: this.limit, offset: this.offset, type: this.type}
-            return searchV2({...config, ...params})
+            const merged = {...config, ...params}
+            // 只有单曲搜索走增强接口：它会补回被降权的无版权原唱；
+            // 其余 8 个 tab 保持 /cloudsearch 不变。增强接口不可用时回退原接口。
+            if (Number(this.type) === 1) {
+                return searchEnhanced(merged)
+                    .then(res => {
+                        const body = res && res.data
+                        if (!body || !body.result || !Array.isArray(body.result.songs)) {
+                            throw new Error('Invalid enhanced search result')
+                        }
+                        return res
+                    })
+                    .catch(() => searchV2(merged))
+            }
+            return searchV2(merged)
         },
         readResult(res) {
             const body = res && res.data
