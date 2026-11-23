@@ -87,8 +87,11 @@
 
                     <div class="sheet-meta">
                       <span>{{ m.playlist.tracks.length }} 首</span>
-                      <span v-if="m.playlist.pickReason" class="sheet-why">{{ m.playlist.pickReason }}</span>
                     </div>
+
+                    <!-- 挑选理由现在是两层（偏好关联 + 内容特质），一行放不下，
+                         单独占一块并允许折行 —— 它本身就是"为什么给你这批"的答案 -->
+                    <p v-if="m.playlist.pickReason" class="sheet-why">{{ m.playlist.pickReason }}</p>
 
                     <div class="sheet-actions">
                       <button
@@ -697,10 +700,12 @@ export default {
           .then(res => {
             if (!res) return
             const songs = (res.data && res.data.songs) || []
+            // 带上 id：服务端要拿它去查曲库百科（曲风/情绪标签/语种），
+            // 只有歌名的话模型只能靠自己的记忆猜风格
             const list = songs.map(s => {
               const ar = (s.ar && s.ar[0] && s.ar[0].name) || (s.artists && s.artists[0] && s.artists[0].name) || ''
-              return ar ? `${s.name} - ${ar}` : String(s.name || '')
-            }).filter(Boolean)
+              return {id: String(s.id || ''), name: String(s.name || ''), artist: ar}
+            }).filter(x => x.id && x.name)
             if (!list.length) return
             this.taste = list
             this.writeTasteCache(list)
@@ -710,19 +715,20 @@ export default {
     },
     readTasteCache() {
       try {
-        const raw = localStorage.getItem('acmusic_ai_taste')
+        // v2：条目从「歌名 - 歌手」字符串改成了对象，旧缓存直接作废
+        const raw = localStorage.getItem('acmusic_ai_taste_v2')
         if (!raw) return null
         const o = JSON.parse(raw)
         if (!o || !Array.isArray(o.list) || !o.list.length) return null
         if (Date.now() - Number(o.at || 0) > 24 * 60 * 60 * 1000) return null
-        return o.list
+        return o.list.filter(x => x && x.id && x.name)
       } catch (e) {
         return null
       }
     },
     writeTasteCache(list) {
       try {
-        localStorage.setItem('acmusic_ai_taste', JSON.stringify({at: Date.now(), list}))
+        localStorage.setItem('acmusic_ai_taste_v2', JSON.stringify({at: Date.now(), list}))
       } catch (e) { /* 隐私模式忽略 */ }
     },
     scrollToEnd() {
@@ -1031,11 +1037,15 @@ export default {
   }
 
   .sheet-why {
-    min-width: 0;
+    margin: 8px 0 0;
+    font-size: 11px;
+    line-height: 1.6;
+    color: $font-black-2;
+    // 两层理由约 40-70 字；336px 宽下一行约 30 字，三行足够放下，超了才裁
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    opacity: .85;
   }
 
   .sheet-actions {

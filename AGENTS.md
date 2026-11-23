@@ -32,7 +32,7 @@ No test runner exists.
 - 9 search result sub-views share `searchMixin` in `src/mixins/searchMixin.js`
 - Reusable layout components in `src/components/layout/` (emit events via $bus)
 - Icons: `BaseIcon` + `src/config/icon.js` — **all inline SVG** (24×24 grid, 1.8px round stroke; state glyphs are filled). The old iconfont bundle (`src/assets/ac-font/`) was deleted in 2026-11; `type: 'font'` entries and font classes are gone, don't reintroduce them
-- AI 点歌 (`src/components/AiAssistant.vue`, mounted at `App.vue` root): a floating chat panel, **not** a route. It talks to a **separate** helper service on `3002` (`api/ai-recommend.mjs`), not to the Netease gateway. The LLM only emits search keywords — every song in the response has already been verified against `/cloudsearch`. Playback reuses `TracksAbout/playAllTracks`; "收藏" creates a real NetEase playlist. Hides itself while the full-screen player is open (listens to `$bus` event `playerExpand`).
+- AI 点歌 (`src/components/AiAssistant.vue`, mounted at `App.vue` root): a floating chat panel, **not** a route. It talks to a **separate** helper service on `3002` (`api/ai-recommend.mjs`), not to the Netease gateway. The LLM only emits search keywords — every song in the response has already been verified against `/cloudsearch`. Playback reuses `TracksAbout/playAllTracks`; "收藏" creates a real NetEase playlist. Hides itself while the full-screen player is open (listens to `$bus` event `playerExpand`). Taste profile: the frontend sends liked songs as `{id, name, artist}`; the helper stats `songTag`/`songBizTag`/`language` from `/song/wiki/summary` (cached per song id, 7d) into a short digest fed to the stage-2 pick prompt.
 
 ## API
 

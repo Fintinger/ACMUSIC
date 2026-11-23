@@ -4288,3 +4288,15 @@ Vue 2 的过滤器只能出现在表达式**顶层**。原写法
 - 按用户要求移除搜索单曲行末的「无版权」角标，只保留「原唱 / 翻唱」；`isNoCopyright` 与 `.noCopyrightTag` 一并删除。
 - 线上更新日志不新增版本；仅把 1.9.0 条目里的「原唱 / 翻唱 / 无版权」改为「原唱 / 翻唱」，与实际标注一致。
 - 影响范围：仅 `src/components/layout/TracksLayout.vue`；接口、3003 服务、取源链路均未改。
+
+### 2026-11-24 — AI 选歌接入结构化偏好画像（v1.10.0）
+
+- 背景：对照官方 NetEase/skills 的 
+etease-music-assistant SKILL.md，挑出三条可用做法：结构化画像、两层推荐理由、按需求切专辑通道。其余（内容安全校验、模糊反问、定时推送、IM 推送、明文 ID 拼链接）与本站形态不匹配，不做。
+- 数据可行性（已验证）：/song/wiki/summary 的 creatives[] 稳定给出 songTag（曲风）、songBizTag（情绪标签）、language（语种），抽样 6/6 覆盖；上游没有 ddTime（grep -rl addTime /opt/api-enhanced/module 为空），所以**红心时段维度做不了**，画像只含内容维度。
+- 服务端：新增 getSongMeta（按歌曲 id 缓存百科元数据，TTL 7 天，上限 600 条）、mapLimit（并发 6 路）、uildProfile（统计 Top 艺人/曲风/情绪/语种，压成一段可读 digest）。画像与阶段一**并行**启动，只在阶段二 await —— 实测首次 3.8s、二次 3.2s，与改造前持平。
+- 阶段二 prompt：把 	aste 字符串列表换成画像 digest；理由要求两层（偏好关联 + 内容特质），硬限制 50 字；新增 	rimAtSentence 按句读截断（定长 slice 会产生「安和桥、斑马斑马、」这种半截列表）。
+- 专辑通道：media: album|track 由模型判断，searchAlbumBuckets 走 cloudsearch?type=10 + /album?id= 取曲目；专辑召回不足一半时补一轮单曲。
+- 前端：	aste 由「歌名 - 歌手」字符串改为 {id, name, artist}（缓存键升到 cmusic_ai_taste_v2，旧缓存作废）；.sheet-why 从单行小字改为独立块、三行截断。
+- 验证：有画像时理由形如「你常听久石让、坂本龙一的电影原声与轻音乐，这批偏钢琴纯音与民谣叙事，柳轻颂、dylanf 的器乐最贴深夜独处。」；无画像时退回短理由；「宫崎骏电影原声」走专辑通道，前 5 首全是久石让原声带曲目。
+- **未做浏览器渲染核查**：本机 Edge 正在运行，msedge --headless=new 会 handoff 给现有实例并立即退出（DEVLOG 2026-11-12 已记过），未强杀用户浏览器。样式改动仅为 .sheet-why 的 display/line-clamp，且 .panel-thread 自带滚动，溢出风险低。

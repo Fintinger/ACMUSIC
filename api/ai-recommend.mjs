@@ -135,12 +135,18 @@ function systemPrompt(vocab, exclude, recentKeywords) {
 只输出一个 JSON 对象，不要 markdown 代码块，不要任何解释文字：
 {
   "intent": "music 或 chat",
+  "media": "track 或 album",
   "title": "歌单名，6-10 个汉字，有画面感，不加书名号或引号",
   "desc": "一句话说明这张歌单的选歌逻辑，不超过 30 个汉字",
   "reply": "回给用户的一句话",
   "keywords": ["6-10 个搜索词"],
   "exclude": ["1-3 个要排除的方向"]
 }
+
+media 决定用哪个曲库通道搜：
+- album：用户要的是「整张作品」——影视原声/OST、某张专辑、某部作品的配乐（例：「宫崎骏电影原声」「星际穿越配乐」）
+- track：其余情况，一律 track。这是默认值，拿不准就选它
+判 album 时，keywords 里至少一个是专辑名或作品名（如「久石让 原声带」「海上钢琴师 OST」）。
 
 先判断 intent：
 - music：用户在点歌、要歌单、描述想听什么。包括「随便来点」「再来一张」「换一批」这类省略式请求
@@ -284,7 +290,10 @@ function sanitizeIntent(raw, message) {
         .filter(x => !/^(抒情|治愈|温暖|怀旧|安静|好听|悲伤|快乐|舒缓|轻柔|浪漫)$/.test(x))
     exclude = [...new Set(exclude)].slice(0, 4)
 
-    return {mode, title, desc, reply, keywords, exclude}
+    // 搜索通道：OST / 整张原声带这类需求，专辑搜索比单曲准得多（单曲会捞出一堆同名翻唱）
+    const media = o.media === 'album' ? 'album' : 'track'
+
+    return {mode, title, desc, reply, keywords, exclude, media}
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +509,159 @@ async function searchPlaylistBuckets(keyword, want = 8) {
 }
 
 /**
+ * 专辑通道。
+ *
+ * 「宫崎骏电影原声」「某个 OST」这类需求，用单曲搜索会捞出一堆同名翻唱；
+ * 搜专辑拿到的是一张完整的原声带，曲目质量高一个档次。
+ * 只取前两个专辑、各抽 want 首，避免整张专辑把歌单灌满。
+ */
+async function searchAlbumBuckets(keyword, want = 6) {
+    try {
+        const url = `${NETEASE_API_BASE}/cloudsearch?keywords=${encodeURIComponent(keyword)}&type=10&limit=2`
+        const json = await fetchJson(url, {}, SEARCH_TIMEOUT_MS)
+        const albums = (json && json.result && json.result.albums) || []
+        const picked = albums.slice(0, 2).filter(a => a && a.id)
+        if (!picked.length) return []
+        const details = await Promise.all(picked.map(a =>
+            fetchJson(`${NETEASE_API_BASE}/album?id=${a.id}`, {}, SEARCH_TIMEOUT_MS).catch(() => null)
+        ))
+        return details
+            .map(d => ((d && Array.isArray(d.songs)) ? d.songs.slice(0, want) : []))
+            .filter(b => b.length)
+    } catch (e) {
+        log('[album] 专辑通道失败:', brief(keyword), e.message)
+        return []
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 用户偏好画像
+// ---------------------------------------------------------------------------
+
+/**
+ * 单曲百科元数据缓存。
+ *
+ * 数据来自 /song/wiki/summary 的 creatives[]：songTag（曲风）、songBizTag（情绪标签）、
+ * language（语种），实测 6/6 覆盖。按歌曲 id 缓存 —— 红心歌很少变，
+ * 一首歌的曲风也不会变，所以缓存 7 天，用户再次打开时零网络开销。
+ */
+const META_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const META_MAX = 600
+const metaCache = new Map()
+
+function readWikiMeta(body) {
+    const data = (body && body.data) || body || {}
+    const meta = {tags: [], bizTags: [], language: ''}
+    for (const block of (data.blocks || [])) {
+        for (const c of (block.creatives || [])) {
+            const ui = c.uiElement || {}
+            if (c.creativeType === 'songTag') {
+                for (const res of (c.resources || [])) {
+                    const t = res.uiElement && res.uiElement.mainTitle && res.uiElement.mainTitle.title
+                    if (t && meta.tags.length < 4) meta.tags.push(String(t).slice(0, 16))
+                }
+            } else if (c.creativeType === 'songBizTag') {
+                for (const res of (c.resources || [])) {
+                    const t = res.uiElement && res.uiElement.mainTitle && res.uiElement.mainTitle.title
+                    if (t && meta.bizTags.length < 4) meta.bizTags.push(String(t).slice(0, 12))
+                }
+            } else if (c.creativeType === 'language') {
+                const links = ui.textLinks || []
+                if (links[0] && links[0].text) meta.language = String(links[0].text).slice(0, 12)
+            }
+        }
+    }
+    return meta
+}
+
+async function getSongMeta(id) {
+    if (!id) return null
+    const hit = metaCache.get(id)
+    if (hit && Date.now() - hit.at < META_TTL_MS) return hit.meta
+
+    try {
+        const json = await fetchJson(`${NETEASE_API_BASE}/song/wiki/summary?id=${id}`, {}, SEARCH_TIMEOUT_MS)
+        const meta = readWikiMeta(json)
+        // 查过但没有标签也记下来：否则每次都要为没数据的歌重查一遍
+        if (metaCache.size >= META_MAX) metaCache.delete(metaCache.keys().next().value)
+        metaCache.set(id, {at: Date.now(), meta})
+        return meta
+    } catch (e) {
+        return null
+    }
+}
+
+/** 限并发的小工具：20 首一起打上游会触发风控，6 路足够快又安全 */
+async function mapLimit(items, limit, fn) {
+    const out = new Array(items.length)
+    let cursor = 0
+    const workers = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+        while (cursor < items.length) {
+            const i = cursor++
+            out[i] = await fn(items[i], i)
+        }
+    })
+    await Promise.all(workers)
+    return out
+}
+
+/** 统计数组里出现次数最多的前 n 项 */
+function topCounts(list, n) {
+    const counts = new Map()
+    for (const x of list) {
+        if (!x) continue
+        counts.set(x, (counts.get(x) || 0) + 1)
+    }
+    return [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, n)
+}
+
+/**
+ * 把「20 首红心歌」压成一段可读的偏好画像。
+ *
+ * 这一步是整条链路里唯一需要知道「用户喜欢什么」的地方。以前只把歌名列表丢给模型，
+ * 它只能靠自己的记忆猜风格；现在把曲风、情绪标签、语种统计好摆到它面前。
+ * 注意这不含时间维度 —— 上游没有红心时间戳，做不了时段分析。
+ */
+async function buildProfile(taste) {
+    const list = Array.isArray(taste) ? taste : []
+    if (!list.length) return {digest: '', artists: [], tags: [], bizTags: [], languages: []}
+
+    const metas = await mapLimit(list, 6, item => getSongMeta(item.id))
+
+    const artists = topCounts(list.map(t => t.artist).filter(Boolean), 3)
+    const tags = topCounts(metas.flatMap(m => (m && m.tags) || []), 4)
+    const bizTags = topCounts(metas.flatMap(m => (m && m.bizTags) || []), 4)
+    const languages = topCounts(metas.map(m => m && m.language).filter(Boolean), 2)
+
+    const fmtArtists = artists.map(([name, n]) => (n > 1 ? `${name}×${n}` : name)).join('、')
+    // 曲风标签常带子类（「国风-国风纯音乐」），去掉前缀只留主线，读起来更像人话
+    const fmtTags = tags.map(([t, n]) => `${String(t).split('-').pop()}${n > 1 ? `×${n}` : ''}`).join('、')
+    const fmtBiz = bizTags.map(([t]) => t).join('、')
+    const fmtLang = languages.map(([t, n]) => `${t}${n > 1 ? `×${n}` : ''}`).join('、')
+
+    const lines = []
+    if (fmtArtists) lines.push(`常听艺人：${fmtArtists}`)
+    if (fmtTags) lines.push(`曲风：${fmtTags}`)
+    if (fmtBiz) lines.push(`情绪标签：${fmtBiz}`)
+    if (fmtLang) lines.push(`语种：${fmtLang}`)
+    // 一个标签都没查到（全是冷门歌）时退回歌名列表，至少别让模型瞎猜
+    if (!fmtTags && !fmtArtists) {
+        const names = list.slice(0, 12).map(t => (t.artist ? `${t.name} - ${t.artist}` : t.name)).filter(Boolean)
+        if (names.length) lines.push(`常听：${names.join('；')}`)
+    }
+
+    return {
+        digest: lines.join('\n'),
+        artists: artists.map(x => x[0]),
+        tags: tags.map(x => x[0]),
+        bizTags: bizTags.map(x => x[0]),
+        languages: languages.map(x => x[0])
+    }
+}
+
+/**
  * 造一个「收歌器」：把去重、过滤、歌手配额这些规则收在一处，
  * 让「轮转填充」和「歌单补位」共用同一套判定，不会出现补位把重复歌塞回来的情况。
  */
@@ -581,14 +743,28 @@ function fillRoundRobin(picker, buckets) {
  * 这里却要靠它认歌名（只有它知道《Summer》是钢琴曲、《Where Is Armo?》是弦乐）。
  * 同一份知识放在不同位置，一个带来幻觉，一个带来判断力。
  */
-async function pickFromCandidates(message, candidates, exclude, taste) {
-    if (!candidates.length) return {picks: [], reason: ''}
+/**
+ * 按句子边界截断。
+ * 定长 slice 会把话切在半截（「宋冬野、陈鸿…」），而理由是要给人读的，
+ * 读到一个断句处比读全 110 字却断在词中间更体面。
+ */
+function trimAtSentence(raw, max) {
+    const s = String(raw == null ? '' : raw).trim()
+    if (s.length <= max) return s
+    const cut = s.slice(0, max)
+    // 从后往前找最后一个句读，切在它后面；找不到就退回硬切
+    const idx = Math.max(cut.lastIndexOf('。'), cut.lastIndexOf('；'), cut.lastIndexOf('！'), cut.lastIndexOf('？'))
+    return idx >= max * 0.5 ? cut.slice(0, idx + 1) : cut
+}
+
+async function pickFromCandidates(message, candidates, exclude, profile) {    if (!candidates.length) return {picks: [], reason: ''}
 
     const list = candidates.map((song, i) => {
         const artist = artistsOf(song).map(a => a.name).filter(Boolean).join('/')
         return `${i + 1}. ${song.name || '未知'}${artist ? ' - ' + artist : ''}`
     }).join('\n')
 
+    const hasProfile = !!(profile && profile.digest)
     const rules = [
         '只能选给定候选里的序号，不要编造',
         '宁缺毋滥：风格明显不符的直接跳过，凑不满就少给，不要为了凑数硬塞',
@@ -602,16 +778,22 @@ async function pickFromCandidates(message, candidates, exclude, taste) {
         rules.push(`用户要排除：${exclude.join('、')}。和这些冲突的一律不选；但如果某个排除项和用户当前原话明显矛盾（例如原话要「安静」而排除项里有「慢歌」），以原话为准`)
     }
     // 画像是软约束：只在同等贴合度下起作用，不能让它把话题带偏
-    if (Array.isArray(taste) && taste.length) {
-        rules.push(`这个用户平时常听：${taste.slice(0, 12).join('；')}。同等贴合度下可以优先他熟悉的，但不要仅仅因为他常听就选不贴题的`)
+    if (hasProfile) {
+        rules.push('这个用户的胃口见下方「用户常听」；同等贴合度下可以优先他熟悉的，但不要仅仅因为他常听就选不贴题的')
     }
 
-    const prompt = `你是一位挑剔的选歌编辑。用户的原话是：「${message}」
+    const reasonRule = hasProfile
+        ? `"reason": "两层理由，硬限制 50 字以内（超出会被直接截断）。用一句话写两个半句：前半句『你常听 A、B』用「用户常听」里的艺人或曲风做证据，后半句『这批偏 C』说这批歌的特质。最多提 2 首歌名，不要罗列，禁止「很适合你」这类空话"`
+        : `"reason": "一句话说明取舍，20 字以内"`
 
+    const profileBlock = hasProfile ? `\n用户常听（统计自他的红心歌）：\n${profile.digest}\n` : ''
+
+    const prompt = `你是一位挑剔的选歌编辑。用户的原话是：「${message}」
+${profileBlock}
 下面是从曲库召回的一批候选，格式为「序号. 歌名 - 歌手」。从中挑出最贴合的 ${MAX_TRACKS} 首，按贴合度从高到低排序。
 
 只输出 JSON：
-{"picks": [序号...], "reason": "一句话说明取舍，20 字以内"}
+{"picks": [序号...], ${reasonRule}}
 
 规则：
 ${rules.map(r => '- ' + r).join('\n')}
@@ -625,7 +807,7 @@ ${list}`
         response_format: {type: 'json_object'},
         // 选歌要稳定：同一批候选每次挑出来不该差太多，所以温度压到 0.3
         temperature: 0.3,
-        max_tokens: 500
+        max_tokens: 600
     })
 
     const parsed = readJsonContent(json)
@@ -634,7 +816,9 @@ ${list}`
         .map(n => Number(n))
         .filter(n => Number.isInteger(n) && n >= 1 && n <= candidates.length)
     picks = [...new Set(picks)].slice(0, MAX_TRACKS)
-    return {picks, reason: String(parsed.reason || '').trim().slice(0, 40)}
+    // 两层理由控制在 58 字（模板要求 50，留 8 字余量给标点）。
+    // 模型经常写超，按句读截断而不是硬切，否则会出现「安和桥、斑马斑马、」这种断在半截的列表
+    return {picks, reason: trimAtSentence(parsed.reason, hasProfile ? 58 : 40)}
 }
 
 // ---------------------------------------------------------------------------
@@ -649,7 +833,8 @@ function fallbackIntent(message) {
         desc: '没接上大模型，先按你的原话搜了一遍',
         reply: '先按原话搜的，可能不太准',
         keywords: [text.slice(0, 24)].filter(Boolean),
-        exclude: []
+        exclude: [],
+        media: 'track'
     }
 }
 
@@ -659,6 +844,13 @@ async function buildPlaylist(message, history, constraints, taste, recent) {
     const pendingExclude = Array.isArray(constraints && constraints.exclude) ? constraints.exclude : []
     let intent
     let degraded = null
+
+    /**
+     * 画像和意图解析同时开跑。
+     * 画像要查 20 首曲库百科（首次约 1-2s），而阶段一完全不依赖它 ——
+     * 并起来跑，画像就完全不占额外延迟，等阶段二用的时候早就好了。
+     */
+    const profilePromise = buildProfile(taste)
 
     if (!DEEPSEEK_API_KEY) {
         degraded = 'no-key'
@@ -690,9 +882,20 @@ async function buildPlaylist(message, history, constraints, taste, recent) {
     const excludeRes = compileExclude(intent.exclude)
 
     // ---- 第一阶段：宽召回（目标 MAX_RECALL，故意多于最终歌单） ----
-    const buckets = await Promise.all(intent.keywords.map(k => searchOnce(k)))
+    // 模型判断这类需求搜「专辑」更准（OST、整张原声带），其余走单曲
+    const useAlbum = intent.media === 'album'
+    const buckets = await Promise.all(
+        intent.keywords.map(k => useAlbum ? searchAlbumBuckets(k) : searchOnce(k))
+    )
     const picker = createPicker(allowJunk, intent.keywords, excludeRes, recent.ids)
     fillRoundRobin(picker, buckets)
+
+    // 专辑通道偏窄（每张专辑只抽几首），不够就用单曲补一轮
+    if (useAlbum && picker.list.length < Math.ceil(MAX_RECALL * 0.5)) {
+        log('[album] 专辑召回不足（' + picker.list.length + ' 首），补单曲')
+        const more = await Promise.all(intent.keywords.slice(0, 3).map(k => searchOnce(k)))
+        for (const b of more) fillRoundRobin(picker, [b])
+    }
 
     // 曲目不够就补：场景/情绪类请求靠单曲搜索经常凑不满，歌单种子能把这一档质量拉回来
     if (picker.list.length < Math.ceil(MAX_RECALL * 0.5)) {
@@ -730,12 +933,16 @@ async function buildPlaylist(message, history, constraints, taste, recent) {
     }
 
     // ---- 第二阶段：精挑 ----
+    // 到这里画像肯定已经好了（阶段一至少花了几百毫秒，而百科查询是并行跑的）
+    const profile = await profilePromise
+    if (profile.digest) log('[profile]', profile.digest.replace(/\n/g, ' | '))
+
     let tracks = candidates.slice(0, MAX_TRACKS)
     let pickReason = ''
     // 候选本来就不多时不必再调一次模型：没有挑选余地，只是白烧一次钱
     if (!degraded && candidates.length > MAX_TRACKS) {
         try {
-            const {picks, reason} = await pickFromCandidates(message, candidates, intent.exclude, taste)
+            const {picks, reason} = await pickFromCandidates(message, candidates, intent.exclude, profile)
             if (picks.length >= 6) {
                 tracks = picks.map(i => candidates[i - 1]).filter(Boolean)
                 pickReason = reason
@@ -759,6 +966,8 @@ async function buildPlaylist(message, history, constraints, taste, recent) {
             tracks,
             pickReason
         },
+        // 画像命中情况回给前端只用于调试展示，不参与业务
+        profile: {hasProfile: !!profile.digest, tags: profile.tags.slice(0, 3)},
         stats: {recall: candidates.length, final: tracks.length},
         degraded
     }
@@ -856,15 +1065,35 @@ function normalizeConstraints(raw) {
 }
 
 /**
- * 用户常听的抽样（画像）。
- * 只收「歌名 - 歌手」这种短文本、最多 20 条 —— 这是唯一会把用户数据带出前端的通道，量必须可控。
+ * 用户常听的抽样。
+ *
+ * 收 `{id, name, artist}`：id 用来查曲库百科（曲风/标签/语种），name/artist 用来统计艺人。
+ * 兼容旧的纯字符串形态（那时只能拿歌名去猜风格）。
+ * 最多 20 条 —— 这是唯一会把用户数据带出前端的通道，量必须可控。
  */
 function normalizeTaste(raw) {
     if (!Array.isArray(raw)) return []
-    return raw
-        .map(x => String(x == null ? '' : x).trim())
-        .filter(x => x.length >= 2 && x.length <= 60)
-        .slice(0, 20)
+    const out = []
+    for (const item of raw) {
+        if (item == null) continue
+        if (typeof item === 'string') {
+            const s = item.trim()
+            // 旧格式是「歌名 - 歌手」，拆开还能用
+            const m = s.split(/\s+-\s+/)
+            if (s.length < 2 || s.length > 80) continue
+            out.push({id: '', name: (m[0] || s).slice(0, 50), artist: (m[1] || '').slice(0, 40)})
+            continue
+        }
+        if (typeof item !== 'object') continue
+        const id = String(item.id == null ? '' : item.id).trim()
+        const name = String(item.name == null ? '' : item.name).trim().slice(0, 50)
+        const artist = String(item.artist == null ? '' : item.artist).trim().slice(0, 40)
+        if (!name && !id) continue
+        // id 只收纯数字：它会拼进上游 URL，不能让它变成路径
+        out.push({id: /^\d{1,20}$/.test(id) ? id : '', name, artist})
+        if (out.length >= 20) break
+    }
+    return out.slice(0, 20)
 }
 
 /**
@@ -897,7 +1126,9 @@ function cacheKey(message, history, constraints, taste, recent) {
     const h = normalizeHistory(history).map(m => m.role + ':' + m.content).join('|')
     // 排除项和画像都会改变结果，必须进 key —— 否则"太吵了"会命中上一轮那份不排除人声的缓存
     const c = constraints && constraints.exclude ? constraints.exclude.join(',') : ''
-    const t = Array.isArray(taste) ? taste.slice(0, 5).join(',') : ''
+    const t = Array.isArray(taste)
+        ? taste.slice(0, 8).map(x => (x && (x.id || x.name)) || '').join(',')
+        : ''
     // recent.ids 也必须进 key：排除列表每次都在变，命中旧缓存会让"去重"完全失效
     const r = recent && recent.ids ? recent.ids.join(',') : ''
     return createHash('sha1').update(message + '\n' + h + '\n' + c + '\n' + t + '\n' + r).digest('hex').slice(0, 16)
