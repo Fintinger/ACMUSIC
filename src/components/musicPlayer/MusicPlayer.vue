@@ -1013,8 +1013,12 @@ export default {
 
 .playerWrapper.expandWindow {
   .playerAtmosphere { position: fixed; inset: -10%; background-size: cover; background-position: center; filter: blur(100px); opacity: .16; pointer-events: none; }
-  .heroSection { position: relative; display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.35fr); gap: clamp(40px, 6vw, 100px); min-height: 100vh; padding: 80px 6% 100px; }
-  .heroLeft { position: relative; width: 100%; min-width: 0; max-width: 420px; justify-self: center; gap: $sp-5; }
+  /**
+   * 两栏永远是左右同行：左栏宽度随视口收缩（29vw，最窄 120px），右栏吃掉剩余宽度。
+   * 宽度不够时优先缩封面/歌曲信息，而不是把歌词折到下面一行。
+   */
+  .heroSection { position: relative; display: grid; grid-template-columns: clamp(120px, 29vw, 400px) minmax(0, 1fr); gap: clamp(20px, 4vw, 88px); min-height: 100vh; padding: 80px clamp(20px, 5vw, 84px) 100px; align-items: center; }
+  .heroLeft { position: relative; width: 100%; min-width: 0; max-width: 400px; justify-self: center; gap: $sp-5; }
   .coverWrapper { width: 100%; height: auto; aspect-ratio: 1; }
   .coverWrapper .coverArt { border-radius: $player-radius-xl; box-shadow: $player-shadow-lg; }
   .songMeta .songTitle { text-align: left; font-size: clamp(24px, 2.2vw, 32px); }
@@ -1036,6 +1040,8 @@ export default {
   .controlsRow .modeBtn { background: transparent; color: var(--player-menu-secondary); }
   .controlsRow .iconBtn { color: var(--player-menu-secondary); }
   .controlsRow .iconBtn.is-on { color: $player-danger; }
+  // 显式定尺寸，盖掉旧断点里 40px 的那一档；窄屏再逐级缩
+  .controlsRow .trackBtn, .controlsRow .modeBtn, .controlsRow .iconBtn { width: 46px; height: 46px; }
   .heroRight { align-self: center; width: 100%; min-width: 0; height: clamp(440px, 72vh, 760px); }
   .rightTabs { justify-content: center; span { color: var(--player-menu-muted); padding: $sp-3 $sp-4; } }
   .rightContent { padding: 20px 0 70px; min-height: 0; flex: 1; }
@@ -1060,20 +1066,107 @@ export default {
   .cardScroll { max-height: 66vh; overflow-y: auto; }
   button:focus-visible { outline: 2px solid var(--player-menu-accent); outline-offset: 3px; }
 }
-@media (max-width: 900px) {
+// 左栏收窄到 ~290px 以下时，五个控件仍按 46/64 排会横向溢出；
+// 只缩按钮、不换行，保持「模式 / 上一首 / 播放 / 下一首 / 下载」一行。
+@media (max-width: 1080px) {
   .playerWrapper.expandWindow {
-    .heroSection { grid-template-columns: minmax(0, 1fr); padding: 80px $sp-5 100px; gap: $sp-6; }
-    .heroLeft { max-width: 360px; }
-    .heroRight { min-height: 0; height: 58vh; }
-    .coverWrapper { width: 100%; }
-    .lyricsScroll { height: 50vh; min-height: 300px; .lyricsInner { padding: 20vh 0; } }
+    .heroSection { gap: clamp(18px, 3.4vw, 40px); }
+    .controlsRow { gap: 4px; }
+    .controlsRow .trackBtn, .controlsRow .modeBtn, .controlsRow .iconBtn { width: 40px; height: 40px; }
+    .controlsRow .playBtn { width: 56px; height: 56px; }
   }
 }
-@media (min-width: 901px) and (max-height: 800px) {
+
+/**
+ * 窄桌面窗口（< 860px）：歌词仍留在右栏，左侧封面和歌曲信息继续缩。
+ * 这一档把控件改成等分网格，左栏再窄也不会把页面撑出横向滚动条。
+ */
+@media (max-width: 860px) {
   .playerWrapper.expandWindow {
-    .heroSection { padding-top: 48px; padding-bottom: 80px; }
+    .heroSection { gap: clamp(14px, 2.8vw, 30px); padding: 56px clamp(14px, 3.4vw, 34px) 72px; }
+    .heroLeft { gap: $sp-3; }
+    .heroRight { height: clamp(400px, 70vh, 700px); }
+    .songMeta {
+      .songTitleRow { gap: 6px; margin-bottom: 4px; }
+      .songTitle { font-size: clamp(16px, 2.6vw, 22px); }
+      .songSub { font-size: 12px; }
+      .likeBtn { height: 28px; .likeCount { font-size: 8px; } }
+    }
+    .rightTabs {
+      justify-content: flex-start;
+      overflow-x: auto;
+      scrollbar-width: none;
+      &::-webkit-scrollbar { display: none; }
+      span { padding: 10px 12px; font-size: 12px; white-space: nowrap; flex: 0 0 auto; }
+    }
+    .rightContent { padding: 12px 0 40px; }
+    .lyricsScroll {
+      .lyricsInner { padding: 20vh 0; }
+      p { padding: 0 8px; }
+    }
+    // 中间那格给播放键多一点宽度，仍保持五个控件一行
+    .controlsRow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
+      gap: 4px;
+      justify-content: normal;
+    }
+    .controlsRow .trackBtn, .controlsRow .modeBtn, .controlsRow .iconBtn {
+      width: min(40px, 100%); height: auto; aspect-ratio: 1; justify-self: center;
+    }
+    .controlsRow .playBtn {
+      width: min(52px, 100%); height: auto; aspect-ratio: 1; justify-self: center;
+      i { font-size: clamp(24px, 3.4vw, 32px); }
+      .player-loading-spinner { width: 20px; height: 20px; }
+    }
+  }
+}
+
+/**
+ * 更窄时（< 700px）把控件排成两行（上一首 / 播放 / 下一首，模式与下载在下），
+ * 但左右两栏依旧同行；歌词标签隐藏图标、缩小字号，给歌词留出可读宽度。
+ */
+@media (max-width: 700px) {
+  .playerWrapper.expandWindow {
+    .heroSection { gap: 14px; padding: 48px 16px 60px; }
+    .rightTabs {
+      justify-content: flex-start;
+      span { padding: 9px 10px; i { display: none; } }
+    }
+    .rightContent { padding-bottom: 32px; }
+    .lyricsScroll {
+      .lyricsInner { padding: 16vh 0; }
+      p { font-size: 15px; &.active { font-size: 20px; } }
+    }
+    .controlsRow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .controlsRow .prevBtn { grid-area: 1 / 1; }
+    .controlsRow .nextBtn { grid-area: 1 / 3; }
+    .controlsRow .modeBtn { grid-area: 2 / 1; }
+    .controlsRow .iconBtn { grid-area: 2 / 3; }
+    .controlsRow .playBtn {
+      grid-area: 1 / 2 / span 2 / span 1;
+      align-self: center;
+      width: min(48px, 100%);
+      i { font-size: 22px; }
+      .player-loading-spinner { width: 18px; height: 18px; }
+    }
+  }
+}
+
+// 矮窗口（笔记本 768p 等）：封面尺寸同时受高度约束，左栏整体收窄，
+// 不再单独给封面一个宽度（那会让标题/进度条比封面宽，左边缘对不齐）。
+@media (min-width: 861px) and (max-height: 800px) {
+  .playerWrapper.expandWindow {
+    .heroSection {
+      // 高度约束会把左栏压到 232px，这一档的控件也必须同步缩到 40/56，否则横向溢出
+      grid-template-columns: clamp(232px, min(29vw, 34vh), 360px) minmax(0, 1fr);
+      padding-top: 48px;
+      padding-bottom: 64px;
+    }
     .heroLeft { gap: $sp-4; }
-    .coverWrapper { width: clamp(190px, 32vh, 270px); }
+    .controlsRow { gap: 4px; }
+    .controlsRow .trackBtn, .controlsRow .modeBtn, .controlsRow .iconBtn { width: 40px; height: 40px; }
+    .controlsRow .playBtn { width: 56px; height: 56px; }
     .lyricsScroll { min-height: 300px; height: 65vh; }
   }
 }
