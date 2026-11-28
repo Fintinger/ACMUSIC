@@ -14,10 +14,13 @@
           <span v-if="songs.length">已加载 {{ songs.length }} 首</span>
         </p>
       </div>
-      <button v-if="arBasicInfo.id" class="asp-back" @click="$bus.$emit('arClk', id)">返回歌手页</button>
+      <div class="asp-actions">
+        <PlayAllButton v-if="songs.length" :tracks="songs" size="md"/>
+        <button v-if="arBasicInfo.id" class="asp-back" @click="$bus.$emit('arClk', id)">返回歌手页</button>
+      </div>
     </header>
 
-    <TracksLayout v-if="songs.length" :list="songs"/>
+    <TracksLayout v-if="songs.length" :list="songs" :need-btn="false"/>
 
     <div v-if="firstLoading || (loading && !songs.length)" class="asp-state"><BaseIcon class="is-spinning" name="loader"/> 加载中…</div>
     <div v-else-if="error" class="asp-state">
@@ -41,13 +44,14 @@ import EmptyState from '@/components/common/EmptyState';
 import LoadMore from "@/components/LoadMore";
 import TracksLayout from "@/components/layout/TracksLayout";
 import CoverImage from "@/components/common/CoverImage";
+import PlayAllButton from "@/components/common/PlayAllButton";
 import * as artistApi from "@/api/Artist";
 
 const PAGE_SIZE = 50;
 
 export default {
   name: "ArtistAllSongs",
-  components: {EmptyState, LoadMore, TracksLayout, CoverImage},
+  components: {EmptyState, LoadMore, TracksLayout, CoverImage, PlayAllButton},
   props: ["id"],
   data() {
     return {
@@ -119,4 +123,13 @@ export default {
 
 // 容器由外层 el-main 统一（max-width 1400 + 24 padding）
 .artistAllSongs { padding-bottom: 80px; }
+
+// 页头右侧动作：播放全部 + 返回；margin-left:auto 把整组推到最右
+.asp-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
 </style>

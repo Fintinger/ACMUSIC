@@ -11,51 +11,10 @@
 .tracksContainer {
   margin: 0 auto;
 
-  // 播放全部按钮组
+  // 播放全部 + 添加到播放列表：整颗胶囊由 PlayAllButton 渲染（含尺寸 / 主题变体）
   .btns {
     margin: $sp-3 0;
     padding-top: .5rem;
-    .btn-container {
-      color: $font-black-1;
-      width: max-content;
-      border-radius: 8px;
-      background: $color-theme-sec;
-
-      &>i,
-      &>.btn-item{
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        &:disabled { opacity: .5; cursor: default; }
-        display:inline-block;
-        padding: .5rem .75rem;
-        cursor: pointer;
-        box-sizing: border-box;
-        transition: all .2s;
-        &:hover{
-          color: $color-main-text;
-        }
-      }
-      &>.btn-item{
-        .ac-icon{ vertical-align: middle; }
-        span{ margin-left: 4px; }
-        &:last-child{ margin-left: 0; border-left: 1px solid var(--c-border-strong); }
-      }
-      .ac-play1{
-        font: {
-          size: .8rem;
-          weight: bold;
-        };
-        &:before{
-          font-size: .9rem;
-        }
-      }
-      .ac-jia{
-        font-size: .8rem;
-        font-weight: normal;
-      }
-    }
   }
 
   // 列头：与行共用同一套 padding / gap / 列宽，天然对齐

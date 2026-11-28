@@ -94,12 +94,7 @@
                     <p v-if="m.playlist.pickReason" class="sheet-why">{{ m.playlist.pickReason }}</p>
 
                     <div class="sheet-actions">
-                      <button
-                          type="button"
-                          class="sheet-btn is-primary"
-                          :disabled="!m.playlist.tracks.length"
-                          @click="playSheet(m.playlist)"
-                      ><BaseIcon name="play" :size="12"/><span>播放全部</span></button>
+                      <PlayAllButton size="sm" :tracks="m.playlist.tracks"/>
                       <button
                           type="button"
                           class="sheet-btn"
@@ -200,6 +195,7 @@ import {create, addTracks} from "@/api/Playlist";
 import {likelist, detail as songDetail} from "@/api/Tracks";
 import {isLoggedIn} from "@/utils/auth";
 import {getBpm, breathSeconds as bpmToBreath, DEFAULT_BPM} from "@/utils/songBpm";
+import PlayAllButton from "@/components/common/PlayAllButton";
 
 /**
  * AI 点歌浮窗
@@ -213,6 +209,7 @@ import {getBpm, breathSeconds as bpmToBreath, DEFAULT_BPM} from "@/utils/songBpm
  */
 export default {
   name: "AiAssistant",
+  components: {PlayAllButton},
   data() {
     return {
       open: false,
@@ -607,17 +604,6 @@ export default {
         return
       }
       this.$bus.$emit('songClk', track)
-    },
-    playSheet(playlist) {
-      const tracks = playlist && playlist.tracks
-      if (!tracks || !tracks.length) return
-      const isBlocked = this.$store.getters['BlockAbout/isTrackBlocked']
-      const playable = tracks.filter(t => !isBlocked(t))
-      if (!playable.length) {
-        this.$toast.info('这些歌都在音乐黑名单里')
-        return
-      }
-      this.$store.dispatch('TracksAbout/playAllTracks', playable)
     },
     saveSheet(msg) {
       const playlist = msg.playlist
@@ -1077,14 +1063,6 @@ export default {
     }
 
     &:disabled { opacity: .5; cursor: not-allowed; }
-
-    &.is-primary {
-      border-color: transparent;
-      background: var(--c-button-primary);
-      color: var(--c-text-on-accent);
-
-      &:hover:not(:disabled) { color: var(--c-text-on-accent); opacity: .9; }
-    }
 
     &.is-quiet {
       border-color: transparent;

@@ -1,10 +1,8 @@
 <template>
   <div class="tracksContainer" :class="{ 'has-actions': showActions }">
+    <!-- 播放全部 + 悬停出现的「添加到播放列表」：全站共用，行为见 PlayAllButton -->
     <el-row v-if="needBtn" class="btns">
-      <div class="btn-container">
-        <button type="button" class="btn-item" :disabled="!visibleEntries.length" @click="playAllTracks(visibleTracks)"><BaseIcon name="play"/><span> 播放全部</span></button>
-        <button type="button" class="btn-item" :disabled="!visibleEntries.length" aria-label="全部加入播放列表" title="全部加入播放列表" @click="pushAllToQueue"><BaseIcon name="listPlus"/></button>
-      </div>
+      <PlayAllButton :tracks="visibleTracks" size="xs"/>
     </el-row>
 
     <!-- 被屏蔽的行不渲染，但歌单总数对不上会让人以为丢歌了：这里明说屏蔽了几首，并给管理入口 -->
@@ -120,14 +118,14 @@
 </template>
 
 <script>
-import {mapActions} from 'vuex'
 import CoverImage from "@/components/common/CoverImage";
+import PlayAllButton from "@/components/common/PlayAllButton";
 import {format_s} from "@/utils/filters";
 import {mvIdOf, isMvDead} from "@/utils/songMv";
 
 export default {
   name: "TracksLayout",
-  components: {CoverImage},
+  components: {CoverImage, PlayAllButton},
   props: {
     list: {
       type: Array,
@@ -381,40 +379,7 @@ export default {
     /** 单曲加入歌单：交给 App 里的全局弹窗（登录校验、歌单列表、查重都在那边） */
     addToPlaylist(t) {
       this.$bus.$emit('open-add-to-playlist', { songs: [t], source: 'track-row' })
-    },
-    /** 顶部「全部加入播放列表」：先算清楚有几首是新的，避免提示"已加入 50 首"其实一首没进 */
-    pushAllToQueue() {
-      if (!this.visibleTracks.length) return
-      if (this.queueAddBlocked) {
-        this.$toast.info(this.queueAddTitle)
-        return
-      }
-      // 声音（电台节目）搜索页也复用这个列表，它们没有音乐音源，不能进队列
-      const valid = this.visibleTracks.filter(t => t && !t.isVoice && t.id != null)
-      if (!valid.length) {
-        this.$toast.warning('声音节目不支持加入播放列表')
-        return
-      }
-      const wasEmpty = !(this.$store.state.TracksAbout.currentPlaylist || []).length
-      const existing = new Set(
-          (this.$store.state.TracksAbout.currentPlaylist || []).map(t => String(t.id))
-      )
-      const fresh = valid.filter(t => !existing.has(String(t.id)))
-      if (!fresh.length) {
-        this.$toast.info('这些歌都已在播放列表中')
-        return
-      }
-      this.$store.dispatch('TracksAbout/pushAllTracks', fresh).then(() => {
-        this.$toast.success(`已加入 ${fresh.length} 首到播放列表`)
-        this.$bus.$emit('queue-changed', { playId: fresh[0].id, wasEmpty })
-      })
-    },
-    /** 外部（歌单页/日推页的"播放全部"）调用：只播可见的，跳过被屏蔽的 */
-    playVisible() {
-      if (!this.visibleTracks.length) return
-      this.playAllTracks(this.visibleTracks)
-    },
-    ...mapActions('TracksAbout', {playAllTracks: 'playAllTracks'})
+    }
   }
 }
 </script>

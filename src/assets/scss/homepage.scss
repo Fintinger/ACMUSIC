@@ -142,7 +142,7 @@
           }
         }
 
-        // 播放按钮
+        // 播放全部：按钮本体（透明玻璃）见 PlayAllButton 的 variant-cover，这里只管落位
         .play-tracks-btn {
           z-index: 2;
           position: absolute;
@@ -156,17 +156,6 @@
             height: auto;
             margin: 1rem;
           }
-        }
-
-        ::v-deep .play-btn-expand {
-          background: var(--c-button-primary);
-          color: var(--c-text-on-accent);
-          padding: 0 18px 0 10px;
-          &:hover { background: var(--c-button-primary-hover); transform: none; }
-          &:focus-visible { outline: 3px solid white; outline-offset: 3px; }
-          .play-btn-text { max-width: 80px; margin-left: 8px; opacity: 1; color: var(--c-text-on-accent); }
-          .play-btn-icon { color: var(--c-text-on-accent); }
-          .play-btn-icon i { color: inherit; }
         }
 
         // 深封面: 加暗色渐变 + 标题转白 (放在 .line 基础样式之后, 加完整父级保证优先级)

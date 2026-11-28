@@ -11,11 +11,17 @@
       <div class="fm-section-subtitle">为你推荐可能喜欢的音乐</div>
     </div>
 
-    <!-- 播放全部按钮 (右上角, 玻璃质感) -->
-    <button class="fm-play-all-btn" @click.stop="playAllFM">
-      <span class="btn-icon-circle"><BaseIcon name="play"/></span>
-      <span>播放全部</span>
-    </button>
+    <!-- 播放全部（右上角，玻璃质感；FM 不支持整批入队，所以只保留播放） -->
+    <div class="fm-play-all">
+      <PlayAllButton
+          variant="glass"
+          size="md"
+          :tracks="currentList"
+          :keep-stream="true"
+          :addable="false"
+          @play="onPlayAll"
+      />
+    </div>
 
     <!-- Cover 区域 -->
     <div class="fm-cover-group">
@@ -53,11 +59,13 @@
 
 <script>
 import pubsub from 'pubsub-js'
+import PlayAllButton from "@/components/common/PlayAllButton"
 import { fetchFmBatch, currentFmFetchOptions, markFmUiMounted, markFmUiUnmounted } from "@/utils/personalFm"
 import { imgParam } from "@/utils/filters"
 
 export default {
   name: "PersonalFM",
+  components: { PlayAllButton },
   props: {
     list: { type: Array, default: () => [] }
   },
@@ -234,10 +242,11 @@ export default {
       this.tiltY = 0
       if (this.currentList.length > 1) this.startCarousel()
     },
-    playAllFM() {
-      if (!this.currentList.length) return
-      this.$store.dispatch('TracksAbout/playAllTracks', { list: this.currentList, keepStream: true })
-      // FM 模式标志（已下沉到 PlayerCore，通过 $bus 通知）
+    /**
+     * PlayAllButton 已经把这一批歌换进队列（keepStream），这里只补 FM 来源声明：
+     * FM 模式标志已下沉到 PlayerCore，通过 $bus 通知。
+     */
+    onPlayAll() {
       this.$bus.$emit('fm-mode', true)
     },
     /**
@@ -461,52 +470,12 @@ export default {
 
 // 容器分档已由 clamp(--fm-c) 取代，见上方尺寸体系说明
 
-// 播放全部按钮 (右上角, 玻璃质感)
-.fm-play-all-btn {
+// 播放全部 + 添加到播放列表 (右上角, 玻璃胶囊；按钮本体样式见 PlayAllButton 的 variant-glass)
+.fm-play-all {
   position: absolute;
   top: 20px;
   right: 22px;
   z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 15px;
-  border: 1px solid rgba(255,255,255,.25);
-  border-radius: 24px;
-  background: rgba(255,255,255,.18);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: $font-black-1;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all .25s ease;
-  line-height: 1;
-  letter-spacing: .3px;
-
-  .btn-icon-circle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    /* 原先是 rgba(95,99,104,.12) 的淡灰圆，叠在磨砂玻璃底上深浅两种主题都
-       几乎看不见（用户反馈）；改成主题色实底 + 白色三角，与播放器播放按钮同语言 */
-    background: var(--c-accent);
-    color: #fff;
-  }
-
-  &:hover {
-    background: rgba(255,255,255,.32);
-    border-color: rgba(255,255,255,.45);
-    box-shadow: 0 2px 12px rgba(0,0,0,.06);
-  }
-
-  &:active {
-    background: rgba(255,255,255,.24);
-    transform: scale(.97);
-  }
 }
 
 // 模块标题 (左上角)

@@ -17,9 +17,8 @@
         <button type="button" class="daily-style-btn" :class="{ 'is-open': styleOpen }" @click="toggleStyle">
           <BaseIcon name="explore"/><span>风格</span>
         </button>
-        <button v-if="list.length" type="button" class="daily-play" @click="playAll">
-          <BaseIcon name="play"/><span>播放全部</span>
-        </button>
+        <!-- 每日推荐：播放全部，悬停可把整批加入播放列表 -->
+        <PlayAllButton v-if="list.length" :tracks="list" size="md"/>
       </div>
     </header>
 
@@ -82,6 +81,7 @@
 <script>
 import TracksLayout from "@/components/layout/TracksLayout";
 import EmptyState from "@/components/common/EmptyState";
+import PlayAllButton from "@/components/common/PlayAllButton";
 import * as tracksApi from "@/api/Tracks";
 import * as recommendApi from "@/api/Recommend";
 import {normalizeTrack} from "@/utils/normalize";
@@ -89,7 +89,7 @@ import {isLoggedIn} from "@/utils/auth";
 
 export default {
   name: "DailySongs",
-  components: {TracksLayout, EmptyState},
+  components: {TracksLayout, EmptyState, PlayAllButton},
   props: {
     // 首页通过非 path 路由参数传入的 JSON 字符串; 刷新/直开时为空
     dailySongs: {type: String, default: ''}
@@ -141,17 +141,6 @@ export default {
     this.fetchDailySongs()
   },
   methods: {
-    playAll() {
-      if (!this.list.length) return
-      // 跳过黑名单：列表里已经隐藏了，播放全部也不能把它们带进队列
-      const isBlocked = this.$store.getters['BlockAbout/isTrackBlocked']
-      const playable = this.list.filter(t => !isBlocked(t))
-      if (!playable.length) {
-        this.$toast.info('这些歌都在音乐黑名单里')
-        return
-      }
-      this.$store.dispatch('TracksAbout/playAllTracks', playable)
-    },
     /** 从响应里取歌曲数组：v1 与老接口都放在 data.dailySongs */
     readDaily(res) {
       const daily = res && res.data && res.data.data && res.data.data.dailySongs

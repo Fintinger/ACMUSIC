@@ -17,7 +17,8 @@
                 </el-col>
                 <el-col :span="24" class="play-tracks-btn">
                   <div class="btn-container">
-                    <playTracksBtn :val="dailySongs" expand/>
+                    <!-- 每日推荐大卡片：封面上的透明玻璃按钮，默认只露播放键，悬停展开「播放全部」 -->
+                    <PlayAllButton :tracks="dailySongs" size="lg" variant="cover" :addable="false" expand-on-hover/>
                   </div>
                 </el-col>
               </el-row>
@@ -132,8 +133,7 @@ import FmRoamCards from "@/components/FmRoamCards";
 import HeartModeCard from "@/components/HeartModeCard";
 import GridSkeleton from "@/components/Skeleton/GridSkeleton";
 import EmptyState from "@/components/common/EmptyState";
-
-import playTracksBtn from "@/components/playTracksBtn";
+import PlayAllButton from "@/components/common/PlayAllButton";
 
 import {normalizeTrack, normalizePlaylist, normalizeArtist} from "@/utils/normalize";
 import {fetchFmBatch} from "@/utils/personalFm";
@@ -168,7 +168,7 @@ export default {
     }
   },
   mixins: [coverLight],
-  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, FmRoamCards, HeartModeCard, GridSkeleton, playTracksBtn, EmptyState},
+  components: {PlaylistLayout, AlbumLayout, ArtistLayout, PersonalFM, FmRoamCards, HeartModeCard, GridSkeleton, PlayAllButton, EmptyState},
   computed: {
     isLogin() {
       return this.$store.getters["UserAbout/isLogin"];

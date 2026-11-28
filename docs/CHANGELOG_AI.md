@@ -4300,3 +4300,288 @@ etease-music-assistant SKILL.md，挑出三条可用做法：结构化画像、�
 - 前端：	aste 由「歌名 - 歌手」字符串改为 {id, name, artist}（缓存键升到 cmusic_ai_taste_v2，旧缓存作废）；.sheet-why 从单行小字改为独立块、三行截断。
 - 验证：有画像时理由形如「你常听久石让、坂本龙一的电影原声与轻音乐，这批偏钢琴纯音与民谣叙事，柳轻颂、dylanf 的器乐最贴深夜独处。」；无画像时退回短理由；「宫崎骏电影原声」走专辑通道，前 5 首全是久石让原声带曲目。
 - **未做浏览器渲染核查**：本机 Edge 正在运行，msedge --headless=new 会 handoff 给现有实例并立即退出（DEVLOG 2026-11-12 已记过），未强杀用户浏览器。样式改动仅为 .sheet-why 的 display/line-clamp，且 .panel-thread 自带滚动，溢出风险低。
+
+### 2026-11-28 — 全站「播放全部」统一为综合按钮（v1.11.0）
+
+### 修改内容
+
+- 新增 `src/components/common/PlayAllButton.vue`：一颗胶囊里两段，主段「播放全部」，副段「添加到播放列表」。行为收在一处：播放先排黑名单（全被屏蔽时给提示）、加入用 `Set(String(id))` 去重、空队列时发 `queue-changed { playId, wasEmpty }` 让 PlayerCore 顺手开播并立刻落盘。尺寸 `sm/md/lg`，私人 FM 用 `variant="glass"`（磨砂玻璃 + 主题色播放圆底），并支持 `keepStream`。
+- `TracksLayout` 顶部按钮组换成该组件（入参 `visibleTracks`，管理模式下即全部曲目），删除 `playVisible()` / `pushAllToQueue()` 与 `mapActions`，`.btns` 的胶囊组样式一并清掉。
+- 歌单详情 hero：原来的「播放全部」+「加入列表」两颗按钮合并成 `size="lg"` 的一颗；`$refs.songTracks` 不再需要，`.detail-play-actions` 只保留收藏按钮的外观。
+- 每日推荐 hero、首页每日推荐大卡片、AI 点歌的歌单卡片（`size="sm"`）全部换成同一组件；删除各自的 `playAll / playSheet` 方法与旧样式（`.daily-play`、`.sheet-btn.is-primary`、`::v-deep .play-btn-expand`）。
+- 私人 FM：右上角换成 `variant="glass"` + `keep-stream` 的同款按钮，`playAllFM` 收敛成 `onPlayAll()`，只负责补发 `$bus('fm-mode', true)`。
+
+### 修改文件
+
+- `src/components/common/PlayAllButton.vue`（新增）
+- `src/components/layout/TracksLayout.vue`、`src/assets/scss/tracksLayout.scss`
+- `src/pages/ListDetail.vue`、`src/pages/DailySongs.vue`、`src/pages/HomePage.vue`、`src/assets/scss/dailyTracks.scss`、`src/assets/scss/homepage.scss`
+- `src/components/PersonalFM.vue`、`src/components/AiAssistant.vue`
+- `package.json`、`CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 用户要求「统一所有播放全部按钮，改成播放全部 + 添加到播放列表综合按钮」。原状是 5 套长相与行为各异的按钮：TracksLayout 是「播放全部 + 仅图标的全部加入」胶囊组，歌单详情是两颗粒子按钮，每日推荐只有播放，私人 FM 是玻璃按钮，AI 卡片是 `sheet-btn`；「全部加入播放列表」有的页面有、有的没有，文案也不统一。
+- 行为统一放在组件里，避免各页再复制黑名单过滤、去重、`queue-changed` 落盘这几段逻辑（原先 `pushAllToQueue` 只存在于 TracksLayout，靠 ref 给歌单详情调用）。
+- 声音节目（搜索结果复用同一列表）没有音源：播放维持原行为（可点），「加入」按旧逻辑提示「声音节目不支持加入播放列表」。
+- FM / 心动接管队列时加入会被推荐流冲掉或夹在推荐中间，沿用原判定（`heartMode/heartBusy/fmActive`），视觉压暗、点击说明原因，不做真 disable。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（只有既有的 bundle 体积、dart-sass legacy API 警告）
+- 浏览器手动核查（headless Edge + CDP，1440×1000，深色主题）：
+  - 歌单详情：综合按钮 279×42，两段文案与分隔线正常；点副段 → 队列 0→50、toast「已加入 50 首到播放列表」；再点 →「这些歌都已在播放列表中」；点主段 → 播放条从「未选择歌曲」变「晴天」。
+  - 专辑详情：248×36 正常，TracksLayout 顶部按钮即此组件。
+  - AI 点歌面板：注入一条歌单消息后 213×28 正常，收藏/曲目自动换行不挤。
+  - 首页 hero（伪造登录态 + 注入数据）：私人 FM 玻璃按钮、每日推荐大卡片按钮均正常渲染。
+
+### 注意事项
+
+- 私人 FM 播放中不会真的把 FM 那批歌加进队列（推荐流每批会 REPLACE 整队），点击只给原因；这是既有约束，不是本次引入。
+- 综合按钮在搜索「声音」列表里播放主段仍可点、加入副段会提示无音源；若以后要彻底禁用播放，需要在 PlayerCore 侧支持声音节目。
+- 回滚：删掉 `PlayAllButton.vue` 并把 6 处调用换回原按钮即可；样式是 scoped，不会波及其它组件。
+
+### 2026-11-28 — 综合按钮改版：恢复原尺寸 + 悬停展开「添加」图标（1.11.0 修订）
+
+### 修改内容
+
+- 用户反馈上一版把「播放全部」做成了常驻两段、宽度翻倍；这一版把主按钮恢复成各页原来的尺寸（xs 32 / sm 28 / md 38 / lg 42，分别对应列表顶部 / AI 浮窗 / 每日推荐 / 详情页），不再常驻第二段。
+- `.pac-add` 改为默认 `width: 0; opacity: 0; pointer-events: none`，只在 `.play-all-combo:hover` / `:focus-within` 时展开到 28–34px 并显示 `listPlus` 图标；`width` 用 `cubic-bezier(.22,.61,.36,1)` 0.24s 过渡，图标段带分隔线与底色，title 写「把全部 N 首加入播放列表」，FM/心动下换成不能加的原因。
+- 新增 `addable` prop（默认 true）。每日推荐页、首页每日推荐大卡片、私人 FM 传 `:addable="false"`，组件只渲染播放主段（用户明确要求这三处不要加入口）。
+- 主页面的调用尺寸同步调整：TracksLayout 改 `size="xs"`（32px，恢复列表顶部按钮高度），其余 `sm/md/lg` 不变；私人 FM 的 `variant="glass"` 覆盖为 34px，与原来的玻璃按钮一致。
+- 增加 `.play-all-combo:active` 的 `scale(.98)` 微反馈；主段 hover / active 底色过渡保留。
+
+### 修改文件
+
+- `src/components/common/PlayAllButton.vue`
+- `src/components/layout/TracksLayout.vue`
+- `src/pages/ListDetail.vue`（调用未变）
+- `src/pages/DailySongs.vue`、`src/pages/HomePage.vue`
+- `src/components/PersonalFM.vue`
+- `CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 常驻的两段胶囊太宽，改变了页面原有的按钮尺寸和视觉重心；用户只需要「平时就是播放按钮，想整批入队时再出现入口」。
+- 每日推荐和私人 FM 的使用路径是「点开就听」，整批入队与它们的推荐流语义不搭（尤其 FM 播放中入队本来就会被推荐流冲掉），所以直接不给这个动作。
+- 用「悬停展开」代替下拉菜单：只有一个附加动作，不需要二级菜单，且能保住原按钮尺寸。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（仅既有 bundle 体积 / dart-sass 警告）
+- headless Edge + CDP 实测（1440×1000，深色主题）：
+  - 歌单详情：静止 129×42，悬停 162×42（展开 34px 图标），title 为「把全部 50 首加入播放列表」；点图标 → 队列 0→50、toast「已加入 50 首到播放列表」
+  - 专辑详情：静止 95×32，悬停 122×32（TracksLayout 的 xs），与旧按钮高度一致
+  - AI 浮窗：静止 89×28（与旧 sheet-btn 同宽），悬停 116×28
+  - 每日推荐页：112×38，DOM 里没有 `.pac-add`
+  - 首页每日推荐大卡片：128×42，无 `.pac-add`；私人 FM：106×34 玻璃胶囊，无 `.pac-add`
+
+### 注意事项
+
+- 悬停展开会让按钮右侧内容（如歌单详情的「收藏」）平移 28–34px，这是有意保留的过渡；如果不希望布局位移，需要改成浮层式展开（会遮挡相邻按钮），当前方案优先「不改变静止尺寸」。
+- 触屏设备没有 hover，点不到「加入」图标；本站主形态是桌面 Web，移动端只有 MobileNotice 提示。
+- 回滚：把 `PlayAllButton.vue` 恢复到上一版两段式即可；各页调用只需要去掉/保留 `:addable` 参数，不影响其它的按钮。
+
+### 2026-11-28 — 首页每日推荐卡片恢复透明玻璃按钮（1.11.0 再修订）
+
+### 修改内容
+
+- `PlayAllButton` 新增 `variant="cover"`：半透明白底（`rgba(255,255,255,.22)`）+ 白字 + 34px 半透明白圆底装播放三角 + `backdrop-filter: blur(16px)`，hover 底色加深到 `.32`，高度 44px、字号 14px、内边距 `0 18px 0 10px`，与旧 `playTracksBtn.expand` 的观感一致。
+- 模板的播放圆底判断从「仅 glass」抽成 `withPlayCircle`（glass / cover 共用），圆底图标尺寸按变体取（cover 16px）。
+- 首页 `<PlayAllButton ... variant="cover" :addable="false">`；详情页（ListDetail）和每日推荐页（DailySongs）保持主题实色方案不变。
+- `homepage.scss` 移除上一版给 `.play-all-combo` 加的 `filter: drop-shadow(...)`（会和 `backdrop-filter` 抢合成层），深封面的投影仍沿用旧的 `.dark-bg .play-tracks-btn` 规则。
+
+### 修改文件
+
+- `src/components/common/PlayAllButton.vue`
+- `src/pages/HomePage.vue`
+- `src/assets/scss/homepage.scss`
+- `CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 用户按截图要求：首页每日推荐大卡片的播放按钮改回之前的透明玻璃样式，详情页 / 每日推荐页维持现有的主题实色 + 悬停加入图标方案。
+- 封面图颜色不可控，透明玻璃 + 白字是旧设计已经验证过的观感；`filter` 与 `backdrop-filter` 同元素会破坏磨砂效果，所以把投影交回父级。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（仅既有 bundle 体积 / dart-sass 警告）
+- headless Edge + CDP（伪造登录 + 真实封面）：按钮 126×44，`background rgba(255,255,255,.22)`、`color rgb(255,255,255)`、`backdrop blur(16px)`，内部有 34px 圆底，DOM 无 `.pac-add`；整卡截图确认落位在左下角、磨砂与旧观感一致。
+
+### 注意事项
+
+- 浅色封面下白字对比度天然偏低（与旧按钮一致）；如需提高可读性，可给 cover 变体加一层 `rgba(0,0,0,.18)` 暗底或文字阴影，但这会偏离截图里的透明感，暂不做。
+- 三个变体的高度：glass 34 / cover 44 / solid 按尺寸 32–42；后续调封面卡片尺寸时改 `variant-cover` 一处即可。
+
+### 2026-11-28 — 首页封面播放按钮两态：默认只露播放键，悬停展开（1.11.0 补丁）
+
+### 修改内容
+
+- `PlayAllButton` 新增 `expandOnHover` prop；为 true 时根节点加 `is-expand` 类，配合 `variant="cover"` 实现两态：
+  - 收起：`pac-main` padding `0 10px`、gap 0、文字 `max-width: 0; opacity: 0`，整颗按钮 54×44，只露 34px 圆底播放键；
+  - 展开：`:hover` / `:focus-within` 时 padding 变 `0 18px 0 10px`、文字 `max-width: 96px; margin-left: 8px; opacity: 1`，按钮 126×44；
+  - 过渡统一 0.34s `cubic-bezier(.4,0,.2,1)`（宽度 / 内边距 / 文字 margin）+ 0.2s 透明度，移开自动收回。
+- 首页调用改为 `variant="cover" :addable="false" expand-on-hover`；详情页、每日推荐页、AI 浮窗、列表顶部的按钮保持原有单态（常显文字 + 悬停加入）。
+
+### 修改文件
+
+- `src/components/common/PlayAllButton.vue`
+- `src/pages/HomePage.vue`
+- `CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 用户给出两态截图：默认只要那颗播放键（不占文字宽度），鼠标移入再展开「播放全部」，移开恢复。这与旧 `playTracksBtn.expand` 的交互一致，也避免封面上的常驻文字把画面压重。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- headless Edge + CDP（伪造登录 + 真实封面）：静止 54×44、文字宽 0 / opacity 0；悬停 126×44、文字宽 56 / opacity 1；移开回到 54×44。截图确认两态观感与参考图一致（透明玻璃、白三角、白字）。
+
+### 注意事项
+
+- 收起态文字仍留在 DOM（`max-width: 0` 裁掉），键盘 focus 会自动展开，读屏不受影响。
+- 该两态只通过 `expandOnHover` 打开，其他页面调用不传即保持现状；若以后别的封面卡片也想用，直接加 `expand-on-hover` 即可。
+
+### 2026-11-28 — 播放全部：专辑 hero 落位、daily 恢复加入、播放键圆底
+
+### 修改内容
+
+- **专辑详情**：`PlayAllButton` 从 TracksLayout 顶部移进 `album-hero` 的 `.album-info` 末尾（描述下方，`margin-top: 20px`），`size="lg"`；歌曲 tab 的 TracksLayout 改 `:need-btn="false"`，列表里不再出现第二颗按钮。无歌曲时不渲染按钮（`v-if="songs.length"`）。
+- **每日推荐页**：去掉 `:addable="false"`，恢复「悬停展开加入播放列表」；首页每日推荐大卡片和私人 FM 仍保持只播不加。
+- **播放键圆底**：模板里播放三角统一包进 `.pac-play-circle`，不再只有 glass / cover 才有圆底。solid 变体圆底 24px（lg）/ 22（md）/ 18（xs）/ 16（sm），底色 `rgba(255,255,255,.30)`，三角继承按钮文字色；glass 保留主题色圆底 20px + 白三角，cover 保留 34px 半透明白圆 + 白三角。
+- 组件头部注释同步：`addable=false` 的场景只剩首页大卡片 / 私人 FM。
+
+### 修改文件
+
+- `src/components/common/PlayAllButton.vue`
+- `src/pages/AlbumDetail.vue`
+- `src/pages/DailySongs.vue`
+- `CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 用户要求专辑详情按钮放进 `album-hero` 的 `album-info` 下面；这与歌单详情把主操作放 hero 的模式一致，列表内不再重复。
+- 用户指出 daily 页悬停「加入播放列表」没有生效（上一版按「每日推荐不加」处理过，现按新要求恢复；首页大卡片与 FM 仍不加）。
+- 用户要求播放三角加圆形背景；solid 变体此前是裸三角，与 FM/封面的圆底语言不统一。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- headless Edge + CDP 实测（1440×1000，深色）：
+  - 专辑详情：按钮在 hero 信息区下方，137×42，圆底 24px；歌曲列表 `.tracksContainer .btns` 不存在；悬停后按钮 170×42、加入图标展开 34px。
+  - 歌单详情：137×42，圆底 24px，悬停加入正常。
+  - 每日推荐页：121×38，悬停后 152×38、加入图标展开 32px（此前无加入）。
+  - 首页封面两态按钮、私人 FM 玻璃按钮的尺寸与圆底保持不变。
+
+### 注意事项
+
+- 加圆底后按钮整体宽了约 6–9px（圆底比裸三角宽），高度不变；这是本次唯一主动改动的尺寸。
+- 歌手详情、/artist/songs、搜索单曲/歌词/声音的按钮位置本次未动，建议见对话里的方案（hero / asp-head / 分区标题右侧）。
+
+### 2026-11-28 — 播放全部按建议落位：歌手页 / 歌手全部歌曲 / 搜索三个 tab
+
+### 修改内容
+
+- **歌手详情**（`ArtistDetail.vue`）：`section-head` 右侧新增 `.section-right` 容器，`PlayAllButton size="xs"` 放在「全部 →」左边；`tracks` 改为完整 `top50songs`（原先按钮在列表上方，且 TracksLayout 收到的是 `slice(0, 5)`，只能播 5 首预览）；列表 `:need-btn="false"`。标题行因此从 28px 撑到 32px。
+- **歌手全部歌曲**（`ArtistAllSongs.vue`）：页头 `.asp-head` 右侧新增 `.asp-actions`（`margin-left:auto; flex; gap:12px`），播放按钮 `size="md"` 放在「返回歌手页」左边；列表 `:need-btn="false"`。
+- **搜索单曲 / 歌词 / 声音**（`TrackRes.vue` / `LyricRes.vue` / `VoiceRes.vue`）：各自把 `<h2>` 和按钮包进 `.res-head` 一行（`space-between` + `margin-bottom:20px`），按钮 `size="xs"`；TracksLayout `:need-btn="false"`。为抵消父级 `SearchResult` 的 `::v-deep h2 + * { margin-top: 20px }`，补了 `.res-head .play-all-combo { margin-top: 0 }`。
+- **声音 tab**：`VoiceRes` 的按钮传 `:addable="false"`（声音节目没有音乐音源，不能进队列）；单曲 / 歌词保留悬停加入。
+- 三处按钮的计数与作用域以已加载列表为准：歌手详情是 top50，歌手全部歌曲是已加载分页，搜索是当前已加载结果（title 里带 N 首）。
+
+### 修改文件
+
+- `src/pages/artist/ArtistDetail.vue`
+- `src/pages/artist/ArtistAllSongs.vue`
+- `src/pages/search/TrackRes.vue`、`LyricRes.vue`、`VoiceRes.vue`
+- `CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 用户确认按上一轮建议落位：把「播放全部」从列表上方移到与动作语义匹配的位置（分区标题 / 页头 / tab 标题行），列表本身保持纯展示，避免每个列表顶部都多出一行按钮。
+- 歌手详情的旧按钮只能播 5 首预览，与「播放全部」文案不符；这次顺手修正为完整热门 50 首。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅（构建前修掉了 3 个搜索子页 `<style scoped>` 里的 `//` 注释导致的 PostCSS 解析错误）
+- headless Edge + CDP 实测（1440×1000，深色）：
+  - 歌手详情：按钮 101×32、圆底 18px、title「播放全部（50 首）」；悬停 128×32、加入图标展开 28px；列表内 `.btns` 为 0。
+  - 歌手全部歌曲：121×38 → 悬停 152×38（加入 32px）；页头右侧与返回按钮并排。
+  - 搜索单曲：101×32 → 悬停 128×32（51 首）；搜索歌词：20 首；两者加入图标正常。
+  - 搜索声音：100×32，DOM 里没有加入图标（addable=false），列表内无按钮。
+
+### 注意事项
+
+- `.res-head .play-all-combo { margin-top: 0 }` 依赖子组件根节点继承父页面的 scope id；Vue 2 下成立，升级 Vue 3 时需改成 `:deep()`。
+- 歌手详情的按钮作用于完整 top50，而列表仍只显示 5 首预览，这是有意的（「全部 →」去全部歌曲页）。
+- `/artist/songs` 的播放范围是「已加载」的分页歌曲，不是歌手全部（全部可能几百首，点击时临时拉不现实）；title 会显示当前数量。
+
+### 2026-11-28 — 播放全部：文字与三角改成浅色
+
+### 修改内容
+
+- `PlayAllButton` 默认文字色从 `var(--c-text-on-accent)`（深色）改为 `$font-white`，主段文字、播放三角、加入图标都跟着变浅色。
+- `.pac-play-circle` 的圆底从 `rgba(255,255,255,.30)` 改成 `rgba(0,0,0,.18)`：白三角放在白色半透明圆上会糊掉，深色半透明圆底才立得住。
+- 键盘 `focus-visible` 的描边同步从 `var(--c-text-on-accent)` 改成 `$font-white`。
+- `variant="glass"`（私人 FM）与 `variant="cover"`（首页每日推荐大卡片）保持各自原有的文字/圆底配色，不跟这次改。
+
+### 修改文件
+
+- `src/components/common/PlayAllButton.vue`
+- `CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 用户要求「播放全部文字和三角图标改成浅色」；主题实色底上的深色文字/三角在部分主题色下偏闷，浅色更符合按钮的强调语义。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- headless Edge + CDP 实测（深色主题）：
+  - 歌单详情：computed `color: rgb(255,255,255)`、圆底 `rgba(0,0,0,0.18)`、三角形继承白色；截图确认白字/白三角清晰。
+  - 每日推荐页：同样的白字 + 深色圆底；悬停展开加入图标后仍保持浅色。
+
+### 注意事项
+
+- 白字在浅主题色（例如偏黄的 accent）上对比度会偏低；如果后续开放更亮的主题色，可把文字色换成 `--c-text-inverse` 或在 AccentPicker 里限制高亮色。
+- 私人 FM / 首页封面按钮不受影响：前者仍是深色文字 + 主题色圆底，后者仍是白字 + 白色半透明圆底。
+
+### 2026-11-28 — 播放全部：文字改为中等字重
+
+### 修改内容
+
+- `PlayAllButton` 的 `.play-all-combo` 根节点 `font-weight` 从 600 改为 500，主段文字（`播放全部`）不再加粗；FM 玻璃按钮、首页封面按钮同样跟随（它们没有单独覆盖字重）。
+
+### 修改文件
+
+- `src/components/common/PlayAllButton.vue`
+- `CHANGELOG.md`、`docs/DEVLOG.md`
+
+### 修改原因
+
+- 用户反馈浅色白字在 600 字重下偏发胖，要求不加粗或再细一点；500 在保持可读性的同时明显轻于原来的 600。
+
+### 测试结果
+
+- `yarn lint` ✅
+- `yarn build` ✅
+- headless Edge 实测：歌单详情按钮 computed `font-weight: 500`、`font-size: 14px`；截图确认白字不再发胖。
+
+### 注意事项
+
+- 如果仍然偏重，可以把 `font-weight` 再降到 400（普通字重），只需改 `.play-all-combo` 一处。
+
+
+
+
+
+
+
+

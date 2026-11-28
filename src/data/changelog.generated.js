@@ -2,6 +2,18 @@
 // 改内容请编辑仓库根目录的 CHANGELOG.md，然后跑 yarn changelog（build/serve 会自动跑）。
 export default [
     {
+        "version": "1.11.0",
+        "date": "2026-11-28",
+        "sections": [
+            {
+                "title": "改进",
+                "items": [
+                    "全站「播放全部」统一成同一个按钮组件、鼠标移到按钮上，右侧会滑出「添加到播放列表」图标并带提示，移开自动收回"
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.10.0",
         "date": "2026-11-23",
         "sections": [

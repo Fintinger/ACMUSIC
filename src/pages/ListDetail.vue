@@ -23,8 +23,7 @@
               <pre v-text="listInfo.description"></pre>
             </el-row>
             <div class="detail-play-actions">
-              <button type="button" class="detail-play-all" :disabled="initialLoading || !songs.length" @click="$refs.songTracks.playVisible()"><BaseIcon name="play"/> 播放全部</button>
-              <button type="button" class="detail-queue-all" :disabled="!songs.length" @click="$refs.songTracks.pushAllToQueue()"><BaseIcon name="listPlus"/> 加入列表</button>
+              <PlayAllButton :tracks="songs" size="lg" :disabled="initialLoading"/>
               <!-- 收藏：自己的歌单 / 系统歌单（我喜欢的音乐、榜单）不显示，服务端本来也不允许 -->
               <button
                   v-if="canSubscribe"
@@ -63,7 +62,7 @@
         <el-tab-pane label="歌曲" name="songs">
           <TrackListSkeleton v-if="initialLoading"/>
           <template v-else>
-            <TracksLayout v-if="songs.length" ref="songTracks" :need-btn="false" :list="songs" :show-actions="isOwner && manageMode">
+            <TracksLayout v-if="songs.length" :need-btn="false" :list="songs" :show-actions="isOwner && manageMode">
               <template #actions="{ track, index }">
                 <button class="rowAct" title="上移" :disabled="saving || index === 0"
                         @click="moveTrack(index, -1)">↑
@@ -116,6 +115,7 @@ import TracksLayout from "@/components/layout/TracksLayout";
 import CommentLayout from "@/components/layout/CommentLayout";
 import PlaylistInfoSkeleton from "@/components/Skeleton/PlaylistInfoSkeleton";
 import TrackListSkeleton from "@/components/Skeleton/TrackListSkeleton";
+import PlayAllButton from "@/components/common/PlayAllButton";
 
 import scoText from "@/components/scoText";
 import CoverImage from "@/components/common/CoverImage";
@@ -125,7 +125,7 @@ import { parseWriteResult } from "@/utils/writeResult";
 
 export default {
   name: "listDetail",
-  components: {EmptyState, LoadMore, TracksLayout, CommentLayout, PlaylistInfoSkeleton, TrackListSkeleton, scoText, CoverImage},
+  components: {EmptyState, LoadMore, TracksLayout, CommentLayout, PlaylistInfoSkeleton, TrackListSkeleton, scoText, CoverImage, PlayAllButton},
   data() {
     // const LIMIT = 50, OFFSET = 50;
     return {
@@ -554,12 +554,13 @@ export default {
   }
 }
 .detail-play-actions {
-  display: flex; gap: $sp-3; margin-top: $sp-5;
-  button { display: inline-flex; align-items: center; gap: $sp-2; border-radius: $radius-pill; padding: $sp-3 $sp-5; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--c-border-strong); }
-  .detail-play-all { background: var(--c-button-primary); border-color: var(--c-button-primary); color: var(--c-text-on-accent); }
-  .detail-queue-all { background: var(--c-bg-sunken); color: var(--c-text-primary); }
-  // 收藏：常态是描边按钮，已收藏时整颗变主题色（与红心同一套语义）
+  display: flex; align-items: center; flex-wrap: wrap; gap: $sp-3; margin-top: $sp-5;
+  // 播放全部 / 添加到播放列表由 PlayAllButton 自带样式，这里只管收藏按钮
   .detail-subscribe {
+    display: inline-flex; align-items: center; gap: $sp-2;
+    border-radius: $radius-pill; padding: $sp-3 $sp-5;
+    font: inherit; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--c-border-strong);
     background: transparent;
     color: var(--c-text-secondary);
 
@@ -576,7 +577,8 @@ export default {
     }
 
     &.is-on .subCount { color: inherit; opacity: .8; }
+
+    &:disabled { opacity: .5; cursor: default; }
   }
-  button:disabled { opacity: .5; cursor: default; }
 }
 </style>

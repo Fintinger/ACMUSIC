@@ -56,12 +56,16 @@
     <section class="ar-section">
       <div class="section-head">
         <h2>热门歌曲</h2>
-        <!-- 热门只到 50 首（/artist/top/song 上限），全部歌曲走独立页分页 -->
-        <span class="section-more" @click="arAsClk(id)" title="查看该歌手的全部歌曲">
-          全部 <BaseIcon name="arrowRight"/>
-        </span>
+        <div class="section-right">
+          <!-- 播放的是完整 top50（列表只展示前 5 首预览），与「全部」链接同一行 -->
+          <PlayAllButton v-if="top50songs.length" :tracks="top50songs" size="xs"/>
+          <!-- 热门只到 50 首（/artist/top/song 上限），全部歌曲走独立页分页 -->
+          <span class="section-more" @click="arAsClk(id)" title="查看该歌手的全部歌曲">
+            全部 <BaseIcon name="arrowRight"/>
+          </span>
+        </div>
       </div>
-      <TracksLayout v-if="top50songs.length" :list="top50songs.slice(0, SONG_PREVIEW)"/>
+      <TracksLayout v-if="top50songs.length" :list="top50songs.slice(0, SONG_PREVIEW)" :need-btn="false"/>
       <EmptyState v-else compact :title="sectionErrors.songs ? '热门歌曲加载失败' : '暂无热门歌曲'"/>
     </section>
 
@@ -122,6 +126,7 @@ import ArtistLayout from "@/components/layout/ArtistLayout";
 import MvLayout from "@/components/layout/MvLayout";
 import VideoLayout from "@/components/layout/VideoLayout";
 import CoverImage from "@/components/common/CoverImage";
+import PlayAllButton from "@/components/common/PlayAllButton";
 import * as artistApi from "@/api/Artist";
 
 // 首屏各区块只渲染 CARD_PREVIEW 张，专辑 / MV 多点几张做缓冲（点「更多」是整页跳转，不再续拉）
@@ -131,7 +136,7 @@ const MV_INIT = 16;
 export default {
   name: "ArtistDetail",
   props: ["id"],
-  components: {EmptyState, TracksLayout, AlbumLayout, ArtistLayout, MvLayout, VideoLayout, CoverImage},
+  components: {EmptyState, TracksLayout, AlbumLayout, ArtistLayout, MvLayout, VideoLayout, CoverImage, PlayAllButton},
   data() {
     return {
       arBasicInfo: {},
@@ -404,6 +409,10 @@ export default {
     h2 {
       font-size: 20px; font-weight: 700; color: $font-black; margin: 0;
       display: flex; align-items: baseline; gap: 10px;
+    }
+    // 右侧动作：播放全部 + 「全部 / 更多」链接
+    .section-right {
+      display: flex; align-items: center; gap: 14px; flex-shrink: 0;
     }
     // 标题旁的统计（如「47 张」），弱化处理，不抢标题
     .section-count { font-size: 13px; font-weight: 400; font-style: normal; color: $font-black-2; }

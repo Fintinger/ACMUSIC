@@ -20,12 +20,16 @@
         </p>
         <p class="album-company" v-if="albumInfo.company">{{ albumInfo.company }}</p>
         <p class="album-desc" v-if="albumInfo.description" :title="albumInfo.description">{{ albumInfo.description }}</p>
+        <!-- 播放全部放在 hero 里、信息区下方：与歌单详情一致，列表内不再重复 -->
+        <div v-if="songs.length" class="album-play">
+          <PlayAllButton :tracks="songs" size="lg"/>
+        </div>
       </div>
     </div>
     <div class="album-content">
       <el-tabs v-model="activeName">
         <el-tab-pane label="歌曲" name="songs">
-          <TracksLayout v-if="songs.length" :list="songs"/>
+          <TracksLayout v-if="songs.length" :list="songs" :need-btn="false"/>
           <EmptyState v-else compact title="这张专辑暂无可用歌曲"/>
         </el-tab-pane>
         <el-tab-pane label="评论" name="comment">
@@ -44,6 +48,7 @@ import CommentLayout from "@/components/layout/CommentLayout";
 import PlaylistInfoSkeleton from "@/components/Skeleton/PlaylistInfoSkeleton";
 import TrackListSkeleton from "@/components/Skeleton/TrackListSkeleton";
 import CoverImage from "@/components/common/CoverImage";
+import PlayAllButton from "@/components/common/PlayAllButton";
 import * as albumApi from "@/api/Album";
 
 export default {
@@ -54,7 +59,8 @@ export default {
     CommentLayout,
     PlaylistInfoSkeleton,
     TrackListSkeleton,
-    CoverImage
+    CoverImage,
+    PlayAllButton
   },
   data() {
     return {
@@ -142,6 +148,9 @@ export default {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   max-width: 600px;
 }
+
+// hero 里的主操作：和上面的描述隔开，列表内不再重复
+.album-play { margin-top: 20px; }
 
 .album-content { animation: fadeUp .4s .1s ease backwards; }
 
